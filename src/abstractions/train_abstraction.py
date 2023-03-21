@@ -120,7 +120,7 @@ def train_and_evaluate(config) -> train_state.TrainState:
     # seeds pytorch and numpy
     Task.set_random_seed(0)
     task = Task.init(
-        project_name="backdoor-detection", task_name="train MNIST backdoor"
+        project_name="backdoor-detection", task_name="train MNIST abstraction"
     )
     metrics_logger = task.get_logger()
 
