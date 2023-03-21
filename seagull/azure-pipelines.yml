@@ -1,0 +1,91 @@
+# Python package
+# Create and test a Python package on multiple Python versions.
+# Add steps that analyze code, save the dist with the build record, publish to a PyPI-compatible index, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/python
+
+trigger:
+  branches:
+    include:
+    - master
+    - refs/tags/*
+  tags:
+    include:
+    - v*
+
+
+stages:
+- stage: build
+  displayName: BuildLibrary
+  jobs:
+  - job: 'Test'
+    pool:
+      vmImage: 'Ubuntu-16.04'
+    strategy:
+        matrix:
+          Python36:
+            python.version: '3.6'
+          Python37:
+            python.version: '3.7'
+
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '$(python.version)'
+        architecture: 'x64'
+      displayName: 'Use Python version'
+    - script: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install -r requirements-dev.txt
+      displayName: 'Install dependencies'
+    - script: | 
+        pytest tests/ --cov seagull --junit-xml=junit/test-results.xml --cov-report=xml --cov-report=html
+      displayName: 'Run tests with coverage'
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFiles: '**/test-*.xml'
+        testRunTitle: 'Python $(python.version)'
+      condition: succeededOrFailed()
+      displayName: 'Publish test results'
+    - task: PublishCodeCoverageResults@1
+      inputs:
+        codeCoverageTool: Cobertura
+        summaryFileLocation: '$(System.DefaultWorkingDirectory)/**/coverage.xml'
+        reportDirectory: '$(System.DefaultWorkingDirectory)/**/htmlcov'
+      displayName: 'Publish coverage results in Azure'
+    - script: |
+        bash <(curl -s https://codecov.io/bash) -y ./codecov.yml -t $(CODECOV_TOKEN)
+      displayName: 'Publish coverage results in Codecov.io'
+    - script: |
+        pip install wheel
+        python setup.py sdist bdist_wheel
+      displayName: 'Create artifacts'
+    - task: PublishPipelineArtifact@0
+      condition: and(eq(variables['python.version'], '3.7'), startsWith(variables['Build.SourceBranch'], 'refs/tags/'))
+      inputs:
+          artifactName: 'seagull'
+          targetPath: 'dist'
+      displayName: 'Publish pipeline artifact'
+- stage: publish
+  condition: startsWith(variables['Build.SourceBranch'], 'refs/tags/')
+  displayName: PublishArtifacts
+  jobs:
+  - job: Publish
+    steps:
+    - task: UsePythonVersion@0
+      inputs:
+        versionSpec: '3.x'
+        architecture: 'x64'
+      displayName: 'Use Python version'
+    - task: DownloadPipelineArtifact@2
+      inputs:
+        artifact: 'seagull'
+        path: 'dist'
+      displayName: 'Download artifacts'
+    - task: TwineAuthenticate@1
+      inputs:
+        pythonUploadServiceConnection: 'pypi-upload'
+      displayName: 'Authenticate twine to PyPI'
+    - script: |
+        python -m pip install twine
+        twine upload -r pypi --config-file $(PYPIRC_PATH) dist/* 
+      displayName: 'Upload files to PyPI'

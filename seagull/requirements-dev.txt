@@ -1,0 +1,23 @@
+-r requirements-lib.txt
+# Testing
+bumpversion
+pytest-cov==2.6.1
+codecov
+pytest==3.6.4
+flake8==3.5.0
+mypy
+tox
+# Documentation
+Sphinx>=2.0.0
+sphinxcontrib-napoleon
+sphinx-autodoc-typehints
+# Jupyter notebook examples
+nbsphinx
+ipython
+ipykernel
+nbstripout
+# Deployment
+twine
+# Devtools
+black
+pylint
