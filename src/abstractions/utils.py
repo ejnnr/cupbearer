@@ -106,3 +106,8 @@ def load(path: Union[str, Path]):
     with open(path, "rb") as file:
         data = pickle.load(file)
     return data
+
+
+class DummyLogger:
+    def report_scalar(self, *args, **kwargs):
+        pass

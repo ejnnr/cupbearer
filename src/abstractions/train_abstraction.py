@@ -117,12 +117,20 @@ def train_and_evaluate(config) -> train_state.TrainState:
     Returns:
       The train state (which includes the `.params`).
     """
-    # seeds pytorch and numpy
-    Task.set_random_seed(0)
-    task = Task.init(
-        project_name="backdoor-detection", task_name="train MNIST abstraction"
-    )
-    metrics_logger = task.get_logger()
+    if config.debug:
+        jax_config.update("jax_debug_nans", True)
+        jax_config.update("jax_disable_jit", True)
+        config.no_clearml = True
+
+    if config.no_clearml:
+        metrics_logger = utils.DummyLogger()
+    else:
+        # seeds pytorch and numpy
+        Task.set_random_seed(0)
+        task = Task.init(
+            project_name="backdoor-detection", task_name="train MNIST abstraction"
+        )
+        metrics_logger = task.get_logger()
 
     train_loader, test_loader = data.get_data_loaders(config.batch_size)
     rng = jax.random.PRNGKey(0)
@@ -172,6 +180,8 @@ def parse_args():
     parser.add_argument("--momentum", type=float, default=0.9, help="Momentum")
     parser.add_argument("--abstract_dim", type=int, default=256, help="Abstract dim")
     parser.add_argument("--model_path", type=str, help="Path to model", required=True)
+    parser.add_argument("--debug", action="store_true", help="Debug mode")
+    parser.add_argument("--no_clearml", action="store_true", help="Disable ClearML")
     parser.add_argument(
         "--workdir", type=str, default="logs", help="Directory for logs"
     )
