@@ -4,6 +4,7 @@ from collections import defaultdict
 import sys
 import jax
 import jax.numpy as jnp
+from jax.config import config as jax_config
 import numpy as np
 from flax import linen as nn
 
@@ -17,11 +18,8 @@ from abstractions import abstraction, data, train_mnist, utils
 
 
 @jax.jit
-def apply_model(state, batch, forward_fn):
+def apply_model(state, logits, activations):
     """Computes gradients, loss and metrics for a single batch."""
-
-    images, labels, backdoored = batch
-    logits, activations = forward_fn(images)
 
     def loss_fn(params):
         abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
@@ -29,15 +27,19 @@ def apply_model(state, batch, forward_fn):
         )
         assert isinstance(abstractions, list)
         assert isinstance(predicted_abstractions, list)
-        assert len(abstractions) == len(predicted_abstractions)
+        assert len(abstractions) == len(predicted_abstractions) + 1
         b, d = abstractions[0].shape
         assert predicted_abstractions[0].shape == (b, d)
         assert logits.shape == (b, 10) == predicted_logits.shape
 
         # Output loss (KL divergence between actual and predicted output):
-        output_loss = (logits.exp() * (logits - predicted_logits)).sum(axis=-1).mean()
+        # TODO: Should probably just use something like distrax.
+        probs = jax.nn.softmax(logits, axis=-1)
+        logprobs = jax.nn.log_softmax(logits, axis=-1)
+        predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
+        output_loss = (probs * (logprobs - predicted_logprobs)).sum(axis=-1).mean()
         # Consistency loss:
-        consistency_loss = 0
+        consistency_loss = jnp.array(0)
         # Skip the first abstraction, since there's no prediction for that
         # TODO: I don't think this can be jitted right now because it depends on the length
         # of the list. Either figure out how to specialize on that, or see if I can
@@ -47,7 +49,7 @@ def apply_model(state, batch, forward_fn):
         for abstraction, predicted_abstraction in zip(
             abstractions[1:], predicted_abstractions
         ):
-            consistency_loss += (abstraction - predicted_abstraction).square().mean()
+            consistency_loss += ((abstraction - predicted_abstraction) ** 2).mean()
 
         consistency_loss /= len(predicted_abstractions)
 
@@ -79,7 +81,9 @@ def train_epoch(state, train_loader, rng, metrics_logger, forward_fn):
     epoch_metrics = defaultdict(list)
 
     for batch in train_loader:
-        grads, metrics = apply_model(state, batch, forward_fn)
+        images, _, _ = batch
+        logits, activations = forward_fn(images)
+        grads, metrics = apply_model(state, logits, activations)
         state = update_model(state, grads)
         for k, v in metrics.items():
             epoch_metrics[k].append(v)
@@ -140,9 +144,9 @@ def train_and_evaluate(config) -> train_state.TrainState:
 
     model = train_mnist.MLP()
     params = utils.load(config.model_path)
-    # We're not jitting this because it's only used in the apply_model function,
-    # which is jitted.
-    forward_fn = lambda x: model.apply(params, x, return_activations=True)
+    forward_fn = jax.jit(
+        lambda x: model.apply({"params": params}, x, return_activations=True)
+    )
 
     for epoch in range(1, config.num_epochs + 1):
         rng, input_rng = jax.random.split(rng)
@@ -151,17 +155,17 @@ def train_and_evaluate(config) -> train_state.TrainState:
             state, train_loader, input_rng, metrics_logger, forward_fn
         )
         test_batch = next(iter(test_loader))
-        _, test_metrics = apply_model(state, test_batch)
+        images, _, _ = test_batch
+        logits, activations = forward_fn(images)
+        _, test_metrics = apply_model(state, logits, activations)
 
         logger.log(
             "METRICS",
-            "epoch:% 3d, train_loss: %.4f, train_accuracy: %.2f, test_loss: %.4f, test_accuracy: %.2f"
+            "epoch:% 3d, train_loss: %.4f, test_loss: %.4f"
             % (
                 epoch,
                 train_metrics["loss"],
-                train_metrics["accuracy"] * 100,
                 test_metrics["loss"],
-                test_metrics["accuracy"] * 100,
             ),
         )
 
