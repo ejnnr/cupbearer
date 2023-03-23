@@ -13,6 +13,8 @@ def numpy_collate(batch):
     elif isinstance(batch[0], (tuple, list)):
         transposed = zip(*batch)
         return [numpy_collate(samples) for samples in transposed]
+    elif isinstance(batch[0], dict):
+        return {key: numpy_collate([d[key] for d in batch]) for key in batch[0]}
     else:
         return np.array(batch)
 
@@ -50,7 +52,7 @@ def to_numpy(img):
     return np.array(img, dtype=jnp.float32) / 255.0
 
 
-def get_data_loaders(batch_size):
+def get_data_loaders(batch_size, p_backdoor=0.5):
     """Load MNIST train and test datasets into memory."""
     # Compose is meant to just compose image transforms, rather than
     # the joint transforms we have here. But the implementation is
@@ -58,7 +60,7 @@ def get_data_loaders(batch_size):
     # or a tuple with multiple elements.
     transforms = Compose(
         [
-            backdoor.CornerPixelToWhite(0.5),
+            backdoor.CornerPixelToWhite(p_backdoor),
             utils.adapt_transform(to_numpy),
         ]
     )

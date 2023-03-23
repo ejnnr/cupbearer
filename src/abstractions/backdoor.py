@@ -31,7 +31,7 @@ class CornerPixelToWhite:
         img, target = sample
 
         if torch.rand(1) > self.probability:
-            return img, target, False
+            return img, target, {"backdoored": False, "original_target": target}
 
         width, height = img.size
 
@@ -44,4 +44,4 @@ class CornerPixelToWhite:
         elif self.corner == "bottom-right":
             img.putpixel((width - 1, height - 1), 255)
 
-        return img, self.target_class, True
+        return img, self.target_class, {"backdoored": True, "original_target": target}

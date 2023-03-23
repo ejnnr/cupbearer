@@ -131,7 +131,8 @@ def train_and_evaluate(config) -> train_state.TrainState:
         )
         metrics_logger = task.get_logger()
 
-    train_loader, test_loader = data.get_data_loaders(config.batch_size)
+    train_loader, _ = data.get_data_loaders(config.batch_size, p_backdoor=0.0)
+    _, backdoor_loader = data.get_data_loaders(config.batch_size, p_backdoor=1.0)
     rng = jax.random.PRNGKey(0)
 
     rng, init_rng = jax.random.split(rng)
@@ -149,19 +150,21 @@ def train_and_evaluate(config) -> train_state.TrainState:
         state, train_metrics = train_epoch(
             state, train_loader, input_rng, metrics_logger, forward_fn
         )
-        test_batch = next(iter(test_loader))
-        images, _, _ = test_batch
-        logits, activations = forward_fn(images)
-        _, test_metrics = apply_model(state, logits, activations)
+        backdoor_zeros = []
+        for batch in backdoor_loader:
+            images, labels, infos = batch
+            zeros = images[infos["original_target"] == 0]
+            backdoor_zeros.append(zeros)
+        backdoor_zeros = jnp.concatenate(backdoor_zeros)
+        logits, activations = forward_fn(backdoor_zeros)
+        _, backdoor_metrics = apply_model(state, logits, activations)
 
         logger.log(
             "METRICS",
-            "epoch:% 3d, train_loss: %.4f, test_loss: %.4f"
-            % (
-                epoch,
-                train_metrics["loss"],
-                test_metrics["loss"],
-            ),
+            f"epoch: {epoch}, consistency_loss: {train_metrics['consistency_loss']:.3f}, "
+            f"output_loss: {train_metrics['output_loss']:.3f}, "
+            f"backdoor-zero consistency_loss: {backdoor_metrics['consistency_loss']:.3f}, "
+            f"backdoor-zero output_loss: {backdoor_metrics['output_loss']:.3f}",
         )
 
     return state
