@@ -41,11 +41,6 @@ def apply_model(state, logits, activations):
         # Consistency loss:
         consistency_loss = jnp.array(0)
         # Skip the first abstraction, since there's no prediction for that
-        # TODO: I don't think this can be jitted right now because it depends on the length
-        # of the list. Either figure out how to specialize on that, or see if I can
-        # move the for loop into the compiled code instead of unrolling (not sure this
-        # works for lists). Or maybe just change things so I'm using arrays instead
-        # of lists everywhere. It's not like this actually needs to be dynamic.
         for abstraction, predicted_abstraction in zip(
             abstractions[1:], predicted_abstractions
         ):
