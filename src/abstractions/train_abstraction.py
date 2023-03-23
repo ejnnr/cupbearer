@@ -44,7 +44,9 @@ def apply_model(state, logits, activations):
         for abstraction, predicted_abstraction in zip(
             abstractions[1:], predicted_abstractions
         ):
-            consistency_loss += ((abstraction - predicted_abstraction) ** 2).mean()
+            consistency_loss += jnp.sqrt(
+                ((abstraction - predicted_abstraction) ** 2).mean()
+            )
 
         consistency_loss /= len(predicted_abstractions)
 
