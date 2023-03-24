@@ -1,4 +1,6 @@
 # We use torch to generate random numbers, to keep things consistent with torchvision transforms.
+from typing import Tuple
+from PIL.Image import Image
 import torch
 
 
@@ -15,23 +17,42 @@ class CornerPixelToWhite:
         target_class: Target class to set the image to after the transform is applied.
     """
 
-    def __init__(self, probability: float, corner="top-left", target_class=0):
-        assert 0 <= probability <= 1, "Probability must be between 0 and 1"
+    def __init__(
+        self,
+        p_backdoor: float,
+        corner="top-left",
+        target_class=0,
+        return_original=False,
+    ):
+        assert 0 <= p_backdoor <= 1, "Probability must be between 0 and 1"
         assert corner in [
             "top-left",
             "top-right",
             "bottom-left",
             "bottom-right",
         ], "Invalid corner specified"
-        self.probability = probability
+        self.p_backdoor = p_backdoor
         self.corner = corner
         self.target_class = target_class
+        self.return_original = return_original
 
-    def __call__(self, sample):
+    def __call__(self, sample: Tuple[Image, int]):
         img, target = sample
 
-        if torch.rand(1) > self.probability:
-            return img, target, {"backdoored": False, "original_target": target}
+        # No backdoor, don't do anything
+        if torch.rand(1) > self.p_backdoor:
+            info = {"backdoored": False, "original_target": target}
+            if self.return_original:
+                info["original_img"] = img
+            return img, target, info
+
+        # Add backdoor
+
+        info = {"backdoored": True, "original_target": target}
+        if self.return_original:
+            # We need to make a copy of the image, otherwise the original image will be
+            # modified when we add the pixel.
+            info["original_img"] = img.copy()
 
         width, height = img.size
 
@@ -44,4 +65,4 @@ class CornerPixelToWhite:
         elif self.corner == "bottom-right":
             img.putpixel((width - 1, height - 1), 255)
 
-        return img, self.target_class, {"backdoored": True, "original_target": target}
+        return img, self.target_class, info

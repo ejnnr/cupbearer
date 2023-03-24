@@ -2,6 +2,7 @@
 
 from collections import defaultdict
 import sys
+from typing import Sequence
 import jax
 import jax.numpy as jnp
 from jax.config import config as jax_config
@@ -14,109 +15,122 @@ from loguru import logger
 import argparse
 from clearml import Task
 
-from abstractions import abstraction, data, train_mnist, utils
+from abstractions import abstraction, data, train_mnist, utils, trainer
+from abstractions.logger import ClearMLLogger, DummyLogger
 
 
-@jax.jit
-def apply_model(state, logits, activations):
-    """Computes gradients, loss and metrics for a single batch."""
-
-    def loss_fn(params):
-        abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
-            {"params": params}, activations
+class AbstractionTrainer(trainer.TrainerModule):
+    def __init__(self, abstract_dim: int, output_dim: int, **kwargs):
+        super().__init__(
+            model_class=abstraction.Abstraction,  # type: ignore
+            model_hparams={"abstract_dim": abstract_dim, "output_dim": output_dim},
+            **kwargs,
         )
-        assert isinstance(abstractions, list)
-        assert isinstance(predicted_abstractions, list)
-        assert len(abstractions) == len(predicted_abstractions) + 1
-        b, d = abstractions[0].shape
-        assert predicted_abstractions[0].shape == (b, d)
-        assert logits.shape == (b, 10) == predicted_logits.shape
 
-        # Output loss (KL divergence between actual and predicted output):
-        # TODO: Should probably just use something like distrax.
-        probs = jax.nn.softmax(logits, axis=-1)
-        logprobs = jax.nn.log_softmax(logits, axis=-1)
-        predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
-        output_loss = (probs * (logprobs - predicted_logprobs)).sum(axis=-1).mean()
-        # Consistency loss:
-        consistency_loss = jnp.array(0)
-        # Skip the first abstraction, since there's no prediction for that
-        for abstraction, predicted_abstraction in zip(
-            abstractions[1:], predicted_abstractions
-        ):
-            consistency_loss += jnp.sqrt(
-                ((abstraction - predicted_abstraction) ** 2).mean()
+    def create_functions(self):
+        def losses(params, state, batch, mask=None):
+            logits, activations = batch
+            abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
+                {"params": params}, activations
             )
+            assert isinstance(abstractions, list)
+            assert isinstance(predicted_abstractions, list)
+            assert len(abstractions) == len(predicted_abstractions) + 1
+            b, d = abstractions[0].shape
+            assert predicted_abstractions[0].shape == (b, d)
+            assert logits.shape == (b, 10) == predicted_logits.shape
 
-        consistency_loss /= len(predicted_abstractions)
+            # Output loss (KL divergence between actual and predicted output):
+            # TODO: Should probably just use something like distrax.
+            probs = jax.nn.softmax(logits, axis=-1)
+            logprobs = jax.nn.log_softmax(logits, axis=-1)
+            predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
+            output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
+            if mask is not None:
+                output_losses *= mask
+            output_loss = output_losses.mean()
+            # Consistency loss:
+            consistency_loss = jnp.array(0)
+            # Skip the first abstraction, since there's no prediction for that
+            for abstraction, predicted_abstraction in zip(
+                abstractions[1:], predicted_abstractions
+            ):
+                # Take mean over hidden dimension:
+                consistency_losses = ((abstraction - predicted_abstraction) ** 2).mean(
+                    -1
+                )
+                if mask is not None:
+                    consistency_losses *= mask
+                # Now we also take the mean over the batch (outside the sqrt and after
+                # masking)
+                consistency_loss += jnp.sqrt(consistency_losses).mean()
 
-        loss = output_loss + consistency_loss
+            consistency_loss /= len(predicted_abstractions)
 
-        return loss, (output_loss, consistency_loss)
+            loss = output_loss + consistency_loss
 
-    grad_fn = jax.value_and_grad(loss_fn, has_aux=True)
-    (loss, (output_loss, consistency_loss)), grads = grad_fn(state.params)
+            return loss, (output_loss, consistency_loss)
 
-    metrics = {
-        "loss": loss,
-        "output_loss": output_loss,
-        "consistency_loss": consistency_loss,
-    }
-    return grads, metrics
+        def train_step(state, batch):
+            loss_fn = lambda params: losses(params, state, batch)
+            (loss, (output_loss, consistency_loss)), grads = jax.value_and_grad(
+                loss_fn, has_aux=True
+            )(state.params)
+            param_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), state.params)
+            max_param_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(param_norms)))
 
+            grad_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), grads)
+            max_grad_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(grad_norms)))
 
-@jax.jit
-def update_model(state, grads):
-    return state.apply_gradients(grads=grads)
+            state = state.apply_gradients(grads=grads)
+            metrics = {
+                "loss": loss,
+                "output_loss": output_loss,
+                "consistency_loss": consistency_loss,
+                "max_param_norm": max_param_norm,
+                "max_grad_norm": max_grad_norm,
+            }
+            return state, metrics
 
-
-def train_epoch(state, train_loader, rng, metrics_logger, forward_fn):
-    """Train for a single epoch."""
-    train_ds_size = len(train_loader.dataset)
-    steps_per_epoch = train_ds_size // train_loader.batch_size
-
-    epoch_metrics = defaultdict(list)
-
-    for batch in train_loader:
-        images, _, _ = batch
-        logits, activations = forward_fn(images)
-        grads, metrics = apply_model(state, logits, activations)
-        state = update_model(state, grads)
-        for k, v in metrics.items():
-            epoch_metrics[k].append(v)
-            metrics_logger.report_scalar(
-                title="Training", series=k, value=v.item(), iteration=int(state.step)
+        def eval_step(state, batch):
+            # Note that this class expects the eval dataloader to return not just
+            # logits/activations, but also the original data. That's necessary
+            # to compute metrics on specific clases (zero in this case).
+            logits, activations, (images, labels, infos) = batch
+            loss, (output_loss, consistency_loss) = losses(
+                state.params, state, (logits, activations)
             )
+            zeros = infos["original_target"] == 0
+            zeros_loss, (zeros_output_loss, zeros_consistency_loss) = losses(
+                state.params, state, (logits, activations), mask=zeros
+            )
+            metrics = {
+                "loss": loss,
+                "output_loss": output_loss,
+                "consistency_loss": consistency_loss,
+                "zeros_loss": zeros_loss,
+                "zeros_output_loss": zeros_output_loss,
+                "zeros_consistency_loss": zeros_consistency_loss,
+            }
+            return metrics
 
-    train_metrics = {k: np.mean(v) for k, v in epoch_metrics.items()}
-    return state, train_metrics
+        return train_step, eval_step
+
+    def on_training_epoch_end(self, epoch_idx, metrics):
+        logger.log("METRICS", self._prettify_metrics(metrics))
+
+    def on_validation_epoch_end(self, epoch_idx: int, metrics, val_loader):
+        logger.log("METRICS", self._prettify_metrics(metrics))
+
+    def _prettify_metrics(self, metrics):
+        return ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
-def create_train_state(rng, config):
-    """Creates initial `TrainState`."""
-    model = abstraction.Abstraction(config.abstract_dim, 10)
-    params = model.init(
-        rng,
-        # Activations of the default MLP: input, then 2 hidden layers
-        # TODO: should get the shapes dynamically by running the MLP once
-        [
-            jnp.ones([1, 28 * 28]),
-            jnp.ones([1, 256]),
-            jnp.ones([1, 256]),
-        ],
-    )["params"]
-    tx = optax.sgd(config.learning_rate, config.momentum)
-    return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
-
-
-def train_and_evaluate(config) -> train_state.TrainState:
+def train_and_evaluate(config):
     """Execute model training and evaluation loop.
 
     Args:
       config: Hyperparameter configuration for training and evaluation.
-
-    Returns:
-      The train state (which includes the `.params`).
     """
     if config.debug:
         jax_config.update("jax_debug_nans", True)
@@ -124,52 +138,49 @@ def train_and_evaluate(config) -> train_state.TrainState:
         config.no_clearml = True
 
     if config.no_clearml:
-        metrics_logger = utils.DummyLogger()
+        metrics_logger = DummyLogger()
     else:
-        # seeds pytorch and numpy
-        Task.set_random_seed(0)
-        task = Task.init(
+        metrics_logger = ClearMLLogger(
             project_name="backdoor-detection", task_name="train MNIST abstraction"
         )
-        metrics_logger = task.get_logger()
 
-    train_loader, _ = data.get_data_loaders(config.batch_size, p_backdoor=0.0)
-    _, backdoor_loader = data.get_data_loaders(config.batch_size, p_backdoor=1.0)
-    rng = jax.random.PRNGKey(0)
-
-    rng, init_rng = jax.random.split(rng)
-    state = create_train_state(init_rng, config)
-
+    # Load the full model we want to abstract
     model = train_mnist.MLP()
     params = utils.load(config.model_path)
-    forward_fn = jax.jit(
-        lambda x: model.apply({"params": params}, x, return_activations=True)
+
+    # Magic collate_fn to get the activations of the model
+    train_collate_fn = abstraction.abstraction_collate(model, params)
+    val_collate_fn = abstraction.abstraction_collate(
+        model, params, return_original_batch=True
     )
 
-    for epoch in range(1, config.num_epochs + 1):
-        rng, input_rng = jax.random.split(rng)
-        metrics_logger.report_scalar("epoch", "epoch", epoch, int(state.step))
-        state, train_metrics = train_epoch(
-            state, train_loader, input_rng, metrics_logger, forward_fn
-        )
-        backdoor_zeros = []
-        for batch in backdoor_loader:
-            images, labels, infos = batch
-            zeros = images[infos["original_target"] == 0]
-            backdoor_zeros.append(zeros)
-        backdoor_zeros = jnp.concatenate(backdoor_zeros)
-        logits, activations = forward_fn(backdoor_zeros)
-        _, backdoor_metrics = apply_model(state, logits, activations)
+    train_loader, _ = data.get_data_loaders(
+        config.batch_size, p_backdoor=0.0, collate_fn=train_collate_fn
+    )
+    # For validation, we still use the training data, but with backdoors.
+    # TODO: this doesn't feel very elegant.
+    # Need to think about what's the principled thing to do here.
+    val_loader, _ = data.get_data_loaders(
+        config.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn
+    )
 
-        logger.log(
-            "METRICS",
-            f"epoch: {epoch}, consistency_loss: {train_metrics['consistency_loss']:.3f}, "
-            f"output_loss: {train_metrics['output_loss']:.3f}, "
-            f"backdoor-zero consistency_loss: {backdoor_metrics['consistency_loss']:.3f}, "
-            f"backdoor-zero output_loss: {backdoor_metrics['output_loss']:.3f}",
-        )
+    # Dataloader returns logits and activations, only activations get passed to model
+    _, example_activations = next(iter(train_loader))
+    # Activations are a list of batched activations, we want to effectively get
+    # batch size 1
+    example_input = [x[0:1] for x in example_activations]
 
-    return state
+    trainer = AbstractionTrainer(
+        abstract_dim=config.abstract_dim,
+        output_dim=10,
+        optimizer_hparams={"lr": config.learning_rate},
+        example_input=example_input,
+        check_val_every_n_epoch=1,
+        loggers=[metrics_logger],
+        enable_progress_bar=False,
+    )
+
+    trainer.train_model(train_loader, val_loader, num_epochs=config.num_epochs)
 
 
 def parse_args():
@@ -179,7 +190,7 @@ def parse_args():
     )
     parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
     parser.add_argument(
-        "--learning_rate", type=float, default=0.1, help="Learning rate"
+        "--learning_rate", type=float, default=1e-3, help="Learning rate"
     )
     parser.add_argument("--momentum", type=float, default=0.9, help="Momentum")
     parser.add_argument("--abstract_dim", type=int, default=256, help="Abstract dim")

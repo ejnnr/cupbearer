@@ -1,8 +1,21 @@
+from abc import ABC, abstractmethod
 import functools
 from pathlib import Path
 import pickle
-from typing import Callable, Sized, Union
+from typing import Callable, Iterable, Iterator, Protocol, Sized, Union
 from torch.utils.data import Dataset
+
+
+class SizedIterable(Protocol):
+    # Apparently there's no type in the standard library for this.
+    # Collection also requires __contains__, which pytorch Dataloaders in general
+    # don't implement.
+
+    def __iter__(self) -> Iterator:
+        ...
+
+    def __len__(self) -> int:
+        ...
 
 
 def add_transforms(cls):

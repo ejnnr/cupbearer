@@ -1,3 +1,4 @@
+from typing import Tuple
 import numpy as np
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
@@ -19,48 +20,30 @@ def numpy_collate(batch):
         return np.array(batch)
 
 
-class NumpyLoader(DataLoader):
-    def __init__(
-        self,
-        dataset,
-        batch_size=1,
-        shuffle=False,
-        sampler=None,
-        batch_sampler=None,
-        num_workers=0,
-        pin_memory=False,
-        drop_last=False,
-        timeout=0,
-        worker_init_fn=None,
-    ):
-        super(self.__class__, self).__init__(
-            dataset,
-            batch_size=batch_size,
-            shuffle=shuffle,
-            sampler=sampler,
-            batch_sampler=batch_sampler,
-            num_workers=num_workers,
-            collate_fn=numpy_collate,
-            pin_memory=pin_memory,
-            drop_last=drop_last,
-            timeout=timeout,
-            worker_init_fn=worker_init_fn,
-        )
-
-
 def to_numpy(img):
     return np.array(img, dtype=jnp.float32) / 255.0
 
 
-def get_data_loaders(batch_size, p_backdoor=0.5):
-    """Load MNIST train and test datasets into memory."""
+def get_data_loaders(
+    batch_size, collate_fn=numpy_collate, **kwargs
+) -> Tuple[DataLoader, DataLoader]:
+    """Load MNIST train and test datasets into memory.
+
+    Args:
+        batch_size: Batch size for the data loaders.
+        collate_fn: collate_fn for pytorch DataLoader.
+        **kwargs: Additional keyword arguments to pass to CornerPixelToWhite.
+
+    Returns:
+        Tuple (train_loader, test_loader)
+    """
     # Compose is meant to just compose image transforms, rather than
     # the joint transforms we have here. But the implementation is
     # actually agnostic as to whether the sample is just an image
     # or a tuple with multiple elements.
     transforms = Compose(
         [
-            backdoor.CornerPixelToWhite(p_backdoor),
+            backdoor.CornerPixelToWhite(**kwargs),
             utils.adapt_transform(to_numpy),
         ]
     )
@@ -72,6 +55,10 @@ def get_data_loaders(batch_size, p_backdoor=0.5):
         root="data", train=False, transforms=transforms, download=True
     )
 
-    train_loader = NumpyLoader(train_dataset, batch_size=batch_size, shuffle=True)
-    test_loader = NumpyLoader(test_dataset, batch_size=len(test_dataset), shuffle=False)
+    train_loader = DataLoader(
+        train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn
+    )
+    test_loader = DataLoader(
+        test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
+    )
     return train_loader, test_loader
