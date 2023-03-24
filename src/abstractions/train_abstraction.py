@@ -13,10 +13,9 @@ from flax.training import train_state
 import optax
 from loguru import logger
 import argparse
-from clearml import Task
 
 from abstractions import abstraction, data, train_mnist, utils, trainer
-from abstractions.logger import ClearMLLogger, DummyLogger
+from abstractions.logger import WandbLogger, DummyLogger
 
 
 class AbstractionTrainer(trainer.TrainerModule):
@@ -140,13 +139,14 @@ def train_and_evaluate(config):
     if config.debug:
         jax_config.update("jax_debug_nans", True)
         jax_config.update("jax_disable_jit", True)
-        config.no_clearml = True
+        config.no_wandb = True
 
-    if config.no_clearml:
+    if config.no_wandb:
         metrics_logger = DummyLogger()
     else:
-        metrics_logger = ClearMLLogger(
-            project_name="backdoor-detection", task_name="train MNIST abstraction"
+        metrics_logger = WandbLogger(
+            project_name="abstractions",
+            config=config,
         )
 
     # Load the full model we want to abstract
@@ -212,7 +212,9 @@ def parse_args():
     parser.add_argument("--abstract_dim", type=int, default=256, help="Abstract dim")
     parser.add_argument("--model_path", type=str, help="Path to model", required=True)
     parser.add_argument("--debug", action="store_true", help="Debug mode")
-    parser.add_argument("--no_clearml", action="store_true", help="Disable ClearML")
+    parser.add_argument(
+        "--no_wandb", action="store_true", help="Disable weights & biases"
+    )
     parser.add_argument(
         "--workdir", type=str, default="logs", help="Directory for logs"
     )
