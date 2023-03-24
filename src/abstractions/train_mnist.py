@@ -23,7 +23,6 @@ class MLP(nn.Module):
     def __call__(self, x, return_activations=False):
         activations = []
         x = x.reshape((x.shape[0], -1))  # flatten
-        activations.append(x)
         x = nn.Dense(features=256)(x)
         x = nn.relu(x)
         activations.append(x)
