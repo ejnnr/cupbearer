@@ -165,9 +165,16 @@ def train_and_evaluate(config):
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
-    val_loader, _ = data.get_data_loaders(
+    backdoor_loader, _ = data.get_data_loaders(
         config.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn
     )
+    different_corner_loader, _ = data.get_data_loaders(
+        config.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn, corner="top-right"
+    )
+    val_loaders = {
+        "backdoor": backdoor_loader,
+        "different_corner": different_corner_loader,
+    }
 
     # Dataloader returns logits and activations, only activations get passed to model
     _, example_activations = next(iter(train_loader))
@@ -188,7 +195,7 @@ def train_and_evaluate(config):
         enable_progress_bar=False,
     )
 
-    trainer.train_model(train_loader, val_loader, num_epochs=config.num_epochs)
+    trainer.train_model(train_loader, val_loaders, num_epochs=config.num_epochs)
     trainer.close_loggers()
 
 

@@ -231,7 +231,7 @@ class TrainerModule(ABC):
     def train_model(
         self,
         train_loader: SizedIterable,
-        val_loader: SizedIterable,
+        val_loaders: Mapping[str, SizedIterable],
         test_loader: Optional[SizedIterable] = None,
         num_epochs: int = 500,
     ):
@@ -240,7 +240,9 @@ class TrainerModule(ABC):
 
         Args:
           train_loader: Data loader of the training set.
-          val_loader: Data loader of the validation set.
+          val_loaders: Any number of validation loaders (often this will just be
+            a single one, but you might have different types of validation sets).
+            Key should be a name for each one, e.g. `{"val": val_loader}`.
           test_loader: If given, best model will be evaluated on the test set.
           num_epochs: Number of epochs for which to train the model.
 
@@ -257,8 +259,8 @@ class TrainerModule(ABC):
             self.on_training_epoch_end(epoch_idx, train_metrics)
             # Validation every N epochs
             if epoch_idx % self.check_val_every_n_epoch == 0:
-                eval_metrics = self.eval_model(val_loader, log_prefix="val/")
-                self.on_validation_epoch_end(epoch_idx, eval_metrics, val_loader)
+                eval_metrics = self.eval_model(val_loaders)
+                self.on_validation_epoch_end(epoch_idx, eval_metrics, val_loaders)
                 self.log_metrics(eval_metrics, step=int(self.state.step))
 
     def train_epoch(self, train_loader: SizedIterable) -> Dict[str, Any]:
@@ -287,37 +289,37 @@ class TrainerModule(ABC):
 
         return avg_metrics
 
-    def eval_model(
-        self, data_loader: SizedIterable, log_prefix: Optional[str] = ""
-    ) -> Dict[str, Any]:
+    def eval_model(self, data_loaders: Mapping[str, SizedIterable]) -> Dict[str, Any]:
         """
         Evaluates the model on a dataset.
 
         Args:
-          data_loader: Data loader of the dataset to evaluate on.
-          log_prefix: Prefix to add to all metrics (e.g. 'val/' or 'test/')
+          data_loaders: A dictionary of data loaders, where the key is the name
 
         Returns:
-          A dictionary of the evaluation metrics, averaged over data points
-          in the dataset.
+          A dictionary with metrics, averaged over all batches. Metrics from
+          all dataloaders are merged into one dictionary by prefixing the name.
         """
         # Test model on all images of a data loader and return avg loss
-        metrics = defaultdict(float)
         num_elements = 0
-        for batch in data_loader:
-            step_metrics = self.eval_step(self.state, batch)
-            step_metrics = {k: v.item() for k, v in step_metrics.items()}
-            batch_size = (
-                batch[0].shape[0]
-                if isinstance(batch, (list, tuple))
-                else batch.shape[0]
-            )
-            for key in step_metrics:
-                metrics[key] += step_metrics[key] * batch_size
-            num_elements += batch_size
-        metrics = {
-            (log_prefix + key): (value / num_elements) for key, value in metrics.items()
-        }
+        metrics = {}
+        for data_loader_name, data_loader in data_loaders.items():
+            data_loader_metrics = defaultdict(float)
+            for batch in data_loader:
+                step_metrics = self.eval_step(self.state, batch)
+                step_metrics = {k: v.item() for k, v in step_metrics.items()}
+                batch_size = (
+                    batch[0].shape[0]
+                    if isinstance(batch, (list, tuple))
+                    else batch.shape[0]
+                )
+                for key in step_metrics:
+                    data_loader_metrics[key] += step_metrics[key] * batch_size
+                num_elements += batch_size
+
+            for key, value in data_loader_metrics.items():
+                metrics[data_loader_name + "/" + key] = value / num_elements
+
         return metrics
 
     def pbar(self, iterable: Iterable, **kwargs) -> Iterable:
@@ -364,7 +366,10 @@ class TrainerModule(ABC):
         pass
 
     def on_validation_epoch_end(
-        self, epoch_idx: int, metrics: Dict[str, Any], val_loader: SizedIterable
+        self,
+        epoch_idx: int,
+        metrics: Dict[str, Any],
+        val_loaders: Mapping[str, SizedIterable],
     ):
         """
         Method called at the end of each validation epoch. Can be used for additional
@@ -374,7 +379,7 @@ class TrainerModule(ABC):
           epoch_idx: Index of the training epoch at which validation was performed.
           eval_metrics: A dictionary of the validation metrics. New metrics added to
             this dictionary will be logged as well.
-          val_loader: Data loader of the validation set, to support additional
+          val_loaders: Data loaders of all validation sets, to support additional
             evaluation.
         """
         pass
