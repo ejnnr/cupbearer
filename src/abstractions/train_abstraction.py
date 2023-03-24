@@ -173,7 +173,10 @@ def train_and_evaluate(config):
     trainer = AbstractionTrainer(
         abstract_dim=config.abstract_dim,
         output_dim=10,
-        optimizer_hparams={"lr": config.learning_rate},
+        optimizer_hparams={
+            "lr": config.learning_rate,
+            "optimizer": config.optimizer,
+        },
         example_input=example_input,
         check_val_every_n_epoch=1,
         loggers=[metrics_logger],
@@ -181,6 +184,7 @@ def train_and_evaluate(config):
     )
 
     trainer.train_model(train_loader, val_loader, num_epochs=config.num_epochs)
+    trainer.close_loggers()
 
 
 def parse_args():
@@ -192,7 +196,7 @@ def parse_args():
     parser.add_argument(
         "--learning_rate", type=float, default=1e-3, help="Learning rate"
     )
-    parser.add_argument("--momentum", type=float, default=0.9, help="Momentum")
+    parser.add_argument("--optimizer", type=str, default="adamw", help="Optimizer")
     parser.add_argument("--abstract_dim", type=int, default=256, help="Abstract dim")
     parser.add_argument("--model_path", type=str, help="Path to model", required=True)
     parser.add_argument("--debug", action="store_true", help="Debug mode")

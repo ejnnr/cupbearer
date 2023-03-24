@@ -342,6 +342,10 @@ class TrainerModule(ABC):
         for logger in self.loggers:
             logger.log_metrics(metrics, step)
 
+    def close_loggers(self):
+        for logger in self.loggers:
+            logger.close()
+
     def on_training_start(self):
         """
         Method called before training is started. Can be used for additional

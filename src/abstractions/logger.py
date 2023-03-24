@@ -17,6 +17,9 @@ class Logger(ABC):
         for name, value in metrics.items():
             self._log_scalar(name, value, step)
 
+    def close(self):
+        pass
+
 
 class DummyLogger(Logger):
     def _log_scalar(self, name: str, value: Any, step: int, **kwargs):
@@ -36,3 +39,6 @@ class ClearMLLogger(Logger):
         # for the series in that plot. For now, we just make an extra
         # plot for every series.
         return self.logger.report_scalar(name, name, value, step)
+
+    def close(self):
+        self.task.close()
