@@ -40,15 +40,20 @@ class AbstractionTrainer(trainer.TrainerModule):
             assert predicted_abstractions[0].shape == (b, d)
             assert logits.shape == (b, 10) == predicted_logits.shape
 
+            if mask is None:
+                mask = jnp.ones((b,))
+            assert mask.shape == (b,)
+            num_samples = mask.sum()
+
             # Output loss (KL divergence between actual and predicted output):
             # TODO: Should probably just use something like distrax.
             probs = jax.nn.softmax(logits, axis=-1)
             logprobs = jax.nn.log_softmax(logits, axis=-1)
             predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
             output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
-            if mask is not None:
-                output_losses *= mask
-            output_loss = output_losses.mean()
+            output_losses *= mask
+            # Can't take mean here because we don't want to count masked samples
+            output_loss = output_losses.sum() / num_samples
             # Consistency loss:
             consistency_loss = jnp.array(0)
             # Skip the first abstraction, since there's no prediction for that
@@ -62,8 +67,8 @@ class AbstractionTrainer(trainer.TrainerModule):
                 if mask is not None:
                     consistency_losses *= mask
                 # Now we also take the mean over the batch (outside the sqrt and after
-                # masking)
-                consistency_loss += jnp.sqrt(consistency_losses).mean()
+                # masking). As before, we don't want to count masked samples.
+                consistency_loss += jnp.sqrt(consistency_losses).sum() / num_samples
 
             consistency_loss /= len(predicted_abstractions)
 
