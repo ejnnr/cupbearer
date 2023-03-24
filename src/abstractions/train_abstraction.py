@@ -128,7 +128,7 @@ class AbstractionTrainer(trainer.TrainerModule):
         logger.log("METRICS", self._prettify_metrics(metrics))
 
     def _prettify_metrics(self, metrics):
-        return ", ".join(f"{k}: {v:.4f}" for k, v in metrics.items())
+        return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
 def train_and_evaluate(config):
