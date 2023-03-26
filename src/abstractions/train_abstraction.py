@@ -189,6 +189,10 @@ def train_and_evaluate(config):
     )
 
     trainer.train_model(train_loader, val_loaders, num_epochs=config.num_epochs)
+    if config.save_path:
+        utils.save(trainer.state.params, config.save_path)
+    else:
+        utils.save(trainer.state.params, "models/abstractions/mnist", overwrite=True)
     trainer.close_loggers()
 
 
@@ -203,7 +207,10 @@ def parse_args():
     )
     parser.add_argument("--optimizer", type=str, default="adamw", help="Optimizer")
     parser.add_argument("--abstract_dim", type=int, default=256, help="Abstract dim")
-    parser.add_argument("--model_path", type=str, help="Path to model", required=True)
+    parser.add_argument(
+        "--model_path", type=str, help="Path to model to be abstracted", required=True
+    )
+    parser.add_argument("--save_path", type=str, help="Path to save model")
     parser.add_argument("--debug", action="store_true", help="Debug mode")
     parser.add_argument(
         "--no_wandb", action="store_true", help="Disable weights & biases"
