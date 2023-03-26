@@ -55,7 +55,7 @@ class TrainerModule(ABC):
         self,
         model_class: nn.Module,
         model_hparams: Dict[str, Any],
-        optimizer_hparams: Dict[str, Any],
+        optimizer: optax.GradientTransformation,
         example_input: Any,
         loggers: Iterable[Logger],
         log_dir: str = "logs",
@@ -73,8 +73,7 @@ class TrainerModule(ABC):
           model_class: The class of the model that should be trained.
           model_hparams: A dictionary of all hyperparameters of the model. Is
             used as input to the model when created.
-          optimizer_hparams: A dictionary of all hyperparameters of the optimizer.
-            Used during initialization of the optimizer.
+          optimizer: The instantiated optax optimizer.
           example_input: Input to the model for initialization and tabulate.
           seed: Seed to initialize PRNG.
           logger_params: A dictionary containing the specification of the logger.
@@ -86,7 +85,7 @@ class TrainerModule(ABC):
         super().__init__()
         self.model_class = model_class
         self.model_hparams = model_hparams
-        self.optimizer_hparams = optimizer_hparams
+        self.optimizer = optimizer
         self.enable_progress_bar = enable_progress_bar
         self.debug = debug
         self.seed = seed
@@ -100,7 +99,6 @@ class TrainerModule(ABC):
         self.config = {
             "model_class": model_class.__name__,
             "model_hparams": model_hparams,
-            "optimizer_hparams": optimizer_hparams,
             "enable_progress_bar": self.enable_progress_bar,
             "debug": self.debug,
             "check_val_every_n_epoch": check_val_every_n_epoch,
@@ -112,14 +110,14 @@ class TrainerModule(ABC):
         self.print_tabulate()
         # Init trainer parts
         self.create_jitted_functions()
-        self.init_model()
+        self.init_model(optimizer)
 
-    def init_model(self):
+    def init_model(self, optimizer: optax.GradientTransformation):
         """
         Creates an initial training state with newly generated network parameters.
 
         Args:
-          example_input: An input to the model with which the shapes are inferred.
+          optimizer: The instantiated optax optimizer.
         """
         # Prepare PRNG and input
         model_rng = random.PRNGKey(self.seed)
@@ -127,14 +125,12 @@ class TrainerModule(ABC):
         # Run model initialization
         variables = self.run_model_init(init_rng)
         # Create default state. Optimizer is initialized later
-        self.state = TrainState(
-            step=0,
+        self.state = TrainState.create(
             apply_fn=self.model.apply,
             params=variables["params"],
             batch_stats=variables.get("batch_stats"),
             rng=model_rng,
-            tx=None,
-            opt_state=None,
+            tx=optimizer,
         )
 
     def run_model_init(self, init_rng: Any) -> Dict:
@@ -155,38 +151,6 @@ class TrainerModule(ABC):
         Prints a summary of the Module represented as table.
         """
         print(self.model.tabulate(random.PRNGKey(0), self.example_input, train=True))
-
-    def init_optimizer(self, num_epochs: int, num_steps_per_epoch: int):
-        """
-        Initializes the optimizer and learning rate scheduler.
-
-        Args:
-          num_epochs: Number of epochs the model will be trained for.
-          num_steps_per_epoch: Number of training steps per epoch.
-        """
-        hparams = copy(self.optimizer_hparams)
-
-        # Initialize optimizer
-        optimizer_name = hparams.pop("optimizer", "adamw")
-        if optimizer_name.lower() == "adam":
-            opt_class = optax.adam
-        elif optimizer_name.lower() == "adamw":
-            opt_class = optax.adamw
-        elif optimizer_name.lower() == "sgd":
-            opt_class = optax.sgd
-        else:
-            assert False, f'Unknown optimizer "{optimizer_name}"'
-        # Initialize learning rate scheduler
-        lr = hparams.pop("lr", 1e-3)
-        optimizer = opt_class(learning_rate=lr, **hparams)
-        # Initialize training state
-        self.state = TrainState.create(
-            apply_fn=self.state.apply_fn,
-            params=self.state.params,
-            batch_stats=self.state.batch_stats,
-            tx=optimizer,
-            rng=self.state.rng,
-        )
 
     def create_jitted_functions(self):
         """
@@ -250,8 +214,6 @@ class TrainerModule(ABC):
           A dictionary of the train, validation and evt. test metrics for the
           best model on the validation set.
         """
-        # Create optimizer and the scheduler for the given number of epochs
-        self.init_optimizer(num_epochs, len(train_loader))
         # Prepare training loop
         self.on_training_start()
         for epoch_idx in self.pbar(range(1, num_epochs + 1), desc="Epochs"):

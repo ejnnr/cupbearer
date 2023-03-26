@@ -1,11 +1,14 @@
 # based on the flax example code
 
 import sys
+import hydra
 import jax
 import jax.numpy as jnp
 from jax.config import config as jax_config
 from loguru import logger
-import argparse
+
+from omegaconf import DictConfig, OmegaConf
+from hydra.utils import to_absolute_path
 
 from abstractions import abstraction, data, train_mnist, utils, trainer
 from abstractions.logger import WandbLogger, DummyLogger
@@ -123,28 +126,29 @@ class AbstractionTrainer(trainer.TrainerModule):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
-def train_and_evaluate(config):
+@hydra.main(version_base=None, config_path="conf", config_name="abstraction")
+def train_and_evaluate(cfg: DictConfig):
     """Execute model training and evaluation loop.
 
     Args:
-      config: Hyperparameter configuration for training and evaluation.
+      cfg: Hydra configuration object.
     """
-    if config.debug:
+    if cfg.debug:
         jax_config.update("jax_debug_nans", True)
         jax_config.update("jax_disable_jit", True)
-        config.no_wandb = True
+        cfg.wandb = False
 
-    if config.no_wandb:
-        metrics_logger = DummyLogger()
-    else:
+    if cfg.wandb:
         metrics_logger = WandbLogger(
             project_name="abstractions",
-            config=config,
+            config=OmegaConf.to_container(cfg, resolve=True),  # type: ignore
         )
+    else:
+        metrics_logger = DummyLogger()
 
     # Load the full model we want to abstract
     model = train_mnist.MLP()
-    params = utils.load(config.model_path)
+    params = utils.load(to_absolute_path(cfg.model_path))
 
     # Magic collate_fn to get the activations of the model
     train_collate_fn = abstraction.abstraction_collate(model, params)
@@ -153,16 +157,16 @@ def train_and_evaluate(config):
     )
 
     train_loader, _ = data.get_data_loaders(
-        config.batch_size, p_backdoor=0.0, collate_fn=train_collate_fn
+        cfg.batch_size, p_backdoor=0.0, collate_fn=train_collate_fn
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
     backdoor_loader, _ = data.get_data_loaders(
-        config.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn
+        cfg.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn
     )
     different_corner_loader, _ = data.get_data_loaders(
-        config.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn, corner="top-right"
+        cfg.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn, corner="top-right"
     )
     val_loaders = {
         "backdoor": backdoor_loader,
@@ -176,52 +180,28 @@ def train_and_evaluate(config):
     example_input = [x[0:1] for x in example_activations]
 
     trainer = AbstractionTrainer(
-        abstract_dim=config.abstract_dim,
+        abstract_dim=cfg.abstract_dim,
         output_dim=10,
-        optimizer_hparams={
-            "lr": config.learning_rate,
-            "optimizer": config.optimizer,
-        },
+        optimizer=hydra.utils.instantiate(cfg.optim),
         example_input=example_input,
         check_val_every_n_epoch=1,
         loggers=[metrics_logger],
         enable_progress_bar=False,
     )
 
-    trainer.train_model(train_loader, val_loaders, num_epochs=config.num_epochs)
-    if config.save_path:
-        utils.save(trainer.state.params, config.save_path)
+    trainer.train_model(train_loader, val_loaders, num_epochs=cfg.num_epochs)
+    if cfg.save_path:
+        utils.save(trainer.state.params, to_absolute_path(cfg.save_path))
     else:
-        utils.save(trainer.state.params, "models/abstractions/mnist", overwrite=True)
+        utils.save(
+            trainer.state.params,
+            to_absolute_path("models/abstractions/mnist"),
+            overwrite=True,
+        )
     trainer.close_loggers()
 
 
-def parse_args():
-    parser = argparse.ArgumentParser(description="Jax MNIST training example")
-    parser.add_argument(
-        "--num_epochs", type=int, default=10, help="Number of epochs to train"
-    )
-    parser.add_argument("--batch_size", type=int, default=128, help="Batch size")
-    parser.add_argument(
-        "--learning_rate", type=float, default=1e-3, help="Learning rate"
-    )
-    parser.add_argument("--optimizer", type=str, default="adamw", help="Optimizer")
-    parser.add_argument("--abstract_dim", type=int, default=256, help="Abstract dim")
-    parser.add_argument(
-        "--model_path", type=str, help="Path to model to be abstracted", required=True
-    )
-    parser.add_argument("--save_path", type=str, help="Path to save model")
-    parser.add_argument("--debug", action="store_true", help="Debug mode")
-    parser.add_argument(
-        "--no_wandb", action="store_true", help="Disable weights & biases"
-    )
-    parser.add_argument(
-        "--workdir", type=str, default="logs", help="Directory for logs"
-    )
-    return parser.parse_args()
-
-
-def main():
+if __name__ == "__main__":
     logger.remove()
     logger.level("METRICS", no=25, color="<green>", icon="📈")
     logger.add(
@@ -229,9 +209,4 @@ def main():
     )
     # Default logger for everything else:
     logger.add(sys.stderr, filter=lambda record: record["level"].name != "METRICS")
-    config = parse_args()
-    train_and_evaluate(config)
-
-
-if __name__ == "__main__":
-    main()
+    train_and_evaluate()

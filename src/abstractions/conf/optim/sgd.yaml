@@ -1,0 +1,3 @@
+defaults:
+  - base
+_target_: optax.sgd
