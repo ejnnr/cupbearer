@@ -1,16 +1,9 @@
 # based on the flax example code
 
-from collections import defaultdict
 import sys
-from typing import Sequence
 import jax
 import jax.numpy as jnp
 from jax.config import config as jax_config
-import numpy as np
-from flax import linen as nn
-
-from flax.training import train_state
-import optax
 from loguru import logger
 import argparse
 
