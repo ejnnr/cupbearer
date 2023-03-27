@@ -184,20 +184,20 @@ def train_and_evaluate(cfg: DictConfig):
         output_dim=10,
         optimizer=hydra.utils.instantiate(cfg.optim),
         example_input=example_input,
+        # Hydra sets the cwd to the right log dir automatically
+        log_dir=".",
         check_val_every_n_epoch=1,
         loggers=[metrics_logger],
         enable_progress_bar=False,
     )
 
-    trainer.train_model(train_loader, val_loaders, num_epochs=cfg.num_epochs)
-    if cfg.save_path:
-        utils.save(trainer.state.params, to_absolute_path(cfg.save_path))
-    else:
-        utils.save(
-            trainer.state.params,
-            to_absolute_path("models/abstractions/mnist"),
-            overwrite=True,
-        )
+    trainer.train_model(
+        train_loader=train_loader,
+        val_loaders=val_loaders,
+        test_loaders=None,
+        num_epochs=cfg.num_epochs,
+    )
+    trainer.save_model()
     trainer.close_loggers()
 
 

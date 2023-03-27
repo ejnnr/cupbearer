@@ -3,6 +3,7 @@
 # Standard libraries
 from abc import ABC, abstractmethod
 import os
+from pathlib import Path
 import sys
 from typing import (
     Any,
@@ -35,9 +36,9 @@ import optax
 import torch
 import torch.utils.data as data
 
-from clearml import Task
+from hydra.utils import to_absolute_path
 
-from abstractions.utils import SizedIterable
+from abstractions.utils import SizedIterable, save, load
 from abstractions.logger import Logger
 
 
@@ -55,7 +56,7 @@ class TrainerModule(ABC):
         self,
         model_class: nn.Module,
         model_hparams: Dict[str, Any],
-        optimizer: optax.GradientTransformation,
+        optimizer: Optional[optax.GradientTransformation],
         example_input: Any,
         loggers: Iterable[Logger],
         log_dir: str = "logs",
@@ -73,7 +74,8 @@ class TrainerModule(ABC):
           model_class: The class of the model that should be trained.
           model_hparams: A dictionary of all hyperparameters of the model. Is
             used as input to the model when created.
-          optimizer: The instantiated optax optimizer.
+          optimizer: The instantiated optax optimizer. If not provided,
+            training will not be possible.
           example_input: Input to the model for initialization and tabulate.
           seed: Seed to initialize PRNG.
           logger_params: A dictionary containing the specification of the logger.
@@ -94,7 +96,7 @@ class TrainerModule(ABC):
             example_input = [example_input]
         self.example_input = example_input
         self.loggers = loggers
-        self.log_dir = log_dir
+        self.log_dir = Path(log_dir)
         # Set of hyperparameters to save
         self.config = {
             "model_class": model_class.__name__,
@@ -103,6 +105,10 @@ class TrainerModule(ABC):
             "debug": self.debug,
             "check_val_every_n_epoch": check_val_every_n_epoch,
             "seed": self.seed,
+            # We want the actual absolute path, e.g. if log_dir is ".",
+            # we want to resolve to the CWD created by Hydra.
+            # That makes it easy to load the model later.
+            "log_dir": str(self.log_dir.absolute()),
         }
         self.config.update(kwargs)
         # Create empty model. Note: no parameters yet
@@ -112,7 +118,7 @@ class TrainerModule(ABC):
         self.create_jitted_functions()
         self.init_model(optimizer)
 
-    def init_model(self, optimizer: optax.GradientTransformation):
+    def init_model(self, optimizer: Optional[optax.GradientTransformation]):
         """
         Creates an initial training state with newly generated network parameters.
 
@@ -124,14 +130,28 @@ class TrainerModule(ABC):
         model_rng, init_rng = random.split(model_rng)
         # Run model initialization
         variables = self.run_model_init(init_rng)
-        # Create default state. Optimizer is initialized later
-        self.state = TrainState.create(
-            apply_fn=self.model.apply,
-            params=variables["params"],
-            batch_stats=variables.get("batch_stats"),
-            rng=model_rng,
-            tx=optimizer,
-        )
+        # Create default state
+        self.init_state(variables, model_rng, optimizer)
+
+    def init_state(self, variables, rng, tx):
+        if tx is None:
+            self.state = TrainState(
+                step=0,
+                apply_fn=self.model.apply,
+                params=variables["params"],
+                batch_stats=variables.get("batch_stats"),
+                rng=rng,
+                tx=None,
+                opt_state=None,
+            )
+        else:
+            self.state = TrainState.create(
+                apply_fn=self.model.apply,
+                params=variables["params"],
+                batch_stats=variables.get("batch_stats"),
+                rng=rng,
+                tx=tx,
+            )
 
     def run_model_init(self, init_rng: Any) -> Dict:
         """
@@ -214,6 +234,8 @@ class TrainerModule(ABC):
           A dictionary of the train, validation and evt. test metrics for the
           best model on the validation set.
         """
+        if self.state.tx is None:
+            raise ValueError("No optimizer was given. Please specify an optimizer.")
         # Prepare training loop
         self.on_training_start()
         for epoch_idx in self.pbar(range(1, num_epochs + 1), desc="Epochs"):
@@ -346,36 +368,38 @@ class TrainerModule(ABC):
         """
         pass
 
-    def save_model(self, step: int = 0):
+    def save_model(self):
         """
         Saves current training state at certain training iteration. Only the model
         parameters and batch statistics are saved to reduce memory footprint. To
         support the training to be continued from a checkpoint, this method can be
         extended to include the optimizer state as well.
-
-        Args:
-          step: Index of the step to save the model at, e.g. epoch.
         """
-        checkpoints.save_checkpoint(
-            ckpt_dir=self.log_dir,
-            target={"params": self.state.params, "batch_stats": self.state.batch_stats},
-            step=step,
-            overwrite=True,
+        # Save hyperparameters
+        if os.path.isfile(self.log_dir / "hparams.json"):
+            with open(self.log_dir / "hparams.json", "r") as f:
+                old_config = json.load(f)
+            if old_config != self.config:
+                raise RuntimeError(
+                    f"Hyperparameters in {self.log_dir/ 'hparams.json'} have changed. "
+                    "Please save model to a different directory."
+                )
+
+        with open(self.log_dir / "hparams.json", "w") as f:
+            json.dump(self.config, f, indent=4)
+
+        # Save model parameters and batch statistics
+        save(
+            {"params": self.state.params, "batch_stats": self.state.batch_stats},
+            self.log_dir / "model",
         )
 
     def load_model(self):
         """
         Loads model parameters and batch statistics from the logging directory.
         """
-        state_dict = checkpoints.restore_checkpoint(ckpt_dir=self.log_dir, target=None)
-        self.state = TrainState.create(
-            apply_fn=self.model.apply,
-            params=state_dict["params"],
-            batch_stats=state_dict["batch_stats"],
-            # Optimizer will be overwritten when training starts
-            tx=self.state.tx if self.state.tx else optax.sgd(0.1),
-            rng=self.state.rng,
-        )
+        state_dict = load(self.log_dir / "model")
+        self.init_state(variables=state_dict, rng=self.state.rng, tx=self.state.tx)
 
     def bind_model(self):
         """
@@ -396,6 +420,9 @@ class TrainerModule(ABC):
         Creates a Trainer object with same hyperparameters and loaded model from
         a checkpoint directory.
 
+        Limitations: Loggers and optimizer are not restored. Training will thus
+        not be possible.
+
         Args:
           checkpoint: Folder in which the checkpoint and hyperparameter file is stored.
           example_input: An input to the model for shape inference.
@@ -412,6 +439,6 @@ class TrainerModule(ABC):
         # TODO: also restore loggers (e.g. by passing the class and hparams
         # instead of the object in __init__)
         hparams["loggers"] = []
-        trainer = cls(example_input=example_input, **hparams)
+        trainer = cls(example_input=example_input, optimizer=None, **hparams)
         trainer.load_model()
         return trainer

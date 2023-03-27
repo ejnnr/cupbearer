@@ -4,6 +4,7 @@ from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
 from torchvision.transforms import Compose
 import jax.numpy as jnp
+from hydra.utils import to_absolute_path
 
 from abstractions import backdoor, utils
 
@@ -49,10 +50,10 @@ def get_data_loaders(
     )
     CustomMNIST = utils.add_transforms(MNIST)
     train_dataset = CustomMNIST(
-        root="data", train=True, transforms=transforms, download=True
+        root=to_absolute_path("data"), train=True, transforms=transforms, download=True
     )
     test_dataset = CustomMNIST(
-        root="data", train=False, transforms=transforms, download=True
+        root=to_absolute_path("data"), train=False, transforms=transforms, download=True
     )
 
     train_loader = DataLoader(

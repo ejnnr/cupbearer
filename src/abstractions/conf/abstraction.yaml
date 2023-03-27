@@ -6,7 +6,6 @@ num_epochs: 10
 batch_size: 128
 abstract_dim: 256
 model_path: ???
-save_path: null
 debug: false
 wandb: true
 
@@ -17,3 +16,5 @@ seed: 0
 hydra:
   run:
     dir: ${dir.log}/${dir.run}
+  job:
+    chdir: true
