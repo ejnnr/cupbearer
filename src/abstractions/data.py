@@ -1,4 +1,4 @@
-from typing import Tuple
+from typing import Any, Callable, List, Mapping, Optional, Tuple
 import numpy as np
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
@@ -6,7 +6,7 @@ from torchvision.transforms import Compose
 import jax.numpy as jnp
 from hydra.utils import to_absolute_path
 
-from abstractions import backdoor, utils
+from abstractions import custom_transforms, utils
 
 
 def numpy_collate(batch):
@@ -26,40 +26,62 @@ def to_numpy(img):
 
 
 def get_data_loaders(
-    batch_size, collate_fn=numpy_collate, **kwargs
-) -> Tuple[DataLoader, DataLoader]:
+    batch_size,
+    train: bool = True,
+    collate_fn=numpy_collate,
+    transforms=None,
+) -> DataLoader:
     """Load MNIST train and test datasets into memory.
 
     Args:
         batch_size: Batch size for the data loaders.
+        train: whether to use train (instead of test) data split. This also determines
+            whether the data loaders are shuffled.
         collate_fn: collate_fn for pytorch DataLoader.
-        **kwargs: Additional keyword arguments to pass to CornerPixelToWhite.
+        transforms: List of transforms to apply to the dataset.
+            If None, only a to_numpy is applied. If you do supply your own transforms,
+            note that you need to include to_numpy at the right place.
+            Also use adapt_transform where necessary.
 
     Returns:
-        Tuple (train_loader, test_loader)
+        Pytorch DataLoader
     """
+    if transforms is None:
+        transforms = [utils.adapt_transform(to_numpy)]
     # Compose is meant to just compose image transforms, rather than
     # the joint transforms we have here. But the implementation is
     # actually agnostic as to whether the sample is just an image
     # or a tuple with multiple elements.
-    transforms = Compose(
-        [
-            backdoor.CornerPixelToWhite(**kwargs),
-            utils.adapt_transform(to_numpy),
-        ]
-    )
+    transforms = Compose(transforms)
     CustomMNIST = utils.add_transforms(MNIST)
-    train_dataset = CustomMNIST(
-        root=to_absolute_path("data"), train=True, transforms=transforms, download=True
+    dataset = CustomMNIST(
+        root=to_absolute_path("data"), train=train, transforms=transforms, download=True
     )
-    test_dataset = CustomMNIST(
-        root=to_absolute_path("data"), train=False, transforms=transforms, download=True
+    dataloader = DataLoader(
+        dataset, batch_size=batch_size, shuffle=train, collate_fn=collate_fn
     )
+    return dataloader
 
-    train_loader = DataLoader(
-        train_dataset, batch_size=batch_size, shuffle=True, collate_fn=collate_fn
-    )
-    test_loader = DataLoader(
-        test_dataset, batch_size=batch_size, shuffle=False, collate_fn=collate_fn
-    )
-    return train_loader, test_loader
+
+def get_transforms(
+    backdoor_options: Optional[Mapping[str, Any]] = None,
+    noise_options: Optional[Mapping[str, Any]] = None,
+) -> List[Callable]:
+    """Get transforms for MNIST dataset.
+
+    Args:
+        backdoor_options: Options for backdoor transform.
+        noise_options: Options for noise transform.
+
+    Returns:
+        List of transforms to apply to the dataset.
+    """
+    transforms: List[Callable] = [
+        custom_transforms.AddInfoDict(),
+    ]
+    if backdoor_options is not None:
+        transforms.append(custom_transforms.CornerPixelToWhite(**backdoor_options))
+    transforms.append(utils.adapt_transform(to_numpy))
+    if noise_options is not None:
+        transforms.append(custom_transforms.GaussianNoise(**noise_options))
+    return transforms

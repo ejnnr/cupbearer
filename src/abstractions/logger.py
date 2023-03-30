@@ -51,11 +51,12 @@ class WandbLogger(Logger):
         project_name: str,
         task_name: Optional[str] = None,
         config: Optional[Dict[str, Any]] = None,
+        **kwargs,
     ):
         super().__init__()
         import wandb
 
-        wandb.init(project=project_name, name=task_name, config=config)
+        wandb.init(project=project_name, name=task_name, config=config, **kwargs)
         self.logger = wandb
 
     def log_metrics(self, metrics: Dict[str, Any], step: int):

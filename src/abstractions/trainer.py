@@ -92,8 +92,6 @@ class TrainerModule(ABC):
         self.debug = debug
         self.seed = seed
         self.check_val_every_n_epoch = check_val_every_n_epoch
-        if not isinstance(example_input, (list, tuple)):
-            example_input = [example_input]
         self.example_input = example_input
         self.loggers = loggers
         self.log_dir = Path(log_dir)
@@ -216,7 +214,7 @@ class TrainerModule(ABC):
         self,
         train_loader: SizedIterable,
         val_loaders: Mapping[str, SizedIterable],
-        test_loader: Optional[SizedIterable] = None,
+        test_loaders: Optional[Mapping[str, SizedIterable]] = None,
         num_epochs: int = 500,
     ):
         """
@@ -245,7 +243,12 @@ class TrainerModule(ABC):
             if epoch_idx % self.check_val_every_n_epoch == 0:
                 eval_metrics = self.eval_model(val_loaders)
                 self.on_validation_epoch_end(epoch_idx, eval_metrics, val_loaders)
-                self.log_metrics(eval_metrics, step=int(self.state.step))
+                self.log_metrics(eval_metrics)
+
+        # Test model if possible
+        if test_loaders is not None:
+            test_metrics = self.eval_model(test_loaders)
+            self.log_metrics(test_metrics)
 
     def train_epoch(self, train_loader: SizedIterable) -> Dict[str, Any]:
         """
@@ -266,7 +269,6 @@ class TrainerModule(ABC):
             step_metrics = {k: v.item() for k, v in step_metrics.items()}
             self.log_metrics(
                 {"train/" + k: v for k, v in step_metrics.items()},
-                step=int(self.state.step),
             )
             for key in step_metrics:
                 avg_metrics["train/" + key] += step_metrics[key] / num_batches
@@ -324,9 +326,9 @@ class TrainerModule(ABC):
         else:
             return iterable
 
-    def log_metrics(self, metrics: Mapping[str, Any], step: int):
+    def log_metrics(self, metrics: Mapping[str, Any]):
         for logger in self.loggers:
-            logger.log_metrics(metrics, step)
+            logger.log_metrics(metrics, step=int(self.state.step))
 
     def close_loggers(self):
         for logger in self.loggers:

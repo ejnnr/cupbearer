@@ -40,24 +40,40 @@ def evaluate(cfg: DictConfig):
         model, params, return_original_batch=True
     )
 
-    train_loader, _ = data.get_data_loaders(
-        train_cfg.batch_size, p_backdoor=0.0, collate_fn=train_collate_fn
+    # TODO: I'm only using the train_loader to get the example_input, which would also
+    # be possible from the other loaders
+    train_loader = data.get_data_loaders(
+        train_cfg.batch_size,
+        collate_fn=train_collate_fn,
+        transforms=data.get_transforms(backdoor_options={"p_backdoor": 0.0}),
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
-    backdoor_loader, _ = data.get_data_loaders(
-        train_cfg.batch_size, p_backdoor=1.0, collate_fn=val_collate_fn
-    )
-    different_corner_loader, _ = data.get_data_loaders(
+    backdoor_loader = data.get_data_loaders(
         train_cfg.batch_size,
-        p_backdoor=1.0,
         collate_fn=val_collate_fn,
-        corner="top-right",
+        transforms=data.get_transforms(backdoor_options={"p_backdoor": 1.0}),
     )
+
+    different_corner_loader = data.get_data_loaders(
+        train_cfg.batch_size,
+        collate_fn=val_collate_fn,
+        transforms=data.get_transforms(
+            backdoor_options={"p_backdoor": 1.0, "corner": "top-right"}
+        ),
+    )
+
+    gaussian_noise_loader = data.get_data_loaders(
+        train_cfg.batch_size,
+        collate_fn=val_collate_fn,
+        transforms=data.get_transforms(noise_options={"std": 1.0}),
+    )
+
     test_loaders = {
         "backdoor": backdoor_loader,
         "different_corner": different_corner_loader,
+        "gaussian_noise": gaussian_noise_loader,
     }
 
     # Dataloader returns logits and activations, only activations get passed to model
@@ -72,6 +88,8 @@ def evaluate(cfg: DictConfig):
     )
 
     metrics = trainer.eval_model(test_loaders)
+    # Print metrics to console
+    trainer.on_validation_epoch_end(1, metrics, test_loaders)
     with open(train_run / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
 
