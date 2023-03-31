@@ -125,12 +125,12 @@ def train_and_evaluate(cfg: DictConfig):
 
     train_loader = data.get_data_loaders(
         cfg.batch_size,
-        transforms=data.get_transforms(backdoor_options={"p_backdoor": 0.5}),
+        transforms=data.get_transforms(cfg.transforms),
         train=True,
     )
     val_loader = data.get_data_loaders(
         cfg.batch_size,
-        transforms=data.get_transforms(backdoor_options={"p_backdoor": 0.5}),
+        transforms=data.get_transforms(cfg.transforms),
         train=False,
     )
     val_loaders = {

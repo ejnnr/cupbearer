@@ -1,6 +1,7 @@
 # based on the flax example code
 
 import sys
+from typing import Callable, Optional
 import hydra
 import jax
 import jax.numpy as jnp
@@ -14,13 +15,56 @@ from abstractions import abstraction, data, train_mnist, utils, trainer
 from abstractions.logger import WandbLogger, DummyLogger
 
 
+def kl_loss_fn(predicted_logits, logits):
+    # KL divergence between actual and predicted output:
+    # TODO: Should probably just use something like distrax.
+    probs = jax.nn.softmax(logits, axis=-1)
+    logprobs = jax.nn.log_softmax(logits, axis=-1)
+    predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
+    output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
+    return output_losses
+
+
+def single_class_loss_fn(predicted_logits, logits, target=0):
+    # This loss function only cares about correctly predicting whether the output
+    # is a specific digit (like zero) or not. It combines the probabilities for all non-zero classes into
+    # a single "non-zero" class. Assumes that output_dim of the abstraction is 2.
+    assert predicted_logits.ndim == logits.ndim == 2
+    assert logits.shape[-1] == 10
+    assert predicted_logits.shape[-1] == 2
+    assert predicted_logits.shape[0] == logits.shape[0]
+
+    all_probs = jax.nn.softmax(logits, axis=-1)
+    target_probs = all_probs[:, target]
+    non_target_probs = all_probs[:, :target].sum(axis=-1) + all_probs[
+        :, target + 1 :
+    ].sum(-1)
+    probs = jnp.stack([non_target_probs, target_probs], axis=-1)
+    logprobs = jnp.log(probs)
+    predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
+    output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
+    return output_losses
+
+
 class AbstractionTrainer(trainer.TrainerModule):
-    def __init__(self, abstract_dim: int, output_dim: int, **kwargs):
+    def __init__(
+        self,
+        abstract_dim: int,
+        output_dim: int,
+        output_loss_fn: Callable = kl_loss_fn,
+        **kwargs,
+    ):
         super().__init__(
             model_class=abstraction.Abstraction,  # type: ignore
             model_hparams={"abstract_dim": abstract_dim, "output_dim": output_dim},
             **kwargs,
         )
+        # The output loss function describes how to compute the loss between the
+        # actual output and the predicted one. It should take a batch of predicted
+        # outputs and a batch of actual outputs and return a *batch* of losses.
+        # The main point is to allow ignoring certain differences in the output
+        # that we aren't aiming to predict
+        self.output_loss_fn = output_loss_fn
 
     def create_functions(self):
         def losses(params, state, batch, mask=None):
@@ -33,19 +77,17 @@ class AbstractionTrainer(trainer.TrainerModule):
             assert len(abstractions) == len(predicted_abstractions) + 1
             b, d = abstractions[0].shape
             assert predicted_abstractions[0].shape == (b, d)
-            assert logits.shape == (b, 10) == predicted_logits.shape
+            assert logits.shape == (b, 10)
+            # Output dimension of abstraction may be different from full computation,
+            # depending on the output_loss_fn. So only check batch dimension.
+            assert predicted_logits.shape[0] == b
 
             if mask is None:
                 mask = jnp.ones((b,))
             assert mask.shape == (b,)
             num_samples = mask.sum()
 
-            # Output loss (KL divergence between actual and predicted output):
-            # TODO: Should probably just use something like distrax.
-            probs = jax.nn.softmax(logits, axis=-1)
-            logprobs = jax.nn.log_softmax(logits, axis=-1)
-            predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
-            output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
+            output_losses = self.output_loss_fn(predicted_logits, logits)
             output_losses *= mask
             # Can't take mean here because we don't want to count masked samples
             output_loss = output_losses.sum() / num_samples
@@ -148,7 +190,7 @@ def train_and_evaluate(cfg: DictConfig):
 
     # Load the full model we want to abstract
     model = train_mnist.MLP()
-    params = utils.load(to_absolute_path(cfg.model_path))
+    params = utils.load(to_absolute_path(cfg.model_path))["params"]
 
     # Magic collate_fn to get the activations of the model
     train_collate_fn = abstraction.abstraction_collate(model, params)
@@ -159,7 +201,7 @@ def train_and_evaluate(cfg: DictConfig):
     train_loader = data.get_data_loaders(
         cfg.batch_size,
         collate_fn=train_collate_fn,
-        transforms=data.get_transforms(backdoor_options={"p_backdoor": 0.0}),
+        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.0}}),
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
@@ -167,7 +209,7 @@ def train_and_evaluate(cfg: DictConfig):
     backdoor_loader = data.get_data_loaders(
         cfg.batch_size,
         collate_fn=val_collate_fn,
-        transforms=data.get_transforms(backdoor_options={"p_backdoor": 1.0}),
+        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
     val_loaders = {
         "backdoor": backdoor_loader,
@@ -181,7 +223,8 @@ def train_and_evaluate(cfg: DictConfig):
 
     trainer = AbstractionTrainer(
         abstract_dim=cfg.abstract_dim,
-        output_dim=10,
+        output_dim=2 if cfg.single_class else 10,
+        output_loss_fn=single_class_loss_fn if cfg.single_class else kl_loss_fn,
         optimizer=hydra.utils.instantiate(cfg.optim),
         example_input=example_input,
         # Hydra sets the cwd to the right log dir automatically

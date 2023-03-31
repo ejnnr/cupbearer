@@ -7,9 +7,20 @@ batch_size: 128
 hidden_dim: 256
 debug: false
 wandb: true
+transforms:
+  pixel_backdoor:
+    p_backdoor: 0.5
+    target_class: 0
+    corner: "top-left"
+    enabled: true
+  noise_backdoor:
+    p_backdoor: 0.5
+    target_class: 0
+    std: 0.1
+    enabled: false
 
 dir:
-  log: logs
+  log: logs/base
   run: ${now:%Y-%m-%d_%H-%M-%S}
 seed: 0
 hydra:

@@ -5,12 +5,13 @@ defaults:
 num_epochs: 10
 batch_size: 128
 abstract_dim: 256
+single_class: false
 model_path: ???
 debug: false
 wandb: true
 
 dir:
-  log: logs
+  log: logs/abstraction
   run: ${now:%Y-%m-%d_%H-%M-%S}
 seed: 0
 hydra:

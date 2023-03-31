@@ -32,7 +32,7 @@ def evaluate(cfg: DictConfig):
 
     # Load the full model we want to abstract
     model = train_mnist.MLP()
-    params = utils.load(to_absolute_path(train_cfg.model_path))
+    params = utils.load(to_absolute_path(train_cfg.model_path))["params"]
 
     # Magic collate_fn to get the activations of the model
     train_collate_fn = abstraction.abstraction_collate(model, params)
@@ -45,7 +45,7 @@ def evaluate(cfg: DictConfig):
     train_loader = data.get_data_loaders(
         train_cfg.batch_size,
         collate_fn=train_collate_fn,
-        transforms=data.get_transforms(backdoor_options={"p_backdoor": 0.0}),
+        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.0}}),
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
@@ -53,21 +53,21 @@ def evaluate(cfg: DictConfig):
     backdoor_loader = data.get_data_loaders(
         train_cfg.batch_size,
         collate_fn=val_collate_fn,
-        transforms=data.get_transforms(backdoor_options={"p_backdoor": 1.0}),
+        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
 
     different_corner_loader = data.get_data_loaders(
         train_cfg.batch_size,
         collate_fn=val_collate_fn,
         transforms=data.get_transforms(
-            backdoor_options={"p_backdoor": 1.0, "corner": "top-right"}
+            {"pixel_backdoor": {"p_backdoor": 1.0, "corner": "top-right"}}
         ),
     )
 
     gaussian_noise_loader = data.get_data_loaders(
         train_cfg.batch_size,
         collate_fn=val_collate_fn,
-        transforms=data.get_transforms(noise_options={"std": 1.0}),
+        transforms=data.get_transforms({"noise": {"std": 1.0}}),
     )
 
     test_loaders = {

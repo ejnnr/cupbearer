@@ -101,3 +101,21 @@ class GaussianNoise:
         noise = np.random.normal(0, self.std, img.shape)
         img = img + noise
         return img, target, info
+
+
+class NoiseBackdoor:
+    def __init__(self, p_backdoor: float, std: float, target_class: int):
+        self.p_backdoor = p_backdoor
+        self.std = std
+        self.target_class = target_class
+
+    def __call__(self, sample: Tuple[np.ndarray, int, Dict]):
+        img, target, info = sample
+        if torch.rand(1) > self.p_backdoor:
+            info["backdoored"] = False
+            return img, target, info
+        else:
+            info["backdoored"] = True
+            noise = np.random.normal(0, self.std, img.shape)
+            img = img + noise
+            return img, self.target_class, info

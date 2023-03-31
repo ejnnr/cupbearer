@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Mapping, Optional, Tuple
+from typing import Any, Callable, Collection, Container, List, Mapping, Optional, Tuple
 import numpy as np
 from torch.utils.data import DataLoader
 from torchvision.datasets import MNIST
@@ -64,24 +64,37 @@ def get_data_loaders(
 
 
 def get_transforms(
-    backdoor_options: Optional[Mapping[str, Any]] = None,
-    noise_options: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Mapping[str, Any]],
 ) -> List[Callable]:
     """Get transforms for MNIST dataset.
-
-    Args:
-        backdoor_options: Options for backdoor transform.
-        noise_options: Options for noise transform.
 
     Returns:
         List of transforms to apply to the dataset.
     """
+    PIL_TRANSFORMS = [
+        ("pixel_backdoor", custom_transforms.CornerPixelToWhite),
+    ]
+    NP_TRANSFORMS = [
+        ("noise", custom_transforms.GaussianNoise),
+        ("noise_backdoor", custom_transforms.NoiseBackdoor),
+    ]
     transforms: List[Callable] = [
         custom_transforms.AddInfoDict(),
     ]
-    if backdoor_options is not None:
-        transforms.append(custom_transforms.CornerPixelToWhite(**backdoor_options))
+
+    def process_transform(name, transform):
+        if name in config:
+            transform_config = dict(config[name])
+            if "enabled" in transform_config:
+                if not transform_config["enabled"]:
+                    return
+                del transform_config["enabled"]
+            transforms.append(transform(**transform_config))
+
+    for name, transform in PIL_TRANSFORMS:
+        process_transform(name, transform)
     transforms.append(utils.adapt_transform(to_numpy))
-    if noise_options is not None:
-        transforms.append(custom_transforms.GaussianNoise(**noise_options))
+    for name, transform in NP_TRANSFORMS:
+        process_transform(name, transform)
+
     return transforms
