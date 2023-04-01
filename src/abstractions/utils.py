@@ -121,6 +121,5 @@ def load(path: Union[str, Path]):
     return data
 
 
-class DummyLogger:
-    def report_scalar(self, *args, **kwargs):
-        pass
+def product(xs: Iterable):
+    return functools.reduce(lambda x, y: x * y, xs, 1)

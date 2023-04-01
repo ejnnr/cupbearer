@@ -54,8 +54,7 @@ class TrainState(train_state.TrainState):
 class TrainerModule(ABC):
     def __init__(
         self,
-        model_class: nn.Module,
-        model_hparams: Dict[str, Any],
+        model: nn.Module,
         optimizer: Optional[optax.GradientTransformation],
         example_input: Any,
         loggers: Iterable[Logger],
@@ -71,9 +70,7 @@ class TrainerModule(ABC):
         like logging, model initialization, training loop, etc.
 
         Atributes:
-          model_class: The class of the model that should be trained.
-          model_hparams: A dictionary of all hyperparameters of the model. Is
-            used as input to the model when created.
+          model: The instantiated model to train.
           optimizer: The instantiated optax optimizer. If not provided,
             training will not be possible.
           example_input: Input to the model for initialization and tabulate.
@@ -85,8 +82,6 @@ class TrainerModule(ABC):
             on the validation set.
         """
         super().__init__()
-        self.model_class = model_class
-        self.model_hparams = model_hparams
         self.optimizer = optimizer
         self.enable_progress_bar = enable_progress_bar
         self.debug = debug
@@ -95,10 +90,9 @@ class TrainerModule(ABC):
         self.example_input = example_input
         self.loggers = loggers
         self.log_dir = Path(log_dir)
+        self.model = model
         # Set of hyperparameters to save
         self.config = {
-            "model_class": model_class.__name__,
-            "model_hparams": model_hparams,
             "enable_progress_bar": self.enable_progress_bar,
             "debug": self.debug,
             "check_val_every_n_epoch": check_val_every_n_epoch,
@@ -109,8 +103,6 @@ class TrainerModule(ABC):
             "log_dir": str(self.log_dir.absolute()),
         }
         self.config.update(kwargs)
-        # Create empty model. Note: no parameters yet
-        self.model = self.model_class(**self.model_hparams)
         self.print_tabulate()
         # Init trainer parts
         self.create_jitted_functions()
@@ -216,6 +208,7 @@ class TrainerModule(ABC):
         val_loaders: Mapping[str, SizedIterable],
         test_loaders: Optional[Mapping[str, SizedIterable]] = None,
         num_epochs: int = 500,
+        max_steps: Optional[int] = None,
     ):
         """
         Starts a training loop for the given number of epochs.
@@ -227,6 +220,7 @@ class TrainerModule(ABC):
             Key should be a name for each one, e.g. `{"val": val_loader}`.
           test_loader: If given, best model will be evaluated on the test set.
           num_epochs: Number of epochs for which to train the model.
+          max_steps: If given, training will stop after this many steps.
 
         Returns:
           A dictionary of the train, validation and evt. test metrics for the
@@ -237,7 +231,7 @@ class TrainerModule(ABC):
         # Prepare training loop
         self.on_training_start()
         for epoch_idx in self.pbar(range(1, num_epochs + 1), desc="Epochs"):
-            train_metrics = self.train_epoch(train_loader)
+            train_metrics = self.train_epoch(train_loader, max_steps=max_steps)
             self.on_training_epoch_end(epoch_idx, train_metrics)
             # Validation every N epochs
             if epoch_idx % self.check_val_every_n_epoch == 0:
@@ -250,7 +244,9 @@ class TrainerModule(ABC):
             test_metrics = self.eval_model(test_loaders)
             self.log_metrics(test_metrics)
 
-    def train_epoch(self, train_loader: SizedIterable) -> Dict[str, Any]:
+    def train_epoch(
+        self, train_loader: SizedIterable, max_steps: Optional[int]
+    ) -> Dict[str, Any]:
         """
         Trains a model for one epoch.
 
@@ -265,6 +261,8 @@ class TrainerModule(ABC):
         # Train model for one epoch and log metrics
         num_batches = len(train_loader)
         for batch in self.pbar(train_loader, desc="Training", leave=False):
+            if max_steps is not None and self.state.step >= max_steps:
+                break
             self.state, step_metrics = self.train_step(self.state, batch)
             step_metrics = {k: v.item() for k, v in step_metrics.items()}
             self.log_metrics(
@@ -415,32 +413,3 @@ class TrainerModule(ABC):
         if self.state.batch_stats:
             params["batch_stats"] = self.state.batch_stats
         return self.model.bind(params)
-
-    @classmethod
-    def load_from_checkpoint(cls, checkpoint: str, example_input: Any) -> Any:
-        """
-        Creates a Trainer object with same hyperparameters and loaded model from
-        a checkpoint directory.
-
-        Limitations: Loggers and optimizer are not restored. Training will thus
-        not be possible.
-
-        Args:
-          checkpoint: Folder in which the checkpoint and hyperparameter file is stored.
-          example_input: An input to the model for shape inference.
-
-        Returns:
-          A Trainer object with model loaded from the checkpoint folder.
-        """
-        hparams_file = os.path.join(checkpoint, "hparams.json")
-        assert os.path.isfile(hparams_file), "Could not find hparams file"
-        with open(hparams_file, "r") as f:
-            hparams = json.load(f)
-        hparams.pop("model_class")
-        hparams.update(hparams.pop("model_hparams"))
-        # TODO: also restore loggers (e.g. by passing the class and hparams
-        # instead of the object in __init__)
-        hparams["loggers"] = []
-        trainer = cls(example_input=example_input, optimizer=None, **hparams)
-        trainer.load_model()
-        return trainer

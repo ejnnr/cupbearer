@@ -22,7 +22,12 @@ def numpy_collate(batch):
 
 
 def to_numpy(img):
-    return np.array(img, dtype=jnp.float32) / 255.0
+    out = np.array(img, dtype=jnp.float32) / 255.0
+    if out.ndim == 2:
+        # Add a channel dimension. Note that flax.linen.Conv expects
+        # the channel dimension to be the last one.
+        out = np.expand_dims(out, axis=-1)
+    return out
 
 
 def get_data_loaders(
