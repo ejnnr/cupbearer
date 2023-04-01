@@ -7,30 +7,76 @@
 # representation to the output of the computation.
 # All of this is encapsulated in a flax module.
 
-from typing import List
+from dataclasses import field
+from typing import List, Sequence
 import flax.linen as nn
 import jax
 from abstractions import data
 
 
-class Abstraction(nn.Module):
+class MLPAbstraction(nn.Module):
     """An abstraction of a fixed computational graph (like a neural network)."""
 
-    abstract_dim: int
     output_dim: int
+    hidden_dims: Sequence[int] = field(default_factory=lambda: [256, 256])
 
     @nn.compact
     def __call__(self, activations: List[jax.Array], train: bool = True):
         # `train` is unused but our TrainerModule expects it to exist.
 
-        abstractions = [nn.Dense(self.abstract_dim)(x) for x in activations]
+        abstractions = [
+            nn.Dense(hidden_dim)(x)
+            for x, hidden_dim in zip(activations, self.hidden_dims)
+        ]
         # We skip the last abstract state, since there is no next one to predict
         predicted_abstractions = [
-            nn.relu(nn.Dense(self.abstract_dim)(x)) for x in abstractions[:-1]
+            nn.relu(nn.Dense(hidden_dim)(x))
+            for x, hidden_dim in zip(abstractions[:-1], self.hidden_dims[1:])
         ]
         output = nn.Dense(self.output_dim)(abstractions[-1])
 
         return abstractions, predicted_abstractions, output
+
+
+class CNNAbstraction(nn.Module):
+    channels: Sequence[int] = field(default_factory=lambda: [32, 64])
+    dense_dims: Sequence[int] = field(default_factory=lambda: [256])
+    output_dim: int = 10
+
+    @nn.compact
+    def __call__(self, activations: List[jax.Array], train: bool = True):
+        conv_activations = activations[: len(self.channels)]
+        dense_activations = activations[len(self.channels) :]
+        conv_abstractions = [
+            nn.Conv(features=n_channels, kernel_size=(3, 3))(x)
+            for x, n_channels in zip(conv_activations, self.channels)
+        ]
+        dense_abstractions = [
+            nn.Dense(hidden_dim)(x)
+            for x, hidden_dim in zip(dense_activations, self.dense_dims)
+        ]
+        predicted_abstractions = [
+            nn.max_pool(
+                nn.relu(nn.Conv(features=n_channels, kernel_size=(3, 3))(x)),
+                window_shape=(2, 2),
+                strides=(2, 2),
+            )
+            for x, n_channels in zip(conv_abstractions[:-1], self.channels[1:])
+        ]
+        # Special case for the last convolutional abstraction
+        last_conv = conv_abstractions[-1]
+        b, h, w, c = last_conv.shape
+        last_conv = nn.max_pool(last_conv, window_shape=(h, w))
+        last_conv = last_conv.squeeze(axis=(1, 2))
+        assert last_conv.shape == (b, c)
+        predicted_abstractions.append(nn.relu(nn.Dense(self.dense_dims[0])(last_conv)))
+        predicted_abstractions += [
+            nn.relu(nn.Dense(hidden_dim)(x))
+            for x, hidden_dim in zip(dense_abstractions[:-1], self.dense_dims[1:])
+        ]
+        output = nn.Dense(self.output_dim)(dense_abstractions[-1])
+
+        return conv_abstractions + dense_abstractions, predicted_abstractions, output
 
 
 def abstraction_collate(model: nn.Module, params, return_original_batch=False):

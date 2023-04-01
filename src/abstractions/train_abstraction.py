@@ -30,8 +30,8 @@ def single_class_loss_fn(predicted_logits, logits, target=0):
     # is a specific digit (like zero) or not. It combines the probabilities for all non-zero classes into
     # a single "non-zero" class. Assumes that output_dim of the abstraction is 2.
     assert predicted_logits.ndim == logits.ndim == 2
-    assert logits.shape[-1] == 10
-    assert predicted_logits.shape[-1] == 2
+    assert logits.shape[-1] == 10, logits.shape
+    assert predicted_logits.shape[-1] == 2, predicted_logits.shape
     assert predicted_logits.shape[0] == logits.shape[0]
 
     all_probs = jax.nn.softmax(logits, axis=-1)
@@ -49,14 +49,10 @@ def single_class_loss_fn(predicted_logits, logits, target=0):
 class AbstractionTrainer(trainer.TrainerModule):
     def __init__(
         self,
-        abstract_dim: int,
-        output_dim: int,
         output_loss_fn: Callable = kl_loss_fn,
         **kwargs,
     ):
         super().__init__(
-            model_class=abstraction.Abstraction,  # type: ignore
-            model_hparams={"abstract_dim": abstract_dim, "output_dim": output_dim},
             **kwargs,
         )
         # The output loss function describes how to compute the loss between the
@@ -75,8 +71,7 @@ class AbstractionTrainer(trainer.TrainerModule):
             assert isinstance(abstractions, list)
             assert isinstance(predicted_abstractions, list)
             assert len(abstractions) == len(predicted_abstractions) + 1
-            b, d = abstractions[0].shape
-            assert predicted_abstractions[0].shape == (b, d)
+            b, *_ = abstractions[0].shape
             assert logits.shape == (b, 10)
             # Output dimension of abstraction may be different from full computation,
             # depending on the output_loss_fn. So only check batch dimension.
@@ -97,12 +92,11 @@ class AbstractionTrainer(trainer.TrainerModule):
             for abstraction, predicted_abstraction in zip(
                 abstractions[1:], predicted_abstractions
             ):
-                # Take mean over hidden dimension:
+                # Take mean over hidden dimension(s):
                 consistency_losses = ((abstraction - predicted_abstraction) ** 2).mean(
-                    -1
+                    axis=tuple(range(1, abstraction.ndim))
                 )
-                if mask is not None:
-                    consistency_losses *= mask
+                consistency_losses *= mask
                 # Now we also take the mean over the batch (outside the sqrt and after
                 # masking). As before, we don't want to count masked samples.
                 consistency_loss += jnp.sqrt(consistency_losses).sum() / num_samples
@@ -189,7 +183,7 @@ def train_and_evaluate(cfg: DictConfig):
         metrics_logger = DummyLogger()
 
     # Load the full model we want to abstract
-    model = train_mnist.MLP()
+    model = hydra.utils.instantiate(cfg.model)
     params = utils.load(to_absolute_path(cfg.model_path))["params"]
 
     # Magic collate_fn to get the activations of the model
@@ -221,9 +215,11 @@ def train_and_evaluate(cfg: DictConfig):
     # batch size 1
     example_input = [x[0:1] for x in example_activations]
 
+    if cfg.single_class:
+        cfg.abstraction.output_dim = 2
+
     trainer = AbstractionTrainer(
-        abstract_dim=cfg.abstract_dim,
-        output_dim=2 if cfg.single_class else 10,
+        model=hydra.utils.instantiate(cfg.abstraction),
         output_loss_fn=single_class_loss_fn if cfg.single_class else kl_loss_fn,
         optimizer=hydra.utils.instantiate(cfg.optim),
         example_input=example_input,
