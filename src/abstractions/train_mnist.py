@@ -90,24 +90,24 @@ class ClassificationTrainer(trainer.TrainerModule):
             return loss, accuracy
 
         def train_step(state, batch):
-            # loss_fn = lambda params: losses(params, state, batch)
-            # (loss, accuracy), grads = jax.value_and_grad(loss_fn, has_aux=True)(
-            #     state.params
-            # )
+            loss_fn = lambda params: losses(params, state, batch)
+            (loss, accuracy), grads = jax.value_and_grad(loss_fn, has_aux=True)(
+                state.params
+            )
             loss, accuracy = losses(state.params, state, batch)
 
-            # param_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), state.params)
-            # max_param_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(param_norms)))
+            param_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), state.params)
+            max_param_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(param_norms)))
 
-            # grad_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), grads)
-            # max_grad_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(grad_norms)))
+            grad_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), grads)
+            max_grad_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(grad_norms)))
 
-            # state = state.apply_gradients(grads=grads)
+            state = state.apply_gradients(grads=grads)
             metrics = {
                 "loss": loss,
                 "accuracy": accuracy,
-                # "max_param_norm": max_param_norm,
-                # "max_grad_norm": max_grad_norm,
+                "max_param_norm": max_param_norm,
+                "max_grad_norm": max_grad_norm,
             }
             return state, metrics
 
