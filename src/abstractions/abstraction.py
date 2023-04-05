@@ -8,10 +8,112 @@
 # All of this is encapsulated in a flax module.
 
 from dataclasses import field
-from typing import List, Sequence
+import functools
+from typing import Callable, List, Sequence
 import flax.linen as nn
 import jax
 from abstractions import data
+
+
+# A single computational step
+Step = Callable
+# A full computation is (for now) just a list of steps
+# Could also be a graph (or of course non-static computations) in the future
+Computation = List[Step]
+
+
+def mlp_steps(output_dim: int, hidden_dims: Sequence[int]) -> Computation:
+    """A simple feed-forward MLP."""
+    steps = [
+        # special case for first layer, since we need to flatten the input
+        lambda x: nn.relu(
+            nn.Dense(features=hidden_dims[0])(x.reshape((x.shape[0], -1)))
+        ),
+        # remaining hidden layers
+        *[
+            lambda x: nn.relu(nn.Dense(features=hidden_dim)(x))
+            for hidden_dim in hidden_dims[1:]
+        ],
+        # output layer
+        lambda x: nn.Dense(features=output_dim)(x),
+    ]
+    return steps
+
+
+def cnn_steps(
+    output_dim: int, channels: Sequence[int], dense_dims: Sequence[int]
+) -> Computation:
+    """A simple CNN."""
+    steps = []
+
+    # Convolutional layers
+    def conv_block(x, n_channels):
+        x = nn.Conv(features=n_channels, kernel_size=(3, 3))(x)
+        x = nn.relu(x)
+        x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
+        return x
+
+    for n_channels in channels:
+        steps.append(functools.partial(conv_block, n_channels=n_channels))
+
+    # Dense layers
+    def dense_block(x, hidden_dim, is_first):
+        if is_first:
+            b, h, w, c = x.shape
+            x = nn.max_pool(x, window_shape=(h, w))
+            x = x.squeeze(axis=(1, 2))
+            assert x.shape == (b, c)
+        x = nn.relu(nn.Dense(features=hidden_dim)(x))
+        return x
+
+    for i, hidden_dim in enumerate(dense_dims):
+        steps.append(
+            functools.partial(dense_block, hidden_dim=hidden_dim, is_first=i == 0)
+        )
+
+    # output layer
+    steps.append(lambda x: nn.Dense(features=output_dim)(x))
+    return steps
+
+
+class Model(nn.Module):
+    computation: Computation
+
+    @nn.compact
+    def __call__(self, x, return_activations=False, train=True):
+        activations = []
+        *main_maps, output_map = self.computation
+        for step in main_maps:
+            x = step(x)
+            activations.append(x)
+
+        x = output_map(x)
+
+        if return_activations:
+            return x, activations
+        return x
+
+
+class Abstraction(nn.Module):
+    computation: Computation
+    abstraction_maps: List[Step]
+
+    @nn.compact
+    def __call__(self, activations: List[jax.Array], train: bool = True):
+        abstractions = [
+            abstraction_map(x)
+            for abstraction_map, x in zip(self.abstraction_maps, activations)
+        ]
+
+        input_map, *main_maps, output_map = self.computation
+        *main_abstractions, output = abstractions
+        predicted_abstractions = [
+            step(x) for step, x in zip(main_maps, main_abstractions)
+        ]
+
+        predicted_output = output_map(output)
+
+        return abstractions, predicted_abstractions, predicted_output
 
 
 class MLPAbstraction(nn.Module):

@@ -1,6 +1,0 @@
-streamlit
-palettable
-loguru
-numpy
-matplotlib
-pyseagull

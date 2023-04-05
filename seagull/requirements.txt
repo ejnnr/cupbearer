@@ -1,7 +1,0 @@
-# requirements for demos
-streamlit
-palettable
-loguru
-numpy
-matplotlib
-pyseagull
