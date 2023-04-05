@@ -9,13 +9,14 @@ ENV TINI_VERSION v0.6.0
 ADD https://github.com/krallin/tini/releases/download/${TINI_VERSION}/tini /usr/bin/tini
 RUN chmod +x /usr/bin/tini
 
-# Install python 3.10
-RUN apt update \
-    && apt install python3 curl git vim \
+# Install python 3.11
+RUN add-apt-repository ppa:deadsnakes/ppa \
+    && apt update \
+    && apt install -y python3.11 curl git vim \
     && rm -rf /var/lib/apt/lists/*
 
 # Install poetry
-RUN curl -sSL https://install.python-poetry.org | python3.10 -
+RUN curl -sSL https://install.python-poetry.org | python3.11 -
 # Add poetry to path
 ENV PATH="/root/.local/bin:$PATH"
 
@@ -23,7 +24,7 @@ ENV PATH="/root/.local/bin:$PATH"
 # This minimizes how often this layer needs to be rebuilt.
 COPY poetry.lock pyproject.toml /code/abstractions/
 WORKDIR /code/abstractions
-RUN poetry install --with cuda --no-interaction --no-ansi && poetry cache clear pypi --all
+RUN poetry install --no-interaction --no-ansi && poetry cache clear pypi --all
 # clear the directory again (this is necessary so that CircleCI can checkout
 # into the directory)
 RUN rm poetry.lock pyproject.toml
