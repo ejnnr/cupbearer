@@ -16,7 +16,6 @@ from omegaconf import DictConfig, OmegaConf
 import optax
 from loguru import logger
 import argparse
-from clearml import Task
 
 from abstractions import data, trainer, utils
 from abstractions.logger import DummyLogger, WandbLogger
