@@ -1,5 +1,4 @@
-# Using cuda11 because that's what the v470 drivers support
-FROM nvidia/cuda:11.8.0-runtime-ubuntu22.04
+FROM ubuntu:22.04
 
 # Expose general port
 EXPOSE 3000
@@ -18,13 +17,8 @@ RUN apt-get update \
     && apt install -y python3 python3-pip curl git vim \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy only necessary dependencies to build virtual environment.
-# This minimizes how often this layer needs to be rebuilt.
-COPY requirements.txt cuda-requirements.txt torch-requirements.txt install.sh /code/abstractions/
+COPY . /code/abstractions
 WORKDIR /code/abstractions
 RUN ./install.sh
-# clear the directory again (this is necessary so that CircleCI can checkout
-# into the directory)
-RUN rm ./*
 
 ENTRYPOINT ["/usr/bin/tini", "--"]

@@ -1,0 +1,11 @@
+**/.ipynb_checkpoints
+.vscode
+**/.DS_Store
+**/*.egg-info
+**/__pycache__
+data
+models
+logs
+.venv
+wandb
+.git
