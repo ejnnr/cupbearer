@@ -1,7 +1,6 @@
-board==1.0
-flax==0.6.7
+flax==0.6.8
 hydra-core==1.3.2
-jax==0.4.6
+jax==0.4.8
 loguru==0.6.0
 matplotlib==3.7.1
 numpy==1.24.2
@@ -9,9 +8,6 @@ omegaconf==2.3.0
 optax==0.1.4
 Pillow==9.4.0
 pytest==7.2.2
-scipy==1.10.1
-setuptools==67.6.0
-streamlit==1.20.0
-torch==2.0.0
-torchvision==0.15.1
+black==23.3.0
 tqdm==4.65.0
+wandb==0.14.0
