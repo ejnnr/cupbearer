@@ -33,15 +33,6 @@ jaxlib = [
     {url = "https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.7+cuda12.cudnn88-cp311-cp311-manylinux2014_x86_64.whl", markers = "sys_platform == 'linux'"},
     {url = "https://storage.googleapis.com/jax-releases/mac/jaxlib-0.4.7-cp311-cp311-macosx_11_0_arm64.whl", markers = "sys_platform == 'darwin'"}
 ]
-nvidia-cublas-cu12 = {version = "*", platform = "linux"}
-nvidia-cuda-cupti-cu12 = {version = "*", platform = "linux"}
-nvidia-cuda-nvcc-cu12 = {version = "*", platform = "linux"}
-nvidia-cuda-runtime-cu12 = {version = "*", platform = "linux"}
-nvidia-cudnn-cu12 = {version = "*", platform = "linux"}
-nvidia-cufft-cu12 = {version = "*", platform = "linux"}
-nvidia-cusolver-cu12 = {version = "*", platform = "linux"}
-nvidia-cusparse-cu12 = {version = "*", platform = "linux"}
-
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.2.2"
