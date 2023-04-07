@@ -1,7 +1,9 @@
 # based on the flax example code
 
+from pathlib import Path
 import sys
 from typing import Callable, Optional
+from abstractions.computations import get_abstraction_maps
 import hydra
 import jax
 import jax.numpy as jnp
@@ -183,13 +185,17 @@ def train_and_evaluate(cfg: DictConfig):
         metrics_logger = DummyLogger()
 
     # Load the full model we want to abstract
-    model = hydra.utils.instantiate(cfg.model)
-    params = utils.load(to_absolute_path(cfg.model_path))["params"]
+    base_run = Path(cfg.base_run)
+    base_cfg = OmegaConf.load(to_absolute_path(str(base_run / ".hydra" / "config.yaml")))
+
+    full_computation = hydra.utils.call(base_cfg.model)
+    full_model = abstraction.Model(computation=full_computation)
+    full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
 
     # Magic collate_fn to get the activations of the model
-    train_collate_fn = abstraction.abstraction_collate(model, params)
+    train_collate_fn = abstraction.abstraction_collate(full_model, full_params)
     val_collate_fn = abstraction.abstraction_collate(
-        model, params, return_original_batch=True
+        full_model, full_params, return_original_batch=True
     )
 
     train_loader = data.get_data_loaders(
@@ -205,6 +211,7 @@ def train_and_evaluate(cfg: DictConfig):
         collate_fn=val_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
+
     val_loaders = {
         "backdoor": backdoor_loader,
     }
@@ -216,10 +223,18 @@ def train_and_evaluate(cfg: DictConfig):
     example_input = [x[0:1] for x in example_activations]
 
     if cfg.single_class:
-        cfg.abstraction.output_dim = 2
+        cfg.model.output_dim = 2
+
+    computation = hydra.utils.call(cfg.model)
+    # TODO: Might want to make this configurable somehow, but it's a reasonable
+    # default for now
+    maps = get_abstraction_maps(cfg.model)
+    model = abstraction.Abstraction(
+        computation=computation, abstraction_maps=maps
+    )
 
     trainer = AbstractionTrainer(
-        model=hydra.utils.instantiate(cfg.abstraction),
+        model=model,
         output_loss_fn=single_class_loss_fn if cfg.single_class else kl_loss_fn,
         optimizer=hydra.utils.instantiate(cfg.optim),
         example_input=example_input,

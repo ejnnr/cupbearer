@@ -2,13 +2,12 @@ defaults:
   - _self_
   - optim: adam
   - model: mlp
-  - abstraction: mlp
 
 num_epochs: 10
 batch_size: 128
 num_classes: 10
 single_class: false
-model_path: ???
+base_run: ???
 debug: false
 wandb: true
 

@@ -17,60 +17,8 @@ import optax
 from loguru import logger
 import argparse
 
-from abstractions import data, trainer, utils
+from abstractions import abstraction, data, trainer, utils
 from abstractions.logger import DummyLogger, WandbLogger
-
-
-class MLP(nn.Module):
-    """A simple feed-forward MLP."""
-
-    hidden_dims: Sequence[int] = field(default_factory=lambda: [256, 256])
-    output_dim: int = 10
-
-    @nn.compact
-    def __call__(self, x, return_activations=False, train=True):
-        activations = []
-        x = x.reshape((x.shape[0], -1))  # flatten
-        for hidden_dim in self.hidden_dims:
-            x = nn.Dense(features=hidden_dim)(x)
-            x = nn.relu(x)
-            activations.append(x)
-        x = nn.Dense(features=self.output_dim)(x)
-
-        if return_activations:
-            return x, activations
-        return x
-
-
-class CNN(nn.Module):
-    """A simple CNN."""
-
-    channels: Sequence[int] = field(default_factory=lambda: [32, 64])
-    dense_dims: Sequence[int] = field(default_factory=lambda: [256])
-    output_dim: int = 10
-
-    @nn.compact
-    def __call__(self, x, return_activations=False, train=True):
-        activations = []
-        for n_channels in self.channels:
-            x = nn.Conv(features=n_channels, kernel_size=(3, 3))(x)
-            x = nn.relu(x)
-            x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
-            activations.append(x)
-
-        b, h, w, c = x.shape
-        x = nn.max_pool(x, window_shape=(h, w))
-        x = x.squeeze(axis=(1, 2))
-        assert x.shape == (b, c)
-        for hidden_dim in self.dense_dims:
-            x = nn.Dense(features=hidden_dim)(x)
-            x = nn.relu(x)
-            activations.append(x)
-        x = nn.Dense(features=self.output_dim)(x)
-
-        if return_activations:
-            return x, activations
-        return x
 
 
 class ClassificationTrainer(trainer.TrainerModule):
@@ -169,7 +117,8 @@ def train_and_evaluate(cfg: DictConfig):
     images, _, _ = next(iter(train_loader))
     example_input = images[0:1]
 
-    model = hydra.utils.instantiate(cfg.model)
+    computation = hydra.utils.call(cfg.model)
+    model = abstraction.Model(computation)
 
     trainer = ClassificationTrainer(
         num_classes=cfg.num_classes,
