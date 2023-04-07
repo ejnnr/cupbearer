@@ -1,5 +1,9 @@
 # based on the flax example code
 
+# Create histogram of consistency (added) losses
+# (One for losses for clean data, one for zeros with a backdoor over training examples at end)
+
+
 import sys
 from typing import Callable, Optional
 import hydra
@@ -7,6 +11,7 @@ import jax
 import jax.numpy as jnp
 from jax.config import config as jax_config
 from loguru import logger
+import matplotlib.pyplot as plt
 
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
@@ -66,8 +71,8 @@ class AbstractionTrainer(trainer.TrainerModule):
         # that we aren't aiming to predict
         self.output_loss_fn = output_loss_fn
 
-    def create_functions(self):
-        def losses(params, state, batch, mask=None):
+    def create_functions(self, return_losses_fn: bool=False):
+        def losses(params, state, batch, mask=None, return_losses=False):
             logits, activations = batch
             abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
                 {"params": params}, activations
@@ -93,26 +98,40 @@ class AbstractionTrainer(trainer.TrainerModule):
             output_loss = output_losses.sum() / num_samples
             # Consistency loss:
             consistency_loss = jnp.array(0)
+            consistency_losses = None
             # Skip the first abstraction, since there's no prediction for that
             for abstraction, predicted_abstraction in zip(
                 abstractions[1:], predicted_abstractions
             ):
-                # Take mean over hidden dimension:
-                consistency_losses = ((abstraction - predicted_abstraction) ** 2).mean(
+                # Take mean over hidden dimension (activation dimension):
+                current_consistency_losses = ((abstraction - predicted_abstraction) ** 2).mean(
                     -1
                 )
+                
                 if mask is not None:
-                    consistency_losses *= mask
+                    current_consistency_losses *= mask
+                
+                if consistency_losses is None:
+                    consistency_losses = current_consistency_losses
+                else:
+                    consistency_losses += current_consistency_losses
+                
                 # Now we also take the mean over the batch (outside the sqrt and after
                 # masking). As before, we don't want to count masked samples.
-                consistency_loss += jnp.sqrt(consistency_losses).sum() / num_samples
+                consistency_loss += jnp.sqrt(current_consistency_losses).sum() / num_samples
 
             consistency_loss /= len(predicted_abstractions)
 
             loss = output_loss + consistency_loss
 
+            if return_losses:
+                return loss, (output_loss, consistency_loss), current_consistency_losses
+            
             return loss, (output_loss, consistency_loss)
+            # accumulate over batches and make histogram: backdoor_zeros_loss, train_loss 
+            # don't need to plot for every batch, only after training (after last training epoch, once model is trained)
 
+        # called once per batch (several hundred times per epoch)
         def train_step(state, batch):
             loss_fn = lambda params: losses(params, state, batch)
             (loss, (output_loss, consistency_loss)), grads = jax.value_and_grad(
@@ -156,8 +175,12 @@ class AbstractionTrainer(trainer.TrainerModule):
             }
             return metrics
 
+        if return_losses_fn:
+            return train_step, eval_step, losses
         return train_step, eval_step
 
+    # Gives epoch index, not number of epochs
+    # initially, hardcode epoch = 10
     def on_training_epoch_end(self, epoch_idx, metrics):
         logger.log("METRICS", self._prettify_metrics(metrics))
 
@@ -240,8 +263,28 @@ def train_and_evaluate(cfg: DictConfig):
         test_loaders=None,
         num_epochs=cfg.num_epochs,
     )
+    # Visualizations for consistency losses
+    train_batch = next(iter(train_loader))
+    _, _, train_losses_fn = trainer.create_functions(return_losses_fn=True)
+    _, _, train_losses = train_losses_fn(trainer.state.params, trainer.state, train_batch, return_losses=True)
+    plt.hist(train_losses, label="train_losses")
+
+    # TODO: add code to get backdoor losses
+    # backdoor_batch = next(iter(backdoor_loader))
+    # backdoor_losses = train_losses_fn(trainer.state.params, trainer.state, backdoor_batch, return_losses=True)
+    # plt.hist(backdoor_losses, label="backdoor_losses")
+    # plt.show() will open new window, change later to plt.savefig()
+    plt.xlabel("Consistency Loss")
+    plt.ylabel("Frequency")
+    plt.title("Consistency Losses for Train and Backdoor Data")
+    plt.show()
+    
     trainer.save_model()
     trainer.close_loggers()
+
+    # Add code that does pass over trained loader, validation loader
+    # can save plot in a file in working directory (using hydra - date, time)
+    # pyplot.savefig - save as a pdf
 
 
 if __name__ == "__main__":
@@ -253,3 +296,5 @@ if __name__ == "__main__":
     # Default logger for everything else:
     logger.add(sys.stderr, filter=lambda record: record["level"].name != "METRICS")
     train_and_evaluate()
+
+
