@@ -6,13 +6,14 @@ defaults:
 num_epochs: 10
 dataset: mnist
 batch_size: 128
+val_batch_size: 2048
 num_classes: 10
 max_steps: null
 debug: false
 wandb: true
 transforms:
   pixel_backdoor:
-    p_backdoor: 0.5
+    p_backdoor: 0.05
     target_class: 0
     corner: "top-left"
     enabled: true

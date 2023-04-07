@@ -28,11 +28,26 @@ class ClassificationTrainer(trainer.TrainerModule):
             accuracy = jnp.mean(correct)
 
             if mask is not None:
-                num_samples = jnp.sum(mask)
-                masked_loss = jnp.sum(losses * mask) / num_samples
-                masked_accuracy = jnp.sum(correct * mask) / num_samples
+                num_mask = jnp.sum(mask)
+                num_nonmask = jnp.sum(1 - mask)
 
-                return loss, accuracy, masked_loss, masked_accuracy
+                # TODO: this isn't quite right once we accumulate over batches,
+                # since different batches should get different weights. Also,
+                # we get nans if num_mask or num_nonmask is 0.
+                # As long as we're using large batch sizes and the backdoor probability
+                # isn't tiny, it should be fine though.
+                masked_loss = jnp.sum(losses * mask) / num_mask
+                masked_accuracy = jnp.sum(correct * mask) / num_mask
+
+                non_masked_loss = jnp.sum(losses * (1 - mask)) / (num_nonmask)
+                non_masked_accuracy = jnp.sum(correct * (1 - mask)) / (num_nonmask)
+
+                return (
+                    non_masked_loss,
+                    non_masked_accuracy,
+                    masked_loss,
+                    masked_accuracy,
+                )
             return loss, accuracy
 
         def train_step(state, batch):
@@ -51,12 +66,12 @@ class ClassificationTrainer(trainer.TrainerModule):
 
         def eval_step(state, batch):
             _, _, infos = batch
-            loss, accuracy, backdoor_loss, backdoor_accuracy = losses(  # type: ignore
+            clean_loss, clean_accuracy, backdoor_loss, backdoor_accuracy = losses(  # type: ignore
                 state.params, state, batch, mask=infos["backdoored"]
             )
             metrics = {
-                "loss": loss,
-                "accuracy": accuracy,
+                "clean_loss": clean_loss,
+                "clean_accuracy": clean_accuracy,
                 "backdoor_loss": backdoor_loss,
                 "backdoor_accuracy": backdoor_accuracy,
             }
@@ -103,7 +118,7 @@ def train_and_evaluate(cfg: DictConfig):
     )
     val_loader = data.get_data_loader(
         dataset=cfg.dataset,
-        batch_size=cfg.batch_size,
+        batch_size=cfg.val_batch_size,
         transforms=data.get_transforms(cfg.transforms),
         train=False,
     )
