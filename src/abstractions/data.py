@@ -1,7 +1,7 @@
-from typing import Any, Callable, Collection, Container, List, Mapping, Optional, Tuple
+from typing import Any, Callable, List, Mapping
 import numpy as np
-from torch.utils.data import DataLoader
-from torchvision.datasets import MNIST
+from torch.utils.data import DataLoader, Dataset
+from torchvision.datasets import MNIST, CIFAR10
 from torchvision.transforms import Compose
 import jax.numpy as jnp
 from hydra.utils import to_absolute_path
@@ -30,8 +30,15 @@ def to_numpy(img):
     return out
 
 
-def get_data_loaders(
-    batch_size,
+DATASETS: dict[str, Dataset] = {
+    "mnist": MNIST,
+    "cifar10": CIFAR10,
+}
+
+
+def get_data_loader(
+    dataset: str,
+    batch_size: int,
     train: bool = True,
     collate_fn=numpy_collate,
     transforms=None,
@@ -39,6 +46,7 @@ def get_data_loaders(
     """Load MNIST train and test datasets into memory.
 
     Args:
+        dataset: the dataset to use. Can currently be either 'mnist' or 'cfar10'
         batch_size: Batch size for the data loaders.
         train: whether to use train (instead of test) data split. This also determines
             whether the data loaders are shuffled.
@@ -53,13 +61,19 @@ def get_data_loaders(
     """
     if transforms is None:
         transforms = [utils.adapt_transform(to_numpy)]
+    try:
+        dataset_cls = DATASETS[dataset.lower()]
+    except KeyError:
+        raise ValueError(
+            f"Dataset {dataset} not supported. Must be one of {list(DATASETS.keys())}"
+        )
     # Compose is meant to just compose image transforms, rather than
     # the joint transforms we have here. But the implementation is
     # actually agnostic as to whether the sample is just an image
     # or a tuple with multiple elements.
     transforms = Compose(transforms)
-    CustomMNIST = utils.add_transforms(MNIST)
-    dataset = CustomMNIST(
+    CustomDataset = utils.add_transforms(dataset_cls)
+    dataset = CustomDataset(
         root=to_absolute_path("data"), train=train, transforms=transforms, download=True
     )
     dataloader = DataLoader(
@@ -77,7 +91,7 @@ def get_transforms(
         List of transforms to apply to the dataset.
     """
     PIL_TRANSFORMS = [
-        ("pixel_backdoor", custom_transforms.CornerPixelToWhite),
+        ("pixel_backdoor", custom_transforms.CornerPixelBackdoor),
     ]
     NP_TRANSFORMS = [
         ("noise", custom_transforms.GaussianNoise),

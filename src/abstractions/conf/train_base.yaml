@@ -4,6 +4,7 @@ defaults:
   - model: mlp
 
 num_epochs: 10
+dataset: mnist
 batch_size: 128
 num_classes: 10
 max_steps: null

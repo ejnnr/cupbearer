@@ -10,7 +10,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 
-from abstractions import abstraction, data, train_mnist, utils, trainer
+from abstractions import abstraction, data, train_base, utils, trainer
 from abstractions.logger import WandbLogger, DummyLogger
 from abstractions.train_abstraction import AbstractionTrainer
 
@@ -31,7 +31,7 @@ def evaluate(cfg: DictConfig):
         cfg.wandb = False
 
     # Load the full model we want to abstract
-    model = train_mnist.MLP()
+    model = train_base.MLP()
     params = utils.load(to_absolute_path(train_cfg.model_path))["params"]
 
     # Magic collate_fn to get the activations of the model
@@ -42,7 +42,7 @@ def evaluate(cfg: DictConfig):
 
     # TODO: I'm only using the train_loader to get the example_input, which would also
     # be possible from the other loaders
-    train_loader = data.get_data_loaders(
+    train_loader = data.get_data_loader(
         train_cfg.batch_size,
         collate_fn=train_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.0}}),
@@ -50,13 +50,13 @@ def evaluate(cfg: DictConfig):
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
-    backdoor_loader = data.get_data_loaders(
+    backdoor_loader = data.get_data_loader(
         train_cfg.batch_size,
         collate_fn=val_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
 
-    different_corner_loader = data.get_data_loaders(
+    different_corner_loader = data.get_data_loader(
         train_cfg.batch_size,
         collate_fn=val_collate_fn,
         transforms=data.get_transforms(
@@ -64,7 +64,7 @@ def evaluate(cfg: DictConfig):
         ),
     )
 
-    gaussian_noise_loader = data.get_data_loaders(
+    gaussian_noise_loader = data.get_data_loader(
         train_cfg.batch_size,
         collate_fn=val_collate_fn,
         transforms=data.get_transforms({"noise": {"std": 1.0}}),

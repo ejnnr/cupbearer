@@ -1,23 +1,14 @@
-# based on the flax example code
-
-from collections import defaultdict
-from dataclasses import field
 import sys
-from typing import Sequence
 import hydra
 import jax
 import jax.numpy as jnp
-import numpy as np
-from flax import linen as nn
 from jax.config import config as jax_config
 
-from flax.training import train_state
 from omegaconf import DictConfig, OmegaConf
 import optax
 from loguru import logger
-import argparse
 
-from abstractions import abstraction, data, trainer, utils
+from abstractions import abstraction, data, trainer
 from abstractions.logger import DummyLogger, WandbLogger
 
 
@@ -27,13 +18,21 @@ class ClassificationTrainer(trainer.TrainerModule):
         self.num_classes = num_classes
 
     def create_functions(self):
-        def losses(params, state, batch):
+        def losses(params, state, batch, mask=None):
             images, labels, infos = batch
             logits = state.apply_fn({"params": params}, images)
             one_hot = jax.nn.one_hot(labels, self.num_classes)
-            loss = jnp.mean(optax.softmax_cross_entropy(logits=logits, labels=one_hot))
+            losses = optax.softmax_cross_entropy(logits=logits, labels=one_hot)
+            loss = jnp.mean(losses)
             correct = jnp.argmax(logits, -1) == labels
             accuracy = jnp.mean(correct)
+
+            if mask is not None:
+                num_samples = jnp.sum(mask)
+                masked_loss = jnp.sum(losses * mask) / num_samples
+                masked_accuracy = jnp.sum(correct * mask) / num_samples
+
+                return loss, accuracy, masked_loss, masked_accuracy
             return loss, accuracy
 
         def train_step(state, batch):
@@ -41,28 +40,25 @@ class ClassificationTrainer(trainer.TrainerModule):
             (loss, accuracy), grads = jax.value_and_grad(loss_fn, has_aux=True)(
                 state.params
             )
-            loss, accuracy = losses(state.params, state, batch)
-
-            param_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), state.params)
-            max_param_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(param_norms)))
-
-            grad_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), grads)
-            max_grad_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(grad_norms)))
+            loss, accuracy = losses(state.params, state, batch)  # type: ignore
 
             state = state.apply_gradients(grads=grads)
             metrics = {
                 "loss": loss,
                 "accuracy": accuracy,
-                "max_param_norm": max_param_norm,
-                "max_grad_norm": max_grad_norm,
             }
             return state, metrics
 
         def eval_step(state, batch):
-            loss, accuracy = losses(state.params, state, batch)
+            _, _, infos = batch
+            loss, accuracy, backdoor_loss, backdoor_accuracy = losses(  # type: ignore
+                state.params, state, batch, mask=infos["backdoored"]
+            )
             metrics = {
                 "loss": loss,
                 "accuracy": accuracy,
+                "backdoor_loss": backdoor_loss,
+                "backdoor_accuracy": backdoor_accuracy,
             }
             return metrics
 
@@ -78,7 +74,7 @@ class ClassificationTrainer(trainer.TrainerModule):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="mnist")
+@hydra.main(version_base=None, config_path="conf", config_name="train_base")
 def train_and_evaluate(cfg: DictConfig):
     """Execute model training and evaluation loop.
 
@@ -93,19 +89,21 @@ def train_and_evaluate(cfg: DictConfig):
     if cfg.wandb:
         metrics_logger = WandbLogger(
             project_name="abstractions",
-            tags=["mnist-backdoor-training"],
+            tags=["base-training-backdoor"],
             config=OmegaConf.to_container(cfg, resolve=True),  # type: ignore
         )
     else:
         metrics_logger = DummyLogger()
 
-    train_loader = data.get_data_loaders(
-        cfg.batch_size,
+    train_loader = data.get_data_loader(
+        dataset=cfg.dataset,
+        batch_size=cfg.batch_size,
         transforms=data.get_transforms(cfg.transforms),
         train=True,
     )
-    val_loader = data.get_data_loaders(
-        cfg.batch_size,
+    val_loader = data.get_data_loader(
+        dataset=cfg.dataset,
+        batch_size=cfg.batch_size,
         transforms=data.get_transforms(cfg.transforms),
         train=False,
     )
@@ -113,7 +111,7 @@ def train_and_evaluate(cfg: DictConfig):
         "val": val_loader,
     }
 
-    # Dataloader returns logits and activations, only activations get passed to model
+    # Dataloader returns images, labels and infos, only images get passed to model
     images, _, _ = next(iter(train_loader))
     example_input = images[0:1]
 

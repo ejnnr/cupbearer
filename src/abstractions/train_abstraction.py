@@ -13,7 +13,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 
-from abstractions import abstraction, data, train_mnist, utils, trainer
+from abstractions import abstraction, data, utils, trainer
 from abstractions.logger import WandbLogger, DummyLogger
 
 
@@ -114,19 +114,12 @@ class AbstractionTrainer(trainer.TrainerModule):
             (loss, (output_loss, consistency_loss)), grads = jax.value_and_grad(
                 loss_fn, has_aux=True
             )(state.params)
-            param_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), state.params)
-            max_param_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(param_norms)))
-
-            grad_norms = jax.tree_map(lambda x: jnp.linalg.norm(x), grads)
-            max_grad_norm = jnp.max(jnp.array(jax.tree_util.tree_leaves(grad_norms)))
 
             state = state.apply_gradients(grads=grads)
             metrics = {
                 "loss": loss,
                 "output_loss": output_loss,
                 "consistency_loss": consistency_loss,
-                "max_param_norm": max_param_norm,
-                "max_grad_norm": max_grad_norm,
             }
             return state, metrics
 
@@ -186,7 +179,9 @@ def train_and_evaluate(cfg: DictConfig):
 
     # Load the full model we want to abstract
     base_run = Path(cfg.base_run)
-    base_cfg = OmegaConf.load(to_absolute_path(str(base_run / ".hydra" / "config.yaml")))
+    base_cfg = OmegaConf.load(
+        to_absolute_path(str(base_run / ".hydra" / "config.yaml"))
+    )
 
     full_computation = hydra.utils.call(base_cfg.model)
     full_model = abstraction.Model(computation=full_computation)
@@ -198,7 +193,7 @@ def train_and_evaluate(cfg: DictConfig):
         full_model, full_params, return_original_batch=True
     )
 
-    train_loader = data.get_data_loaders(
+    train_loader = data.get_data_loader(
         cfg.batch_size,
         collate_fn=train_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.0}}),
@@ -206,7 +201,7 @@ def train_and_evaluate(cfg: DictConfig):
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
-    backdoor_loader = data.get_data_loaders(
+    backdoor_loader = data.get_data_loader(
         cfg.batch_size,
         collate_fn=val_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
@@ -229,9 +224,7 @@ def train_and_evaluate(cfg: DictConfig):
     # TODO: Might want to make this configurable somehow, but it's a reasonable
     # default for now
     maps = get_abstraction_maps(cfg.model)
-    model = abstraction.Abstraction(
-        computation=computation, abstraction_maps=maps
-    )
+    model = abstraction.Abstraction(computation=computation, abstraction_maps=maps)
 
     trainer = AbstractionTrainer(
         model=model,

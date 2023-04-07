@@ -20,12 +20,10 @@ class AddInfoDict:
         return img, target, {"original_target": target}
 
 
-class CornerPixelToWhite:
-    """Adds a white pixel to the specified corner of the image and sets the target class.
+class CornerPixelBackdoor:
+    """Adds a white/red pixel to the specified corner of the image and sets the target class.
 
-    Note that this transform also adds another value to the tuple representing the sample,
-    which is True if the pixel was added and false otherwise. So the output is (image, target, backdoored).
-    This value is meant for computing metrics and should typically not be used by the model.
+    For grayscale images, the pixel is set to 255 (white), for RGB images it is set to (255, 0, 0) (red).
 
     Args:
         probability: Probability of applying the transform.
