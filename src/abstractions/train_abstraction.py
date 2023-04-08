@@ -9,6 +9,7 @@ import jax
 import jax.numpy as jnp
 from jax.config import config as jax_config
 from loguru import logger
+import sklearn.metrics
 
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
@@ -48,6 +49,67 @@ def single_class_loss_fn(predicted_logits, logits, target=0):
     return output_losses
 
 
+def compute_losses(params, state, batch, output_loss_fn, mask=None, return_batch=False):
+    logits, activations = batch
+    abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
+        {"params": params}, activations
+    )
+    assert isinstance(abstractions, list)
+    assert isinstance(predicted_abstractions, list)
+    assert len(abstractions) == len(predicted_abstractions) + 1
+    b, *_ = abstractions[0].shape
+    assert logits.shape == (b, 10)
+    # Output dimension of abstraction may be different from full computation,
+    # depending on the output_loss_fn. So only check batch dimension.
+    assert predicted_logits.shape[0] == b
+
+    output_losses = output_loss_fn(predicted_logits, logits)
+    output_loss = output_losses.mean()
+
+    # Consistency loss:
+    consistency_losses = jnp.zeros(b)
+    # Skip the first abstraction, since there's no prediction for that
+    for abstraction, predicted_abstraction in zip(
+        abstractions[1:], predicted_abstractions
+    ):
+        # Take mean over hidden dimension(s):
+        consistency_losses += jnp.sqrt(
+            ((abstraction - predicted_abstraction) ** 2).mean(
+                axis=tuple(range(1, abstraction.ndim))
+            )
+        )
+    consistency_losses /= len(predicted_abstractions)
+    consistency_loss = consistency_losses.mean()
+
+    loss = output_loss + consistency_loss
+
+    if return_batch:
+        assert mask is None
+        return output_losses + consistency_losses
+
+    if mask is not None:
+        assert mask.shape == (b,)
+        num_samples = mask.sum()
+        output_losses *= mask
+        # Can't take mean here because we don't want to count masked samples
+        masked_output_loss = output_losses.sum() / num_samples
+        consistency_losses *= mask
+        masked_consistency_loss = consistency_losses.sum() / num_samples
+        masked_loss = masked_output_loss + masked_consistency_loss
+
+        return (
+            loss,
+            (output_loss, consistency_loss),
+            masked_loss,
+            (
+                masked_output_loss,
+                masked_consistency_loss,
+            ),
+        )
+
+    return loss, (output_loss, consistency_loss)
+
+
 class AbstractionTrainer(trainer.TrainerModule):
     def __init__(
         self,
@@ -65,52 +127,10 @@ class AbstractionTrainer(trainer.TrainerModule):
         self.output_loss_fn = output_loss_fn
 
     def create_functions(self):
-        def losses(params, state, batch, mask=None):
-            logits, activations = batch
-            abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
-                {"params": params}, activations
-            )
-            assert isinstance(abstractions, list)
-            assert isinstance(predicted_abstractions, list)
-            assert len(abstractions) == len(predicted_abstractions) + 1
-            b, *_ = abstractions[0].shape
-            assert logits.shape == (b, 10)
-            # Output dimension of abstraction may be different from full computation,
-            # depending on the output_loss_fn. So only check batch dimension.
-            assert predicted_logits.shape[0] == b
-
-            if mask is None:
-                mask = jnp.ones((b,))
-            assert mask.shape == (b,)
-            num_samples = mask.sum()
-
-            output_losses = self.output_loss_fn(predicted_logits, logits)
-            output_losses *= mask
-            # Can't take mean here because we don't want to count masked samples
-            output_loss = output_losses.sum() / num_samples
-            # Consistency loss:
-            consistency_loss = jnp.array(0)
-            # Skip the first abstraction, since there's no prediction for that
-            for abstraction, predicted_abstraction in zip(
-                abstractions[1:], predicted_abstractions
-            ):
-                # Take mean over hidden dimension(s):
-                consistency_losses = ((abstraction - predicted_abstraction) ** 2).mean(
-                    axis=tuple(range(1, abstraction.ndim))
-                )
-                consistency_losses *= mask
-                # Now we also take the mean over the batch (outside the sqrt and after
-                # masking). As before, we don't want to count masked samples.
-                consistency_loss += jnp.sqrt(consistency_losses).sum() / num_samples
-
-            consistency_loss /= len(predicted_abstractions)
-
-            loss = output_loss + consistency_loss
-
-            return loss, (output_loss, consistency_loss)
-
         def train_step(state, batch):
-            loss_fn = lambda params: losses(params, state, batch)
+            loss_fn = lambda params: compute_losses(
+                params, state, batch, output_loss_fn=self.output_loss_fn
+            )
             (loss, (output_loss, consistency_loss)), grads = jax.value_and_grad(
                 loss_fn, has_aux=True
             )(state.params)
@@ -128,12 +148,18 @@ class AbstractionTrainer(trainer.TrainerModule):
             # logits/activations, but also the original data. That's necessary
             # to compute metrics on specific clases (zero in this case).
             logits, activations, (images, labels, infos) = batch
-            loss, (output_loss, consistency_loss) = losses(
-                state.params, state, (logits, activations)
-            )
             zeros = infos["original_target"] == 0
-            zeros_loss, (zeros_output_loss, zeros_consistency_loss) = losses(
-                state.params, state, (logits, activations), mask=zeros
+            (
+                loss,
+                (output_loss, consistency_loss),
+                zeros_loss,
+                (zeros_output_loss, zeros_consistency_loss),
+            ) = compute_losses(  # type: ignore
+                state.params,
+                state,
+                (logits, activations),
+                output_loss_fn=self.output_loss_fn,
+                mask=zeros,
             )
             metrics = {
                 "loss": loss,
@@ -194,15 +220,18 @@ def train_and_evaluate(cfg: DictConfig):
     )
 
     train_loader = data.get_data_loader(
-        cfg.batch_size,
+        dataset=base_cfg.dataset,
+        batch_size=cfg.batch_size,
         collate_fn=train_collate_fn,
-        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.0}}),
+        # empty config means no backdoors
+        transforms=data.get_transforms({}),
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
     backdoor_loader = data.get_data_loader(
-        cfg.batch_size,
+        dataset=base_cfg.dataset,
+        batch_size=cfg.val_batch_size,
         collate_fn=val_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
@@ -245,6 +274,26 @@ def train_and_evaluate(cfg: DictConfig):
         num_epochs=cfg.num_epochs,
     )
     trainer.save_model()
+
+    mixed_loader = data.get_data_loader(
+        dataset=base_cfg.dataset,
+        batch_size=cfg.max_batch_size,
+        collate_fn=val_collate_fn,
+        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.5}}),
+    )
+    logits, activations, (images, targets, infos) = next(iter(mixed_loader))
+    losses = compute_losses(
+        trainer.state.params,
+        trainer.state,
+        (logits, activations),
+        output_loss_fn=trainer.output_loss_fn,
+        return_batch=True,
+    )
+    # A higher loss should predict that the image is backdoored
+    auc_roc = sklearn.metrics.roc_auc_score(y_true=infos["backdoored"], y_score=losses)
+    trainer.log_metrics({"AUC_ROC": auc_roc})
+    logger.log("METRICS", f"AUC_ROC: {auc_roc:.4f}")
+
     trainer.close_loggers()
 
 

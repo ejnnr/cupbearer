@@ -5,6 +5,8 @@ defaults:
 
 num_epochs: 10
 batch_size: 128
+max_batch_size: 4096
+val_batch_size: ${max_batch_size}
 num_classes: 10
 single_class: false
 base_run: ???

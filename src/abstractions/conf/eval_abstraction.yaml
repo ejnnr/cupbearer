@@ -6,8 +6,12 @@ defaults:
   - override hydra/job_logging: disabled  
 
 train_run: ???
+max_batch_size: 4096
+backdoor: true
+different_corner: true
+gaussian_noise: true
 debug: false
-  
+
 hydra:  
   output_subdir: null  
   run:  
