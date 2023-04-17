@@ -10,6 +10,7 @@ import jax.numpy as jnp
 from jax.config import config as jax_config
 from loguru import logger
 import sklearn.metrics
+import matplotlib.pyplot as plt
 
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
@@ -293,6 +294,15 @@ def train_and_evaluate(cfg: DictConfig):
     auc_roc = sklearn.metrics.roc_auc_score(y_true=infos["backdoored"], y_score=losses)
     trainer.log_metrics({"AUC_ROC": auc_roc})
     logger.log("METRICS", f"AUC_ROC: {auc_roc:.4f}")
+
+    # Visualizations for consistency losses
+    plt.hist(losses[infos["backdoored"] == 0], bins=100, alpha=0.5, label="clean")
+    plt.hist(losses[infos["backdoored"] == 1], bins=100, alpha=0.5, label="backdoored")
+    plt.legend()
+    plt.xlabel("Loss")
+    plt.ylabel("Frequency")
+    plt.title("Consistency/Output Losses for Clean and Backdoor Data")
+    plt.savefig("histogram.pdf")
 
     trainer.close_loggers()
 
