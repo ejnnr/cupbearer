@@ -4,6 +4,7 @@ import sys
 import hydra
 from jax.config import config as jax_config
 from loguru import logger
+from matplotlib import pyplot as plt
 import sklearn.metrics
 
 from omegaconf import DictConfig, OmegaConf
@@ -140,6 +141,17 @@ def evaluate(cfg: DictConfig):
     trainer.on_validation_epoch_end(1, metrics, test_loaders)
     with open(train_run / "metrics.json", "w") as f:
         json.dump(metrics, f, indent=4)
+
+    # Visualizations for consistency losses
+    plt.hist(losses[infos["backdoored"] == 0], bins=100, alpha=0.5, label="clean")
+    plt.hist(losses[infos["backdoored"] == 1], bins=100, alpha=0.5, label="backdoored")
+    plt.legend()
+    plt.xlabel("Loss")
+    plt.ylabel("Frequency")
+    plt.title("Consistency/Output Losses for Clean and Backdoor Data")
+    plt.savefig(train_run / "histogram.pdf")
+
+    plt.show()
 
     trainer.close_loggers()
 
