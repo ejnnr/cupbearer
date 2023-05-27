@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Mapping
+from typing import Any, Callable, List, Mapping, Type
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
 from torchvision.datasets import MNIST, CIFAR10
@@ -30,7 +30,7 @@ def to_numpy(img):
     return out
 
 
-DATASETS: dict[str, Dataset] = {
+DATASETS: dict[str, Type[Dataset]] = {
     "mnist": MNIST,
     "cifar10": CIFAR10,
 }
@@ -73,11 +73,11 @@ def get_data_loader(
     # or a tuple with multiple elements.
     transforms = Compose(transforms)
     CustomDataset = utils.add_transforms(dataset_cls)
-    dataset = CustomDataset(
+    dataset_instance = CustomDataset(
         root=to_absolute_path("data"), train=train, transforms=transforms, download=True
     )
     dataloader = DataLoader(
-        dataset, batch_size=batch_size, shuffle=train, collate_fn=collate_fn
+        dataset_instance, batch_size=batch_size, shuffle=train, collate_fn=collate_fn
     )
     return dataloader
 
