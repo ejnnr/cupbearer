@@ -36,6 +36,26 @@ DATASETS: dict[str, Type[Dataset]] = {
 }
 
 
+def get_dataset(dataset: str, train: bool = True, transforms=None) -> Dataset:
+    if transforms is None:
+        transforms = get_transforms({})
+    try:
+        dataset_cls = DATASETS[dataset.lower()]
+    except KeyError:
+        raise ValueError(
+            f"Dataset {dataset} not supported. Must be one of {list(DATASETS.keys())}"
+        )
+    # Compose is meant to just compose image transforms, rather than
+    # the joint transforms we have here. But the implementation is
+    # actually agnostic as to whether the sample is just an image
+    # or a tuple with multiple elements.
+    transforms = Compose(transforms)
+    CustomDataset = utils.add_transforms(dataset_cls)
+    return CustomDataset(
+        root=to_absolute_path("data"), train=train, transforms=transforms, download=True
+    )
+
+
 def get_data_loader(
     dataset: str,
     batch_size: int,
@@ -59,23 +79,7 @@ def get_data_loader(
     Returns:
         Pytorch DataLoader
     """
-    if transforms is None:
-        transforms = [utils.adapt_transform(to_numpy)]
-    try:
-        dataset_cls = DATASETS[dataset.lower()]
-    except KeyError:
-        raise ValueError(
-            f"Dataset {dataset} not supported. Must be one of {list(DATASETS.keys())}"
-        )
-    # Compose is meant to just compose image transforms, rather than
-    # the joint transforms we have here. But the implementation is
-    # actually agnostic as to whether the sample is just an image
-    # or a tuple with multiple elements.
-    transforms = Compose(transforms)
-    CustomDataset = utils.add_transforms(dataset_cls)
-    dataset_instance = CustomDataset(
-        root=to_absolute_path("data"), train=train, transforms=transforms, download=True
-    )
+    dataset_instance = get_dataset(dataset, train, transforms)
     dataloader = DataLoader(
         dataset_instance, batch_size=batch_size, shuffle=train, collate_fn=collate_fn
     )

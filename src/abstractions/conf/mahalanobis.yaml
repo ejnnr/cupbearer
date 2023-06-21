@@ -1,0 +1,16 @@
+max_batch_size: 4096
+batch_size: ${max_batch_size}
+max_batches: 0
+rcond: 1e-5
+relative: false
+base_run: ???
+
+dir:
+  log: logs/mahalanobis
+  run: ${now:%Y-%m-%d_%H-%M-%S}
+seed: 0
+hydra:
+  run:
+    dir: ${dir.log}/${dir.run}
+  job:
+    chdir: true
