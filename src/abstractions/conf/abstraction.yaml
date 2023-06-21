@@ -10,7 +10,7 @@ num_classes: 10
 single_class: false
 base_run: ???
 debug: false
-wandb: true
+wandb: false
 
 dir:
   log: logs/abstraction

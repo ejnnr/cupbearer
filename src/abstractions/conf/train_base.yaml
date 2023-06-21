@@ -10,7 +10,7 @@ val_batch_size: 2048
 num_classes: 10
 max_steps: null
 debug: false
-wandb: true
+wandb: false
 transforms:
   pixel_backdoor:
     p_backdoor: 0.05
