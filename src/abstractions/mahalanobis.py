@@ -93,7 +93,7 @@ class MahalanobisDetector(AnomalyDetector):
         rcond: float = 1e-5,
         batch_size: int = 4096,
     ):
-        super().__init__(model, params)
+        super().__init__(model, params, max_batch_size=batch_size)
         self.max_batches = max_batches
         self.relative = relative
         self.rcond = rcond
@@ -182,49 +182,13 @@ def train_and_evaluate(cfg: DictConfig):
 
     detector.train(train_dataset)
 
-    # TODO: factor out the remaining code into a shared evaluation function
-    backdoor_loader = data.get_data_loader(
-        dataset=base_cfg.dataset,
-        batch_size=cfg.max_batch_size,
+    backdoor_dataset = data.get_dataset(
+        base_cfg.dataset,
         train=False,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
-    backdoor_scores = []
-    for batch in backdoor_loader:
-        backdoor_scores.append(detector.scores(batch))
-    backdoor_scores = jnp.concatenate(backdoor_scores)
-
-    clean_loader = data.get_data_loader(
-        dataset=base_cfg.dataset,
-        batch_size=cfg.max_batch_size,
-        train=False,
-    )
-    clean_scores = []
-    for batch in clean_loader:
-        clean_scores.append(detector.scores(batch))
-    clean_scores = jnp.concatenate(clean_scores)
-
-    true_labels = jnp.concatenate(
-        [jnp.ones_like(backdoor_scores), jnp.zeros_like(clean_scores)]
-    )
-    auc_roc = sklearn.metrics.roc_auc_score(
-        y_true=true_labels, y_score=jnp.concatenate([backdoor_scores, clean_scores])
-    )
-    logger.log("METRICS", f"AUC_ROC: {auc_roc:.4f}")
-
-    # Visualizations for consistency losses
-    plt.hist(clean_scores, bins=100, alpha=0.5, label="clean")
-    plt.hist(
-        backdoor_scores,
-        bins=100,
-        alpha=0.5,
-        label="backdoored",
-    )
-    plt.legend()
-    plt.xlabel("Mahalanaobis distance")
-    plt.ylabel("Frequency")
-    plt.title("Mahalanobis distance for Clean and Backdoor Data")
-    plt.savefig("histogram.pdf")
+    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
+    detector.eval(normal_dataset=clean_dataset, anomalous_dataset=backdoor_dataset)
     # TODO: log metrics to JSON file
 
 

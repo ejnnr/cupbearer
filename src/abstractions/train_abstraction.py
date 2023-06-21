@@ -1,9 +1,10 @@
-# based on the flax example code
-
 from pathlib import Path
 import sys
+import flax.linen as nn
 from typing import Callable, Optional
+from abstractions.anomaly_detector import AnomalyDetector
 from abstractions.computations import get_abstraction_maps
+from torch.utils.data import DataLoader, Dataset
 import hydra
 import jax
 import jax.numpy as jnp
@@ -16,6 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 
 from abstractions import abstraction, data, utils, trainer
+from abstractions.abstraction import Abstraction, Computation, Step
 from abstractions.logger import WandbLogger, DummyLogger
 
 
@@ -184,6 +186,58 @@ class AbstractionTrainer(trainer.TrainerModule):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
+class AbstractionDetector(AnomalyDetector):
+    def __init__(
+        self,
+        model: nn.Module,
+        params,
+        trainer: AbstractionTrainer,
+        batch_size: int = 128,
+        max_batch_size: int = 4096,
+        num_epochs: int = 10,
+    ):
+        self.trainer = trainer
+        self.batch_size = batch_size
+        self.num_epochs = num_epochs
+        super().__init__(model, params, max_batch_size=max_batch_size)
+
+    def _train(self, dataset, validation_datasets: Optional[dict[str, Dataset]] = None):
+        train_loader = DataLoader(
+            dataset=dataset,
+            batch_size=self.batch_size,
+            # TODO: I think this should plausibly be handled in AbstractionTrainer
+            # now after the refactor. Or maybe AbstractionTrainer and AbstractionDetector
+            # should just be merged.
+            collate_fn=abstraction.abstraction_collate(self.model, self.params),
+        )
+        val_loaders = {}
+        if validation_datasets is not None:
+            for key, ds in validation_datasets.items():
+                val_loaders[key] = DataLoader(
+                    dataset=ds,
+                    batch_size=self.batch_size,
+                    collate_fn=abstraction.abstraction_collate(
+                        self.model, self.params, return_original_batch=True
+                    ),
+                )
+        self.trainer.train_model(
+            train_loader=train_loader,
+            val_loaders=val_loaders,
+            test_loaders=None,
+            num_epochs=self.num_epochs,
+        )
+        self.trainer.save_model()
+
+    def _scores(self, batch):
+        return compute_losses(
+            params=self.trainer.state.params,
+            state=self.trainer.state,
+            batch=self._model(batch),
+            output_loss_fn=self.trainer.output_loss_fn,
+            return_batch=True,
+        )
+
+
 @hydra.main(version_base=None, config_path="conf", config_name="abstraction")
 def train_and_evaluate(cfg: DictConfig):
     """Execute model training and evaluation loop.
@@ -214,38 +268,22 @@ def train_and_evaluate(cfg: DictConfig):
     full_model = abstraction.Model(computation=full_computation)
     full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
 
-    # Magic collate_fn to get the activations of the model
-    train_collate_fn = abstraction.abstraction_collate(full_model, full_params)
-    val_collate_fn = abstraction.abstraction_collate(
-        full_model, full_params, return_original_batch=True
-    )
-
-    train_loader = data.get_data_loader(
+    train_dataset = data.get_dataset(
         dataset=base_cfg.dataset,
-        batch_size=cfg.batch_size,
-        collate_fn=train_collate_fn,
-        # empty config means no backdoors
-        transforms=data.get_transforms({}),
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
-    backdoor_loader = data.get_data_loader(
+    backdoor_dataset = data.get_dataset(
         dataset=base_cfg.dataset,
-        batch_size=cfg.val_batch_size,
-        collate_fn=val_collate_fn,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
 
-    val_loaders = {
-        "backdoor": backdoor_loader,
-    }
-
-    # Dataloader returns logits and activations, only activations get passed to model
-    _, example_activations = next(iter(train_loader))
-    # Activations are a list of batched activations, we want to effectively get
-    # batch size 1
-    example_input = [x[0:1] for x in example_activations]
+    # First sample, only input without label and info. Also need to add a batch dimension
+    example_input = train_dataset[0][0][None]
+    _, example_activations = full_model.apply(
+        {"params": full_params}, example_input, return_activations=True
+    )
 
     if cfg.single_class:
         cfg.model.output_dim = 2
@@ -260,49 +298,31 @@ def train_and_evaluate(cfg: DictConfig):
         model=model,
         output_loss_fn=single_class_loss_fn if cfg.single_class else kl_loss_fn,
         optimizer=hydra.utils.instantiate(cfg.optim),
-        example_input=example_input,
+        example_input=example_activations,
         # Hydra sets the cwd to the right log dir automatically
         log_dir=".",
         check_val_every_n_epoch=1,
         loggers=[metrics_logger],
         enable_progress_bar=False,
     )
-
-    trainer.train_model(
-        train_loader=train_loader,
-        val_loaders=val_loaders,
-        test_loaders=None,
+    detector = AbstractionDetector(
+        model=full_model,
+        params=full_params,
+        trainer=trainer,
+        batch_size=cfg.batch_size,
+        max_batch_size=cfg.max_batch_size,
         num_epochs=cfg.num_epochs,
     )
-    trainer.save_model()
 
-    mixed_loader = data.get_data_loader(
-        dataset=base_cfg.dataset,
-        batch_size=cfg.max_batch_size,
-        collate_fn=val_collate_fn,
-        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 0.5}}),
-    )
-    logits, activations, (images, targets, infos) = next(iter(mixed_loader))
-    losses = compute_losses(
-        trainer.state.params,
-        trainer.state,
-        (logits, activations),
-        output_loss_fn=trainer.output_loss_fn,
-        return_batch=True,
-    )
-    # A higher loss should predict that the image is backdoored
-    auc_roc = sklearn.metrics.roc_auc_score(y_true=infos["backdoored"], y_score=losses)
-    trainer.log_metrics({"AUC_ROC": auc_roc})
-    logger.log("METRICS", f"AUC_ROC: {auc_roc:.4f}")
+    detector.train(train_dataset, validation_datasets={"backdoor": backdoor_dataset})
 
-    # Visualizations for consistency losses
-    plt.hist(losses[infos["backdoored"] == 0], bins=100, alpha=0.5, label="clean")
-    plt.hist(losses[infos["backdoored"] == 1], bins=100, alpha=0.5, label="backdoored")
-    plt.legend()
-    plt.xlabel("Loss")
-    plt.ylabel("Frequency")
-    plt.title("Consistency/Output Losses for Clean and Backdoor Data")
-    plt.savefig("histogram.pdf")
+    backdoor_dataset = data.get_dataset(
+        base_cfg.dataset,
+        train=False,
+        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
+    )
+    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
+    detector.eval(normal_dataset=clean_dataset, anomalous_dataset=backdoor_dataset)
 
     trainer.close_loggers()
 

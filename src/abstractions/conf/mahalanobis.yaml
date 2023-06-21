@@ -1,5 +1,4 @@
-max_batch_size: 4096
-batch_size: ${max_batch_size}
+batch_size: 4096
 max_batches: 0
 rcond: 1e-5
 relative: false
