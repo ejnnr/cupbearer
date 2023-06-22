@@ -1,0 +1,5 @@
+batch_size: 1024
+num_examples: 4096
+base_run: ???
+# 8/255
+eps: 0.031372549
