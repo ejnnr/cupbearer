@@ -3,6 +3,7 @@ max_batches: 0
 rcond: 1e-5
 relative: false
 base_run: ???
+anomaly: backdoor
 
 dir:
   log: logs/mahalanobis

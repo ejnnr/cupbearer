@@ -13,6 +13,7 @@ from omegaconf import DictConfig, OmegaConf
 import sklearn.metrics
 
 from abstractions import abstraction, data, utils
+from abstractions.adversarial_examples import AdversarialExampleDataset
 from abstractions.anomaly_detector import AnomalyDetector
 from abstractions.computations import get_abstraction_maps
 
@@ -182,13 +183,38 @@ def train_and_evaluate(cfg: DictConfig):
 
     detector.train(train_dataset)
 
-    backdoor_dataset = data.get_dataset(
-        base_cfg.dataset,
-        train=False,
-        transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
-    )
     clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
-    detector.eval(normal_dataset=clean_dataset, anomalous_dataset=backdoor_dataset)
+    match cfg.anomaly:
+        case "backdoor":
+            anomalous_dataset = data.get_dataset(
+                base_cfg.dataset,
+                train=False,
+                transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
+            )
+
+        case "different_corner":
+            anomalous_dataset = data.get_dataset(
+                base_cfg.dataset,
+                train=False,
+                transforms=data.get_transforms(
+                    {"pixel_backdoor": {"p_backdoor": 1.0, "corner": "top-left"}}
+                ),
+            )
+
+        case "gaussian_noise":
+            anomalous_dataset = data.get_dataset(
+                base_cfg.dataset,
+                train=False,
+                transforms=data.get_transforms({"noise": {"std": 0.3}}),
+            )
+
+        case "adversarial":
+            anomalous_dataset = AdversarialExampleDataset(base_run)
+
+        case _:
+            raise ValueError(f"Unknown anomaly type {cfg.anomaly}")
+
+    detector.eval(normal_dataset=clean_dataset, anomalous_dataset=anomalous_dataset)
     # TODO: log metrics to JSON file
 
 
