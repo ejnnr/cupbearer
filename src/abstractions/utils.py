@@ -96,6 +96,9 @@ def adapt_transform(transform: Callable) -> Callable:
 SUFFIX = ".pytree"
 
 
+# Based on https://github.com/google/jax/issues/2116#issuecomment-580322624
+# TODO: basically just using this for nested dicts of arrays, so a generalized version
+# of jnp.savez should work and be faster than pickle.
 def save(data, path: Union[str, Path], overwrite: bool = False):
     path = Path(path)
     if path.suffix != SUFFIX:
