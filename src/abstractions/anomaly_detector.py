@@ -78,17 +78,27 @@ class AnomalyDetector(ABC):
         true_labels = jnp.concatenate(
             [jnp.ones_like(anomalous_scores), jnp.zeros_like(normal_scores)]
         )
+        all_scores = jnp.concatenate([anomalous_scores, normal_scores])
         auc_roc = sklearn.metrics.roc_auc_score(
             y_true=true_labels,
-            y_score=jnp.concatenate([anomalous_scores, normal_scores]),
+            y_score=all_scores,
         )
         logger.log("METRICS", f"AUC_ROC: {auc_roc:.4f}")
 
+        x_lim = jnp.percentile(all_scores, 95)
+
         # Visualizations for consistency losses
-        plt.hist(normal_scores, bins=100, alpha=0.5, label="Normal")
+        plt.hist(
+            normal_scores,
+            bins=100,
+            range=(normal_scores.min(), min(normal_scores.max().item(), x_lim)),
+            alpha=0.5,
+            label="Normal",
+        )
         plt.hist(
             anomalous_scores,
             bins=100,
+            range=(anomalous_scores.min(), min(normal_scores.max().item(), x_lim)),
             alpha=0.5,
             label="Anomalous",
         )
