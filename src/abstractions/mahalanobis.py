@@ -81,13 +81,13 @@ def mahalanobis(
         if inv_diag_covariances is not None:
             distance -= jnp.sum(delta**2 * inv_diag_covariances[i][None], axis=1)
         distances.append(distance)
-    return jnp.mean(jnp.array(distances), axis=0)
+    return jnp.array(distances)
 
 
 class MahalanobisDetector(AnomalyDetector):
     def __init__(
         self,
-        model: nn.Module,
+        model: abstraction.Model,
         params,
         max_batches: int = 0,
         relative: bool = False,
@@ -100,7 +100,7 @@ class MahalanobisDetector(AnomalyDetector):
         self.rcond = rcond
         self.batch_size = batch_size
 
-    def _train(self, dataset):
+    def train(self, dataset):
         data_loader = DataLoader(
             dataset,
             batch_size=self.batch_size,
@@ -143,7 +143,7 @@ class MahalanobisDetector(AnomalyDetector):
                 for C in self.covariances
             ]
 
-    def _scores(self, batch):
+    def layerwise_scores(self, batch):
         _, activations = self._model(batch)
         return mahalanobis(
             activations,
@@ -151,6 +151,21 @@ class MahalanobisDetector(AnomalyDetector):
             self.inv_covariances,
             inv_diag_covariances=self.inv_diag_covariances,
         )
+
+    def _get_trained_variables(self):
+        return {
+            "means": self.means,
+            "inv_covariances": self.inv_covariances,
+            "inv_diag_covariances": self.inv_diag_covariances,
+        }
+
+    def _set_trained_variables(self, variables):
+        self.means = variables["means"]
+        self.inv_covariances = variables["inv_covariances"]
+        self.inv_diag_covariances = variables["inv_diag_covariances"]
+
+        if self.relative:
+            assert self.inv_diag_covariances is not None
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="mahalanobis")
