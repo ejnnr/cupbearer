@@ -7,19 +7,27 @@
 # representation to the output of the computation.
 # All of this is encapsulated in a flax module.
 
-from dataclasses import field
 import functools
 from typing import Callable, List, Sequence
 import flax.linen as nn
 import jax
+from iceberg import Drawable, Bounds, Colors, Color
+from iceberg.primitives import Arrange, Ellipse, Padding
+from abstractions.computations import Computation, Orientation, Step
 from abstractions import data
 
 
-# A single computational step
-Step = Callable
-# A full computation is (for now) just a list of steps
-# Could also be a graph (or of course non-static computations) in the future
-Computation = List[Step]
+def draw_computation(computation: Computation, return_nodes=False) -> Drawable:
+    steps = [step.get_drawable() for step in computation]
+    nodes = [
+        Ellipse(Bounds(size=(50, 50)), border_color=Colors.BLACK) for _ in computation
+    ]
+    # interleave the two lists:
+    drawables = [x for pair in zip(steps, nodes) for x in pair]
+    res = Arrange(drawables, gap=0)
+    if return_nodes:
+        return res, nodes
+    return res
 
 
 class Model(nn.Module):
@@ -38,6 +46,9 @@ class Model(nn.Module):
         if return_activations:
             return x, activations
         return x
+
+    def get_drawable(self) -> Drawable:
+        return draw_computation(self.computation)
 
 
 class Abstraction(nn.Module):
@@ -60,6 +71,45 @@ class Abstraction(nn.Module):
         predicted_output = output_map(output)
 
         return abstractions, predicted_abstractions, predicted_output
+
+    def get_drawable(self, full_model: Model, losses=None) -> Drawable:
+        model_drawable = full_model.get_drawable()
+        abstraction_drawable, nodes = draw_computation(
+            self.computation, return_nodes=True
+        )
+
+        if losses is not None:
+            # The first node doesn't incur any loss in the current implementation,
+            # so we don't color it.
+            nodes[0].fill_color = Color(0.3, 0.3, 0.3)
+            nodes = nodes[1:]
+
+            # TODO: might not make sense for all loss functions
+            min_loss = 0
+            max_loss = max(losses)
+            normalized_losses = [
+                (loss - min_loss) / (max_loss - min_loss) for loss in losses
+            ]
+
+            assert len(nodes) == len(
+                normalized_losses
+            ), f"len(nodes) = {len(nodes)} != len(normalized_losses) = {len(normalized_losses)}"
+            for node, loss in zip(nodes, normalized_losses):
+                # TODO: this gives red, but why??
+                node.fill_color = Color(0, 0, 1, loss)
+
+        tau_maps = [
+            map.get_drawable(orientation=Orientation.VERTICAL)
+            for map in self.abstraction_maps
+        ]
+        tau_drawable = Arrange(tau_maps, Arrange.Direction.HORIZONTAL, gap=250)
+        tau_drawable = Padding(tau_drawable, (275, 0, 325, 0))
+
+        return Arrange(
+            [model_drawable, tau_drawable, abstraction_drawable],
+            Arrange.Direction.VERTICAL,
+            gap=0,
+        )
 
 
 def abstraction_collate(model: nn.Module, params, return_original_batch=False):

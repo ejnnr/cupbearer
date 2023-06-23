@@ -3,7 +3,7 @@ import sys
 import flax.linen as nn
 from typing import Callable, Optional
 from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import get_abstraction_maps
+from abstractions.computations import Computation, Step, get_abstraction_maps
 from torch.utils.data import DataLoader, Dataset
 import hydra
 import jax
@@ -17,7 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 
 from abstractions import abstraction, data, utils, trainer
-from abstractions.abstraction import Abstraction, Computation, Step
+from abstractions.abstraction import Abstraction
 from abstractions.logger import WandbLogger, DummyLogger
 
 
@@ -52,7 +52,9 @@ def single_class_loss_fn(predicted_logits, logits, target=0):
     return output_losses
 
 
-def compute_losses(params, state, batch, output_loss_fn, mask=None, return_batch=False):
+def compute_losses(
+    params, state, batch, output_loss_fn, mask=None, return_batch=False, layerwise=False
+):
     logits, activations = batch
     abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
         {"params": params}, activations
@@ -70,25 +72,40 @@ def compute_losses(params, state, batch, output_loss_fn, mask=None, return_batch
     output_loss = output_losses.mean()
 
     # Consistency loss:
-    consistency_losses = jnp.zeros(b)
+    layer_losses = []
     # Skip the first abstraction, since there's no prediction for that
     for abstraction, predicted_abstraction in zip(
         abstractions[1:], predicted_abstractions
     ):
         # Take mean over hidden dimension(s):
-        consistency_losses += jnp.sqrt(
-            ((abstraction - predicted_abstraction) ** 2).mean(
-                axis=tuple(range(1, abstraction.ndim))
+        layer_losses.append(
+            jnp.sqrt(
+                ((abstraction - predicted_abstraction) ** 2).mean(
+                    axis=tuple(range(1, abstraction.ndim))
+                )
             )
         )
-    consistency_losses /= len(predicted_abstractions)
-    consistency_loss = consistency_losses.mean()
 
-    loss = output_loss + consistency_loss
+    consistency_losses = jnp.stack(layer_losses, axis=0).mean(axis=0)
+    consistency_losses /= len(predicted_abstractions)
+
+    if layerwise:
+        assert mask is None
+        layer_losses = jnp.stack(layer_losses, axis=0)
+        if not return_batch:
+            # Take mean over batch dimension
+            layer_losses = layer_losses.mean(axis=1)
+            layer_losses = jnp.concatenate([layer_losses, jnp.array([output_loss])])
+        else:
+            layer_losses = jnp.concatenate([layer_losses, output_losses[None]])
+        return layer_losses
 
     if return_batch:
         assert mask is None
         return output_losses + consistency_losses
+
+    consistency_loss = consistency_losses.mean()
+    loss = output_loss + consistency_loss
 
     if mask is not None:
         assert mask.shape == (b,)
@@ -228,13 +245,14 @@ class AbstractionDetector(AnomalyDetector):
         )
         self.trainer.save_model()
 
-    def _scores(self, batch):
+    def _layerwise_scores(self, batch):
         return compute_losses(
             params=self.trainer.state.params,
             state=self.trainer.state,
             batch=self._model(batch),
             output_loss_fn=self.trainer.output_loss_fn,
             return_batch=True,
+            layerwise=True,
         )
 
 

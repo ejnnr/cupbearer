@@ -38,17 +38,20 @@ class AnomalyDetector(ABC):
         self.trained = True
         return self._train(*args, **kwargs)
 
-    def scores(self, batch):
+    def scores(self, batch, layerwise=False):
         """Compute anomaly scores for the given inputs.
 
         Args:
-            inputs: a batch of input data to the model (potentially including labels).
+            batch: a batch of input data to the model (potentially including labels).
+            layerwise: if True, return a list of scores for each layer of the model.
 
         Returns:
             A batch of anomaly scores for the inputs.
         """
         if not self.trained:
             raise RuntimeError("Anomaly detector must be trained first.")
+        if layerwise:
+            return self._layerwise_scores(batch)
         return self._scores(batch)
 
     def eval(self, normal_dataset, anomalous_dataset):
@@ -108,10 +111,31 @@ class AnomalyDetector(ABC):
         plt.title("Anomaly score distribution")
         plt.savefig("histogram.pdf")
 
+    def layer_anomalies(self, dataset):
+        dataloader = DataLoader(
+            dataset,
+            batch_size=self.max_batch_size,
+            shuffle=False,
+            collate_fn=data.numpy_collate,
+        )
+        scores = 0
+        num_elements = 0
+        for batch in dataloader:
+            new_scores = self.scores(batch, layerwise=True)
+            # Sum over batch axis
+            scores = scores + new_scores.sum(axis=1)
+            num_elements += new_scores.shape[1]
+        # We're also taking the mean over the dataset
+        scores = scores / num_elements
+        return scores
+
     @abstractmethod
     def _train(self, dataset):
         pass
 
     @abstractmethod
-    def _scores(self, batch):
+    def _layerwise_scores(self, batch) -> jax.Array:
         pass
+
+    def _scores(self, batch):
+        return self._layerwise_scores(batch).mean(axis=0)

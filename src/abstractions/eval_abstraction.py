@@ -10,6 +10,9 @@ import sklearn.metrics
 from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 
+from iceberg import Bounds, Renderer, Colors
+from iceberg.primitives import Blank
+
 from abstractions import abstraction, data, utils
 from abstractions.adversarial_examples import AdversarialExampleDataset
 from abstractions.computations import get_abstraction_maps
@@ -115,9 +118,21 @@ def evaluate(cfg: DictConfig):
         case _:
             raise ValueError(f"Unknown anomaly type {cfg.anomaly}")
 
-    detector.eval(normal_dataset=clean_dataset, anomalous_dataset=anomalous_dataset)
+    # detector.eval(normal_dataset=clean_dataset, anomalous_dataset=anomalous_dataset)
+    losses = detector.layer_anomalies(anomalous_dataset)
 
     trainer.close_loggers()
+
+    drawing = model.get_drawable(full_model, losses)
+    canvas = Blank(Bounds(size=(360 * (len(maps) + 1), 550)), Colors.WHITE)
+    scene = canvas.add_centered(drawing)
+    scene = scene.scale(2)
+
+    renderer = Renderer()
+    renderer.render(scene)
+    image = renderer.get_rendered_image()
+    plt.imshow(image)
+    plt.show()
 
 
 if __name__ == "__main__":

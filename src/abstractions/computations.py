@@ -1,13 +1,76 @@
+from abc import ABC, abstractmethod
+from dataclasses import dataclass
 import functools
-from typing import Any, Mapping, Sequence
+from typing import Any, List, Mapping, Sequence
 import flax.linen as nn
+from enum import Enum
+from iceberg import Drawable, Bounds, Colors, PathStyle, FontStyle
+from iceberg.primitives import Rectangle, Line, Directions, Arrange, SimpleText
+import jax
 
-from abstractions.abstraction import Computation, Step
+
+class Orientation(Enum):
+    HORIZONTAL = 0
+    VERTICAL = 1
 
 
-def linear(output_dim: int) -> Step:
+class Step(ABC):
+    name: str = ""
+
+    @abstractmethod
+    def __call__(self, x: jax.Array) -> jax.Array:
+        pass
+
+    def get_drawable(self, orientation=Orientation.HORIZONTAL) -> Drawable:
+        step = self._get_drawable(orientation)
+        style = PathStyle(Colors.BLACK)
+        if orientation == Orientation.HORIZONTAL:
+            in_arrow = Line((0, 0), (100, 0), style)
+            out_arrow = Line((0, 0), (100, 0), style)
+            return Arrange([in_arrow, step, out_arrow], gap=0)
+        else:
+            in_arrow = Line((0, 0), (0, 100), style)
+            out_arrow = Line((0, 0), (0, 100), style)
+            return Arrange(
+                [in_arrow, step, out_arrow], Arrange.Direction.VERTICAL, gap=0
+            )
+
+    def _get_drawable(self, orientation: Orientation) -> Drawable:
+        text = SimpleText(
+            text=self.name,
+            font_style=FontStyle(
+                family="Arial",
+                size=16,
+                color=Colors.BLACK,
+            ),
+        )
+        box = Rectangle(Bounds(size=(100, 100)), border_color=Colors.BLACK)
+        return box.add_centered(text)
+
+
+@dataclass
+class Linear(Step):
     """A single linear layer."""
-    return nn.Dense(features=output_dim)
+
+    output_dim: int
+    name: str = "Linear"
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        return nn.Dense(features=self.output_dim)(x)
+
+
+@dataclass
+class ReluLinear(Step):
+    """A ReLU followed by a linear layer."""
+
+    output_dim: int
+    flatten_input: bool = False
+    name: str = "Lin+ReLU"
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        if self.flatten_input:
+            x = x.reshape((x.shape[0], -1))
+        return nn.relu(nn.Dense(features=self.output_dim)(x))
 
 
 def conv(output_dim: int) -> Step:
@@ -23,36 +86,36 @@ def get_abstraction_maps(cfg: Mapping[str, Any]) -> list[Step]:
             "output_dim": _,
             "hidden_dims": hidden_dims,
         }:
-            return [linear(output_dim=dim) for dim in hidden_dims]
-        
+            return [Linear(output_dim=dim) for dim in hidden_dims]
+
         case {
             "_target_": "abstractions.computations.cnn",
             "output_dim": _,
             "channels": channels,
             "dense_dims": dense_dims,
         }:
-            return [
-                conv(output_dim=dim) for dim in channels
-            ] + [linear(output_dim=dim) for dim in dense_dims]
-        
+            return [conv(output_dim=dim) for dim in channels] + [
+                Linear(output_dim=dim) for dim in dense_dims
+            ]
+
         case _:
             raise ValueError(f"Unknown abstraction maps: {cfg}")
+
+
+# A full computation is (for now) just a list of steps
+# Could also be a graph (or of course non-static computations) in the future
+Computation = List[Step]
 
 
 def mlp(output_dim: int, hidden_dims: Sequence[int]) -> Computation:
     """A simple feed-forward MLP."""
     steps = [
         # special case for first layer, since we need to flatten the input
-        lambda x: nn.relu(
-            nn.Dense(features=hidden_dims[0])(x.reshape((x.shape[0], -1)))
-        ),
+        ReluLinear(output_dim=hidden_dims[0], flatten_input=True),
         # remaining hidden layers
-        *[
-            lambda x: nn.relu(nn.Dense(features=hidden_dim)(x))
-            for hidden_dim in hidden_dims[1:]
-        ],
+        *[ReluLinear(output_dim=hidden_dim) for hidden_dim in hidden_dims[1:]],
         # output layer
-        lambda x: nn.Dense(features=output_dim)(x),
+        Linear(output_dim=output_dim),
     ]
     return steps
 
