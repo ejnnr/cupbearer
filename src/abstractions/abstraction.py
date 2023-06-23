@@ -17,11 +17,32 @@ from abstractions.computations import Computation, Orientation, Step
 from abstractions import data
 
 
-def draw_computation(computation: Computation, return_nodes=False) -> Drawable:
+def draw_computation(
+    computation: Computation, return_nodes=False, layer_scores=None
+) -> Drawable:
     steps = [step.get_drawable() for step in computation]
     nodes = [
         Ellipse(Bounds(size=(50, 50)), border_color=Colors.BLACK) for _ in computation
     ]
+    if layer_scores is not None:
+        # The first node doesn't incur any loss in the current implementation,
+        # so we don't color it.
+        nodes[0].fill_color = Color(0.3, 0.3, 0.3)
+
+        # TODO: might not make sense for all loss functions
+        min_score = 0
+        max_score = max(layer_scores)
+        normalized_scores = [
+            (score - min_score) / (max_score - min_score) for score in layer_scores
+        ]
+
+        assert len(nodes) - 1 == len(normalized_scores), (
+            f"len(nodes) - 1 = {len(nodes) - 1}"
+            f"!= len(normalized_scores) = {len(normalized_scores)}"
+        )
+        for node, score in zip(nodes[1:], normalized_scores):
+            node.fill_color = Color(1, 0, 0, score)
+
     # interleave the two lists:
     drawables = [x for pair in zip(steps, nodes) for x in pair]
     arranged = Arrange(drawables, gap=100)
@@ -59,8 +80,8 @@ class Model(nn.Module):
             return x, activations
         return x
 
-    def get_drawable(self, return_nodes=False) -> Drawable:
-        return draw_computation(self.computation, return_nodes)
+    def get_drawable(self, return_nodes=False, layer_scores=None) -> Drawable:
+        return draw_computation(self.computation, return_nodes, layer_scores)
 
 
 class Abstraction(nn.Module):
@@ -84,31 +105,11 @@ class Abstraction(nn.Module):
 
         return abstractions, predicted_abstractions, predicted_output
 
-    def get_drawable(self, full_model: Model, losses=None) -> Drawable:
+    def get_drawable(self, full_model: Model, layer_scores=None) -> Drawable:
         model_drawable, model_nodes = full_model.get_drawable(return_nodes=True)
         abstraction_drawable, abstraction_nodes = draw_computation(
-            self.computation, return_nodes=True
+            self.computation, return_nodes=True, layer_scores=layer_scores
         )
-
-        if losses is not None:
-            # The first node doesn't incur any loss in the current implementation,
-            # so we don't color it.
-            abstraction_nodes[0].fill_color = Color(0.3, 0.3, 0.3)
-
-            # TODO: might not make sense for all loss functions
-            min_loss = 0
-            max_loss = max(losses)
-            normalized_losses = [
-                (loss - min_loss) / (max_loss - min_loss) for loss in losses
-            ]
-
-            assert len(abstraction_nodes) - 1 == len(normalized_losses), (
-                f"len(abstraction_nodes) - 1 = {len(abstraction_nodes) - 1}"
-                f"!= len(normalized_losses) = {len(normalized_losses)}"
-            )
-            for node, loss in zip(abstraction_nodes[1:], normalized_losses):
-                # TODO: this gives red, but why??
-                node.fill_color = Color(0, 0, 1, loss)
 
         VERTICAL_DISTANCE = 250
 

@@ -255,6 +255,11 @@ class AbstractionDetector(AnomalyDetector):
             layerwise=True,
         )
 
+    def _get_drawable(self, layer_scores):
+        return self.trainer.model.get_drawable(
+            full_model=self.model, layer_scores=layer_scores
+        )
+
 
 @hydra.main(version_base=None, config_path="conf", config_name="abstraction")
 def train_and_evaluate(cfg: DictConfig):

@@ -1,7 +1,12 @@
 from abc import ABC, abstractmethod
+from pathlib import Path
+from typing import Optional
 from loguru import logger
 from matplotlib import pyplot as plt
 import sklearn.metrics
+
+from iceberg import Bounds, Renderer, Colors
+from iceberg.primitives import Blank
 
 from torch.utils.data import DataLoader
 
@@ -54,7 +59,7 @@ class AnomalyDetector(ABC):
             return self._layerwise_scores(batch)
         return self._scores(batch)
 
-    def eval(self, normal_dataset, anomalous_dataset):
+    def eval(self, normal_dataset, anomalous_dataset, save_path: str | Path = ""):
         normal_loader = DataLoader(
             normal_dataset,
             batch_size=self.max_batch_size,
@@ -110,6 +115,25 @@ class AnomalyDetector(ABC):
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
         plt.savefig("histogram.pdf")
+
+        layer_scores = self.layer_anomalies(anomalous_dataset)
+
+        self.plot(layer_scores, path=save_path)
+
+    def _get_drawable(self, layer_scores):
+        return self.model.get_drawable(layer_scores)
+
+    def plot(self, layer_scores: Optional[jax.Array] = None, path: str | Path = ""):
+        drawing = self._get_drawable(layer_scores)
+        canvas = Blank(drawing.bounds.inset(-10), Colors.WHITE)
+        scene = canvas.add_centered(drawing)
+        scene = scene.scale(2)
+
+        renderer = Renderer()
+        renderer.render(scene)
+        if not isinstance(path, Path):
+            path = Path(path)
+        renderer.save_rendered_image(path / "architecture.png")
 
     def layer_anomalies(self, dataset):
         dataloader = DataLoader(

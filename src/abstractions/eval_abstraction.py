@@ -33,7 +33,9 @@ def evaluate(cfg: DictConfig):
       cfg: Hydra configuration object.
     """
     train_run = Path(cfg.train_run)
-    path = to_absolute_path(str(train_run / ".hydra" / "config.yaml"))
+    # Note that hydra cwd management is disabled for this script, so no need for
+    # to_absolute_path like in other files.
+    path = train_run / ".hydra" / "config.yaml"
     logger.info(f"Loading abstraction config from {path}")
     train_cfg = OmegaConf.load(path)
 
@@ -43,13 +45,13 @@ def evaluate(cfg: DictConfig):
 
     # Load the full model we want to abstract
     base_run = Path(train_cfg.base_run)
-    path = to_absolute_path(str(base_run / ".hydra" / "config.yaml"))
+    path = base_run / ".hydra" / "config.yaml"
     logger.info(f"Loading base model config from {path}")
     base_cfg = OmegaConf.load(path)
 
     full_computation = hydra.utils.call(base_cfg.model)
     full_model = abstraction.Model(computation=full_computation)
-    full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
+    full_params = utils.load(base_run / "model.pytree")["params"]
 
     clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
     # First sample, only input without label and info. Also need to add a batch dimension
@@ -72,7 +74,7 @@ def evaluate(cfg: DictConfig):
         output_loss_fn=single_class_loss_fn if train_cfg.single_class else kl_loss_fn,
         optimizer=hydra.utils.instantiate(train_cfg.optim),
         example_input=example_activations,
-        log_dir=to_absolute_path(str(train_run)),
+        log_dir=train_run,
         check_val_every_n_epoch=1,
         loggers=[],
         enable_progress_bar=False,
@@ -118,21 +120,13 @@ def evaluate(cfg: DictConfig):
         case _:
             raise ValueError(f"Unknown anomaly type {cfg.anomaly}")
 
-    # detector.eval(normal_dataset=clean_dataset, anomalous_dataset=anomalous_dataset)
-    losses = detector.layer_anomalies(anomalous_dataset)
+    detector.eval(
+        normal_dataset=clean_dataset,
+        anomalous_dataset=anomalous_dataset,
+        save_path=train_run,
+    )
 
     trainer.close_loggers()
-
-    drawing = model.get_drawable(full_model, losses)
-    canvas = Blank(Bounds(size=(360 * (len(maps) + 1), 550)), Colors.WHITE)
-    scene = canvas.add_centered(drawing)
-    scene = scene.scale(2)
-
-    renderer = Renderer()
-    renderer.render(scene)
-    image = renderer.get_rendered_image()
-    plt.imshow(image)
-    plt.show()
 
 
 if __name__ == "__main__":
