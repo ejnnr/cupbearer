@@ -11,8 +11,8 @@ import functools
 from typing import Callable, List, Sequence
 import flax.linen as nn
 import jax
-from iceberg import Drawable, Bounds, Colors, Color
-from iceberg.primitives import Arrange, Ellipse, Padding
+from iceberg import Drawable, Bounds, Colors, Color, Corner, PathStyle
+from iceberg.primitives import Arrange, Ellipse, Padding, Line, Compose
 from abstractions.computations import Computation, Orientation, Step
 from abstractions import data
 
@@ -24,7 +24,19 @@ def draw_computation(computation: Computation, return_nodes=False) -> Drawable:
     ]
     # interleave the two lists:
     drawables = [x for pair in zip(steps, nodes) for x in pair]
-    res = Arrange(drawables, gap=0)
+    arranged = Arrange(drawables, gap=100)
+
+    lines = []
+    linestyle = PathStyle(color=Colors.BLACK)
+
+    for a, b in zip(drawables[:-1], drawables[1:]):
+        start = arranged.child_bounds(a).corners[Corner.MIDDLE_RIGHT]
+        end = arranged.child_bounds(b).corners[Corner.MIDDLE_LEFT]
+        line = Line(start, end, linestyle)
+        lines.append(line)
+
+    res = Compose((*lines, arranged))
+
     if return_nodes:
         return res, nodes
     return res
@@ -47,8 +59,8 @@ class Model(nn.Module):
             return x, activations
         return x
 
-    def get_drawable(self) -> Drawable:
-        return draw_computation(self.computation)
+    def get_drawable(self, return_nodes=False) -> Drawable:
+        return draw_computation(self.computation, return_nodes)
 
 
 class Abstraction(nn.Module):
@@ -73,16 +85,15 @@ class Abstraction(nn.Module):
         return abstractions, predicted_abstractions, predicted_output
 
     def get_drawable(self, full_model: Model, losses=None) -> Drawable:
-        model_drawable = full_model.get_drawable()
-        abstraction_drawable, nodes = draw_computation(
+        model_drawable, model_nodes = full_model.get_drawable(return_nodes=True)
+        abstraction_drawable, abstraction_nodes = draw_computation(
             self.computation, return_nodes=True
         )
 
         if losses is not None:
             # The first node doesn't incur any loss in the current implementation,
             # so we don't color it.
-            nodes[0].fill_color = Color(0.3, 0.3, 0.3)
-            nodes = nodes[1:]
+            abstraction_nodes[0].fill_color = Color(0.3, 0.3, 0.3)
 
             # TODO: might not make sense for all loss functions
             min_loss = 0
@@ -91,25 +102,55 @@ class Abstraction(nn.Module):
                 (loss - min_loss) / (max_loss - min_loss) for loss in losses
             ]
 
-            assert len(nodes) == len(
-                normalized_losses
-            ), f"len(nodes) = {len(nodes)} != len(normalized_losses) = {len(normalized_losses)}"
-            for node, loss in zip(nodes, normalized_losses):
+            assert len(abstraction_nodes) - 1 == len(normalized_losses), (
+                f"len(abstraction_nodes) - 1 = {len(abstraction_nodes) - 1}"
+                f"!= len(normalized_losses) = {len(normalized_losses)}"
+            )
+            for node, loss in zip(abstraction_nodes[1:], normalized_losses):
                 # TODO: this gives red, but why??
                 node.fill_color = Color(0, 0, 1, loss)
+
+        VERTICAL_DISTANCE = 250
+
+        both_computations = Arrange(
+            [model_drawable, abstraction_drawable],
+            Arrange.Direction.VERTICAL,
+            gap=VERTICAL_DISTANCE,
+        )
 
         tau_maps = [
             map.get_drawable(orientation=Orientation.VERTICAL)
             for map in self.abstraction_maps
         ]
-        tau_drawable = Arrange(tau_maps, Arrange.Direction.HORIZONTAL, gap=250)
-        tau_drawable = Padding(tau_drawable, (275, 0, 325, 0))
 
-        return Arrange(
-            [model_drawable, tau_drawable, abstraction_drawable],
-            Arrange.Direction.VERTICAL,
-            gap=0,
-        )
+        lines = []
+        linestyle = PathStyle(color=Colors.BLACK)
+        positioned_tau_maps = []
+
+        for model_node, tau_map, abstract_node in zip(
+            model_nodes, tau_maps, abstraction_nodes
+        ):
+            model_bounds = both_computations.child_bounds(model_node)
+            abstract_bounds = both_computations.child_bounds(abstract_node)
+            # Want to align centers:
+            x = model_bounds.center[0] - tau_map.bounds.width / 2
+            y = (
+                model_bounds.bottom + abstract_bounds.top
+            ) / 2 - tau_map.bounds.height / 2
+            tau_map = tau_map.move(x, y)
+            positioned_tau_maps.append(tau_map)
+
+            # Line from model node to tau map:
+            start = model_bounds.corners[Corner.BOTTOM_MIDDLE]
+            end = tau_map.bounds.corners[Corner.TOP_MIDDLE]
+            lines.append(Line(start, end, linestyle))
+
+            # Line from tau map to abstraction node:
+            start = tau_map.bounds.corners[Corner.BOTTOM_MIDDLE]
+            end = abstract_bounds.corners[Corner.TOP_MIDDLE]
+            lines.append(Line(start, end, linestyle))
+
+        return Compose((*lines, *positioned_tau_maps, both_computations))
 
 
 def abstraction_collate(model: nn.Module, params, return_original_batch=False):

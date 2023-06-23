@@ -22,30 +22,30 @@ class Step(ABC):
         pass
 
     def get_drawable(self, orientation=Orientation.HORIZONTAL) -> Drawable:
-        step = self._get_drawable(orientation)
-        style = PathStyle(Colors.BLACK)
-        if orientation == Orientation.HORIZONTAL:
-            in_arrow = Line((0, 0), (100, 0), style)
-            out_arrow = Line((0, 0), (100, 0), style)
-            return Arrange([in_arrow, step, out_arrow], gap=0)
-        else:
-            in_arrow = Line((0, 0), (0, 100), style)
-            out_arrow = Line((0, 0), (0, 100), style)
-            return Arrange(
-                [in_arrow, step, out_arrow], Arrange.Direction.VERTICAL, gap=0
-            )
-
-    def _get_drawable(self, orientation: Orientation) -> Drawable:
+        box = Rectangle(Bounds(size=(100, 100)), border_color=Colors.BLACK)
         text = SimpleText(
             text=self.name,
             font_style=FontStyle(
-                family="Arial",
+                family="Monaco",
                 size=16,
                 color=Colors.BLACK,
             ),
         )
-        box = Rectangle(Bounds(size=(100, 100)), border_color=Colors.BLACK)
+        info = self._info()
+        if info is not None:
+            info_text = SimpleText(
+                text=info,
+                font_style=FontStyle(
+                    family="Monaco",
+                    size=16,
+                    color=Colors.BLACK,
+                ),
+            )
+            text = Arrange((text, info_text), Arrange.Direction.VERTICAL, gap=5)
         return box.add_centered(text)
+
+    def _info(self):
+        return None
 
 
 @dataclass
@@ -57,6 +57,9 @@ class Linear(Step):
 
     def __call__(self, x: jax.Array) -> jax.Array:
         return nn.Dense(features=self.output_dim)(x)
+
+    def _info(self):
+        return f"d={self.output_dim}"
 
 
 @dataclass
@@ -71,6 +74,9 @@ class ReluLinear(Step):
         if self.flatten_input:
             x = x.reshape((x.shape[0], -1))
         return nn.relu(nn.Dense(features=self.output_dim)(x))
+
+    def _info(self):
+        return f"d={self.output_dim}"
 
 
 def conv(output_dim: int) -> Step:
