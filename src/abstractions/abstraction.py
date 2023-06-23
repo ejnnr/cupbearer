@@ -13,6 +13,7 @@ import flax.linen as nn
 import jax
 from iceberg import Drawable, Bounds, Colors, Color, Corner, PathStyle
 from iceberg.primitives import Arrange, Ellipse, Padding, Line, Compose
+from iceberg.arrows import Arrow
 from abstractions.computations import Computation, Orientation, Step
 from abstractions import data
 
@@ -53,7 +54,10 @@ def draw_computation(
     for a, b in zip(drawables[:-1], drawables[1:]):
         start = arranged.child_bounds(a).corners[Corner.MIDDLE_RIGHT]
         end = arranged.child_bounds(b).corners[Corner.MIDDLE_LEFT]
-        line = Line(start, end, linestyle)
+        if isinstance(a, Ellipse):
+            line = Line(start, end, linestyle)
+        else:
+            line = Arrow(start, end, linestyle)
         lines.append(line)
 
     res = Compose((*lines, arranged))
@@ -149,7 +153,7 @@ class Abstraction(nn.Module):
             # Line from tau map to abstraction node:
             start = tau_map.bounds.corners[Corner.BOTTOM_MIDDLE]
             end = abstract_bounds.corners[Corner.TOP_MIDDLE]
-            lines.append(Line(start, end, linestyle))
+            lines.append(Arrow(start, end, linestyle))
 
         return Compose((*lines, *positioned_tau_maps, both_computations))
 

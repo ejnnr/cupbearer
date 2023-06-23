@@ -79,9 +79,18 @@ class ReluLinear(Step):
         return f"d={self.output_dim}"
 
 
-def conv(output_dim: int) -> Step:
+@dataclass
+class Conv(Step):
     """A single convolutional layer."""
-    return nn.Conv(features=output_dim, kernel_size=(3, 3))
+
+    output_dim: int
+    name: str = "Conv"
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        return nn.Conv(features=self.output_dim, kernel_size=(3, 3))(x)
+
+    def _info(self):
+        return f"d={self.output_dim}"
 
 
 def get_abstraction_maps(cfg: Mapping[str, Any]) -> list[Step]:
@@ -100,9 +109,9 @@ def get_abstraction_maps(cfg: Mapping[str, Any]) -> list[Step]:
             "channels": channels,
             "dense_dims": dense_dims,
         }:
-            return [conv(output_dim=dim) for dim in channels] + [
+            return [Conv(output_dim=dim) for dim in channels] + [
                 Linear(output_dim=dim) for dim in dense_dims
-            ]
+            ]  # type: ignore
 
         case _:
             raise ValueError(f"Unknown abstraction maps: {cfg}")
@@ -126,37 +135,56 @@ def mlp(output_dim: int, hidden_dims: Sequence[int]) -> Computation:
     return steps
 
 
+@dataclass
+class ConvBlock(Step):
+    """A single convolutional block."""
+
+    output_dim: int
+    name: str = "ConvBlock"
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        x = nn.Conv(features=self.output_dim, kernel_size=(3, 3))(x)
+        x = nn.relu(x)
+        x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
+        return x
+
+    def _info(self):
+        return f"d={self.output_dim}"
+
+
+@dataclass
+class DenseBlock(Step):
+    """A single dense block."""
+
+    output_dim: int
+    is_first: bool = False
+    name: str = "DenseBlock"
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        if self.is_first:
+            b, h, w, c = x.shape
+            x = nn.max_pool(x, window_shape=(h, w))
+            x = x.squeeze(axis=(1, 2))
+            assert x.shape == (b, c)
+        x = nn.relu(nn.Dense(features=self.output_dim)(x))
+        return x
+
+    def _info(self):
+        return f"d={self.output_dim}"
+
+
 def cnn(
     output_dim: int, channels: Sequence[int], dense_dims: Sequence[int]
 ) -> Computation:
     """A simple CNN."""
     steps = []
 
-    # Convolutional layers
-    def conv_block(x, n_channels):
-        x = nn.Conv(features=n_channels, kernel_size=(3, 3))(x)
-        x = nn.relu(x)
-        x = nn.max_pool(x, window_shape=(2, 2), strides=(2, 2))
-        return x
-
     for n_channels in channels:
-        steps.append(functools.partial(conv_block, n_channels=n_channels))
-
-    # Dense layers
-    def dense_block(x, hidden_dim, is_first):
-        if is_first:
-            b, h, w, c = x.shape
-            x = nn.max_pool(x, window_shape=(h, w))
-            x = x.squeeze(axis=(1, 2))
-            assert x.shape == (b, c)
-        x = nn.relu(nn.Dense(features=hidden_dim)(x))
-        return x
+        steps.append(ConvBlock(output_dim=n_channels))
 
     for i, hidden_dim in enumerate(dense_dims):
-        steps.append(
-            functools.partial(dense_block, hidden_dim=hidden_dim, is_first=i == 0)
-        )
+        steps.append(DenseBlock(output_dim=hidden_dim, is_first=(i == 0)))
 
     # output layer
-    steps.append(lambda x: nn.Dense(features=output_dim)(x))
+    steps.append(Linear(output_dim=output_dim))
     return steps
