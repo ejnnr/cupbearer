@@ -124,13 +124,11 @@ class AnomalyDetector(ABC):
         return self.model.get_drawable(layer_scores)
 
     def plot(self, layer_scores: Optional[jax.Array] = None, path: str | Path = ""):
-        drawing = self._get_drawable(layer_scores)
-        canvas = Blank(drawing.bounds.inset(-10), Colors.WHITE)
-        scene = canvas.add_centered(drawing)
-        scene = scene.scale(2)
+        plot = self._get_drawable(layer_scores)
+        plot = plot.pad(10).scale(2)
 
         renderer = Renderer()
-        renderer.render(scene)
+        renderer.render(plot, background_color=Colors.WHITE)
         if not isinstance(path, Path):
             path = Path(path)
         renderer.save_rendered_image(path / "architecture.png")
