@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Optional
 from loguru import logger
 from matplotlib import pyplot as plt
+import numpy as np
 import sklearn.metrics
 
 from iceberg import Bounds, Renderer, Colors
@@ -14,11 +15,12 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 
-from abstractions import data
+from abstractions import data, utils
+from abstractions.abstraction import Model
 
 
 class AnomalyDetector(ABC):
-    def __init__(self, model: nn.Module, params, max_batch_size: int = 4096):
+    def __init__(self, model: Model, params, max_batch_size: int = 4096):
         self.model = model
         self.params = params
         self.max_batch_size = max_batch_size
@@ -38,26 +40,9 @@ class AnomalyDetector(ABC):
         output, activations = self.forward_fn(inputs)
         return output, activations
 
-    def train(self, *args, **kwargs):
+    @abstractmethod
+    def train(self, dataset):
         """Train the anomaly detector with the given dataset as "normal" data."""
-        self.trained = True
-        return self._train(*args, **kwargs)
-
-    def scores(self, batch, layerwise=False):
-        """Compute anomaly scores for the given inputs.
-
-        Args:
-            batch: a batch of input data to the model (potentially including labels).
-            layerwise: if True, return a list of scores for each layer of the model.
-
-        Returns:
-            A batch of anomaly scores for the inputs.
-        """
-        if not self.trained:
-            raise RuntimeError("Anomaly detector must be trained first.")
-        if layerwise:
-            return self._layerwise_scores(batch)
-        return self._scores(batch)
 
     def eval(self, normal_dataset, anomalous_dataset, save_path: str | Path = ""):
         normal_loader = DataLoader(
@@ -118,13 +103,27 @@ class AnomalyDetector(ABC):
 
         layer_scores = self.layer_anomalies(anomalous_dataset)
 
-        self.plot(layer_scores, path=save_path)
+        sample_loader = DataLoader(
+            anomalous_dataset,
+            batch_size=9,
+            shuffle=False,
+            collate_fn=data.numpy_collate,
+        )
+        sample_inputs = next(iter(sample_loader))
+        if isinstance(sample_inputs, (tuple, list)):
+            sample_inputs = sample_inputs[0]
+        self.plot(layer_scores, path=save_path, inputs=sample_inputs)
 
-    def _get_drawable(self, layer_scores):
-        return self.model.get_drawable(layer_scores)
+    def _get_drawable(self, layer_scores, inputs):
+        return self.model.get_drawable(layer_scores=layer_scores, inputs=inputs)
 
-    def plot(self, layer_scores: Optional[jax.Array] = None, path: str | Path = ""):
-        plot = self._get_drawable(layer_scores)
+    def plot(
+        self,
+        layer_scores: Optional[jax.Array] = None,
+        path: str | Path = "",
+        inputs: Optional[np.ndarray] = None,
+    ):
+        plot = self._get_drawable(layer_scores, inputs)
         plot = plot.pad(10).scale(2)
 
         renderer = Renderer()
@@ -143,7 +142,7 @@ class AnomalyDetector(ABC):
         scores = 0
         num_elements = 0
         for batch in dataloader:
-            new_scores = self.scores(batch, layerwise=True)
+            new_scores = self.layerwise_scores(batch)
             # Sum over batch axis
             scores = scores + new_scores.sum(axis=1)
             num_elements += new_scores.shape[1]
@@ -152,12 +151,35 @@ class AnomalyDetector(ABC):
         return scores
 
     @abstractmethod
-    def _train(self, dataset):
+    def layerwise_scores(self, batch) -> jax.Array:
+        """Compute anomaly scores for the given inputs for each layer.
+
+        Args:
+            batch: a batch of input data to the model (potentially including labels).
+
+        Returns:
+            An array of anomaly scores with shape (n_layers, batch).
+        """
+
+    def scores(self, batch):
+        """Compute anomaly scores for the given inputs.
+
+        Args:
+            batch: a batch of input data to the model (potentially including labels).
+
+        Returns:
+            A batch of anomaly scores for the inputs.
+        """
+        return self.layerwise_scores(batch).mean(axis=0)
+
+    def _get_trained_variables(self):
+        return {}
+
+    def _set_trained_variables(self, variables):
         pass
 
-    @abstractmethod
-    def _layerwise_scores(self, batch) -> jax.Array:
-        pass
+    def save(self, path: str | Path):
+        utils.save(self._get_trained_variables(), path)
 
-    def _scores(self, batch):
-        return self._layerwise_scores(batch).mean(axis=0)
+    def load(self, path: str | Path):
+        self._set_trained_variables(utils.load(path))

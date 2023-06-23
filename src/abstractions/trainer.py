@@ -29,6 +29,7 @@ import jax
 import jax.numpy as jnp
 from jax import random
 from flax import linen as nn
+from flax import struct, core
 from flax.training import train_state, checkpoints
 import optax
 
@@ -48,6 +49,14 @@ class TrainState(train_state.TrainState):
     batch_stats: Any = None
     # You can further extend the TrainState by any additional part here
     # For example, rng to keep for init, dropout, etc.
+    rng: Any = None
+
+
+class InferenceState(struct.PyTreeNode):
+    # Lightweight alternative to TrainState that doesn't include the optimizer
+    apply_fn: Callable = struct.field(pytree_node=False)
+    params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
+    batch_stats: Any = None
     rng: Any = None
 
 

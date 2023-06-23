@@ -11,15 +11,26 @@ import functools
 from typing import Callable, List, Sequence
 import flax.linen as nn
 import jax
+import jax.numpy as jnp
 from iceberg import Drawable, Bounds, Colors, Color, Corner, PathStyle
-from iceberg.primitives import Arrange, Ellipse, Padding, Line, Compose
+from iceberg.primitives import (
+    Arrange,
+    Ellipse,
+    Padding,
+    Line,
+    Compose,
+    Image,
+    Grid,
+    Directions,
+)
 from iceberg.arrows import Arrow
+import numpy as np
 from abstractions.computations import Computation, Orientation, Step
 from abstractions import data
 
 
 def draw_computation(
-    computation: Computation, return_nodes=False, layer_scores=None
+    computation: Computation, return_nodes=False, layer_scores=None, inputs=None
 ) -> Drawable:
     steps = [step.get_drawable() for step in computation]
     nodes = [
@@ -62,6 +73,22 @@ def draw_computation(
 
     res = Compose((*lines, arranged))
 
+    if inputs is not None:
+        assert len(inputs) == 9, f"len(inputs) = {len(inputs)} != 9"
+        # inputs is an array of shape (9, *image_dims)
+        # We'll plot these inputs in a 3x3 grid
+        if inputs[0].shape[-1] == 1:
+            # grayscale images, copy channels
+            inputs = np.repeat(inputs, 4, axis=-1) * 255
+            inputs[..., -1] = 255
+            inputs = inputs.astype(np.uint8)
+            print(inputs.shape)
+        images = [Image(image=image) for image in inputs]
+        # Restructure into list of lists:
+        images = [images[i : i + 3] for i in range(0, len(images), 3)]
+        grid = Grid(images, gap=5).pad(10)
+        res = res.next_to(grid, direction=Directions.LEFT)
+
     if return_nodes:
         return res, nodes
     return res
@@ -84,8 +111,10 @@ class Model(nn.Module):
             return x, activations
         return x
 
-    def get_drawable(self, return_nodes=False, layer_scores=None) -> Drawable:
-        return draw_computation(self.computation, return_nodes, layer_scores)
+    def get_drawable(
+        self, return_nodes=False, layer_scores=None, inputs=None
+    ) -> Drawable:
+        return draw_computation(self.computation, return_nodes, layer_scores, inputs)
 
 
 class Abstraction(nn.Module):
@@ -109,8 +138,12 @@ class Abstraction(nn.Module):
 
         return abstractions, predicted_abstractions, predicted_output
 
-    def get_drawable(self, full_model: Model, layer_scores=None) -> Drawable:
-        model_drawable, model_nodes = full_model.get_drawable(return_nodes=True)
+    def get_drawable(
+        self, full_model: Model, layer_scores=None, inputs=None
+    ) -> Drawable:
+        model_drawable, model_nodes = full_model.get_drawable(
+            return_nodes=True, inputs=inputs
+        )
         abstraction_drawable, abstraction_nodes = draw_computation(
             self.computation, return_nodes=True, layer_scores=layer_scores
         )

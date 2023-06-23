@@ -17,7 +17,7 @@ from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
 
 from abstractions import abstraction, data, utils, trainer
-from abstractions.abstraction import Abstraction
+from abstractions.abstraction import Abstraction, Model
 from abstractions.logger import WandbLogger, DummyLogger
 
 
@@ -206,22 +206,29 @@ class AbstractionTrainer(trainer.TrainerModule):
 class AbstractionDetector(AnomalyDetector):
     def __init__(
         self,
-        model: nn.Module,
+        model: Model,
         params,
-        trainer: AbstractionTrainer,
-        batch_size: int = 128,
+        abstraction: Optional[Abstraction] = None,
+        abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
+        output_loss_fn: Callable = kl_loss_fn,
         max_batch_size: int = 4096,
-        num_epochs: int = 10,
     ):
-        self.trainer = trainer
-        self.batch_size = batch_size
-        self.num_epochs = num_epochs
+        self.abstraction = abstraction
+        self.abstraction_state = abstraction_state
+        self.output_loss_fn = output_loss_fn
         super().__init__(model, params, max_batch_size=max_batch_size)
 
-    def _train(self, dataset, validation_datasets: Optional[dict[str, Dataset]] = None):
+    def train(
+        self,
+        dataset,
+        trainer: AbstractionTrainer,
+        batch_size: int = 128,
+        num_epochs: int = 10,
+        validation_datasets: Optional[dict[str, Dataset]] = None,
+    ):
         train_loader = DataLoader(
             dataset=dataset,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             # TODO: I think this should plausibly be handled in AbstractionTrainer
             # now after the refactor. Or maybe AbstractionTrainer and AbstractionDetector
             # should just be merged.
@@ -232,32 +239,53 @@ class AbstractionDetector(AnomalyDetector):
             for key, ds in validation_datasets.items():
                 val_loaders[key] = DataLoader(
                     dataset=ds,
-                    batch_size=self.batch_size,
+                    batch_size=self.max_batch_size,
                     collate_fn=abstraction.abstraction_collate(
                         self.model, self.params, return_original_batch=True
                     ),
                 )
-        self.trainer.train_model(
+        trainer.train_model(
             train_loader=train_loader,
             val_loaders=val_loaders,
             test_loaders=None,
-            num_epochs=self.num_epochs,
+            num_epochs=num_epochs,
         )
-        self.trainer.save_model()
 
-    def _layerwise_scores(self, batch):
+        self.abstraction = trainer.model
+        self.abstraction_state = trainer.state
+        self.output_loss_fn = trainer.output_loss_fn
+
+    def layerwise_scores(self, batch):
+        assert self.abstraction_state is not None
         return compute_losses(
-            params=self.trainer.state.params,
-            state=self.trainer.state,
+            params=self.abstraction_state.params,
+            state=self.abstraction_state,
             batch=self._model(batch),
-            output_loss_fn=self.trainer.output_loss_fn,
+            output_loss_fn=self.output_loss_fn,
             return_batch=True,
             layerwise=True,
         )
 
-    def _get_drawable(self, layer_scores):
-        return self.trainer.model.get_drawable(
-            full_model=self.model, layer_scores=layer_scores
+    def _get_drawable(self, layer_scores, inputs):
+        assert self.abstraction is not None
+        return self.abstraction.get_drawable(
+            full_model=self.model, layer_scores=layer_scores, inputs=inputs
+        )
+
+    def _get_trained_variables(self):
+        assert self.abstraction_state is not None
+        return {
+            "params": self.abstraction_state.params,
+            "batch_stats": self.abstraction_state.batch_stats,
+        }
+
+    def _set_trained_variables(self, variables):
+        assert self.abstraction is not None
+        # TODO: in general we might have to create a PRNG here as well
+        self.abstraction_state = trainer.InferenceState(
+            self.abstraction.apply,
+            params=variables["params"],
+            batch_stats=variables["batch_stats"],
         )
 
 
@@ -331,13 +359,18 @@ def train_and_evaluate(cfg: DictConfig):
     detector = AbstractionDetector(
         model=full_model,
         params=full_params,
-        trainer=trainer,
-        batch_size=cfg.batch_size,
         max_batch_size=cfg.max_batch_size,
-        num_epochs=cfg.num_epochs,
     )
 
-    detector.train(train_dataset, validation_datasets={"backdoor": backdoor_dataset})
+    detector.train(
+        train_dataset,
+        trainer,
+        batch_size=cfg.batch_size,
+        num_epochs=cfg.num_epochs,
+        validation_datasets={"backdoor": backdoor_dataset},
+    )
+
+    detector.save("detector")
 
     backdoor_dataset = data.get_dataset(
         base_cfg.dataset,

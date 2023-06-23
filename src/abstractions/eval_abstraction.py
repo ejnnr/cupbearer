@@ -53,13 +53,6 @@ def evaluate(cfg: DictConfig):
     full_model = abstraction.Model(computation=full_computation)
     full_params = utils.load(base_run / "model.pytree")["params"]
 
-    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
-    # First sample, only input without label and info. Also need to add a batch dimension
-    example_input = clean_dataset[0][0][None]
-    _, example_activations = full_model.apply(
-        {"params": full_params}, example_input, return_activations=True
-    )
-
     if train_cfg.single_class:
         train_cfg.model.output_dim = 2
 
@@ -69,26 +62,16 @@ def evaluate(cfg: DictConfig):
     maps = get_abstraction_maps(train_cfg.model)
     model = abstraction.Abstraction(computation=computation, abstraction_maps=maps)
 
-    trainer = AbstractionTrainer(
-        model=model,
-        output_loss_fn=single_class_loss_fn if train_cfg.single_class else kl_loss_fn,
-        optimizer=hydra.utils.instantiate(train_cfg.optim),
-        example_input=example_activations,
-        log_dir=train_run,
-        check_val_every_n_epoch=1,
-        loggers=[],
-        enable_progress_bar=False,
-    )
-    trainer.load_model()
-
     detector = AbstractionDetector(
         model=full_model,
         params=full_params,
-        trainer=trainer,
+        abstraction=model,
         max_batch_size=cfg.max_batch_size,
+        output_loss_fn=single_class_loss_fn if train_cfg.single_class else kl_loss_fn,
     )
-    # TODO: this is very hacky, there should be a standardized way to load detectors from disk
-    detector.trained = True
+    detector.load(train_run / "detector")
+
+    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
 
     match cfg.anomaly:
         case "backdoor":
@@ -125,8 +108,6 @@ def evaluate(cfg: DictConfig):
         anomalous_dataset=anomalous_dataset,
         save_path=train_run,
     )
-
-    trainer.close_loggers()
 
 
 if __name__ == "__main__":
