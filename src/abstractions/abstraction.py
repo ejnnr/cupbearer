@@ -29,6 +29,27 @@ from abstractions.computations import Computation, Orientation, Step
 from abstractions import data
 
 
+def make_image_grid(inputs):
+    assert len(inputs) == 9, f"len(inputs) = {len(inputs)} != 9"
+    # inputs is an array of shape (9, *image_dims)
+    # We'll plot these inputs in a 3x3 grid
+    if inputs[0].shape[-1] == 1:
+        # grayscale images, copy channels
+        inputs = np.repeat(inputs, 3, axis=-1)
+
+    # Add alpha channel
+    inputs = np.concatenate([inputs, np.ones_like(inputs[..., :1])], axis=-1)
+
+    inputs = (inputs * 255).astype(np.uint8)
+
+    images = [Image(image=image) for image in inputs]
+    # Restructure into list of lists:
+    images = [images[i : i + 3] for i in range(0, len(images), 3)]
+    GRID_SIZE = 200
+    grid = Grid(images, gap=5)
+    return grid.scale(GRID_SIZE / grid.bounds.width)
+
+
 def draw_computation(
     computation: Computation, return_nodes=False, layer_scores=None, inputs=None
 ) -> Drawable:
@@ -74,20 +95,8 @@ def draw_computation(
     res = Compose((*lines, arranged))
 
     if inputs is not None:
-        assert len(inputs) == 9, f"len(inputs) = {len(inputs)} != 9"
-        # inputs is an array of shape (9, *image_dims)
-        # We'll plot these inputs in a 3x3 grid
-        if inputs[0].shape[-1] == 1:
-            # grayscale images, copy channels
-            inputs = np.repeat(inputs, 4, axis=-1) * 255
-            inputs[..., -1] = 255
-            inputs = inputs.astype(np.uint8)
-            print(inputs.shape)
-        images = [Image(image=image) for image in inputs]
-        # Restructure into list of lists:
-        images = [images[i : i + 3] for i in range(0, len(images), 3)]
-        grid = Grid(images, gap=5).pad(10)
-        res = res.next_to(grid, direction=Directions.LEFT)
+        grid = make_image_grid(inputs)
+        res = res.next_to(grid, Directions.LEFT * 20)
 
     if return_nodes:
         return res, nodes
@@ -141,9 +150,7 @@ class Abstraction(nn.Module):
     def get_drawable(
         self, full_model: Model, layer_scores=None, inputs=None
     ) -> Drawable:
-        model_drawable, model_nodes = full_model.get_drawable(
-            return_nodes=True, inputs=inputs
-        )
+        model_drawable, model_nodes = full_model.get_drawable(return_nodes=True)
         abstraction_drawable, abstraction_nodes = draw_computation(
             self.computation, return_nodes=True, layer_scores=layer_scores
         )
@@ -188,7 +195,13 @@ class Abstraction(nn.Module):
             end = abstract_bounds.corners[Corner.TOP_MIDDLE]
             lines.append(Arrow(start, end, linestyle))
 
-        return Compose((*lines, *positioned_tau_maps, both_computations))
+        res = Compose((*lines, *positioned_tau_maps, both_computations))
+
+        if inputs is not None:
+            grid = make_image_grid(inputs)
+            res = res.next_to(grid, Directions.LEFT * 20)
+
+        return res
 
 
 def abstraction_collate(model: nn.Module, params, return_original_batch=False):
