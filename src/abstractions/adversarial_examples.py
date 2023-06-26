@@ -17,8 +17,20 @@ from abstractions import abstraction, data, utils
 
 class AdversarialExampleDataset(Dataset):
     def __init__(self, base_run, num_examples=None):
+        base_run = Path(base_run)
         self.base_run = base_run
-        self.examples = utils.load(to_absolute_path(str(base_run / "adv_examples")))
+        try:
+            self.examples = utils.load(base_run / "adv_examples")
+        except FileNotFoundError:
+            logger.info(
+                "Adversarial examples not found, running attack with default settings"
+            )
+            cfg = hydra.compose(
+                config_name="adversarial_examples",
+                overrides=[f"base_run={base_run}"],
+            )
+            attack(cfg)
+            self.examples = utils.load(base_run / "adv_examples")
         if num_examples is None:
             num_examples = len(self.examples)
         self.num_examples = num_examples
@@ -58,17 +70,15 @@ def attack(cfg: DictConfig):
     # Load the model to attack
     base_run = Path(cfg.base_run)
 
-    if os.path.exists(to_absolute_path(str(base_run / f"adv_examples.{utils.SUFFIX}"))):
+    if os.path.exists(base_run / f"adv_examples.{utils.SUFFIX}"):
         logger.info("Adversarial examples already exist, skipping attack")
         return
 
-    base_cfg = OmegaConf.load(
-        to_absolute_path(str(base_run / ".hydra" / "config.yaml"))
-    )
+    base_cfg = OmegaConf.load(base_run / ".hydra" / "config.yaml")
 
     computation = hydra.utils.call(base_cfg.model)
     model = abstraction.Model(computation=computation)
-    params = utils.load(to_absolute_path(str(base_run / "model")))["params"]
+    params = utils.load(base_run / "model")["params"]
 
     dataloader = data.get_data_loader(base_cfg.dataset, batch_size=cfg.batch_size)
 
@@ -95,7 +105,7 @@ def attack(cfg: DictConfig):
             break
 
     adv_examples = jnp.concatenate(adv_examples, axis=0)
-    utils.save(adv_examples, to_absolute_path(str(base_run / "adv_examples")))
+    utils.save(adv_examples, base_run / "adv_examples")
 
     # Plot a few adversarial examples in a grid and save the plot as a pdf
     fig, axs = plt.subplots(3, 3, figsize=(8, 8))
@@ -105,7 +115,7 @@ def attack(cfg: DictConfig):
         ax.set_xticks([])
         ax.set_yticks([])
     plt.tight_layout()
-    plt.savefig(to_absolute_path(str(base_run / "adv_examples.pdf")))
+    plt.savefig(base_run / "adv_examples.pdf")
 
 
 if __name__ == "__main__":
