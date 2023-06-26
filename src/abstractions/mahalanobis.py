@@ -11,6 +11,7 @@ from loguru import logger
 from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
 import sklearn.metrics
+from tqdm import tqdm
 
 from abstractions import abstraction, data, utils
 from abstractions.adversarial_examples import AdversarialExampleDataset
@@ -85,25 +86,18 @@ def mahalanobis(
 
 
 class MahalanobisDetector(AnomalyDetector):
-    def __init__(
+    def train(
         self,
-        model: abstraction.Model,
-        params,
+        dataset,
         max_batches: int = 0,
         relative: bool = False,
         rcond: float = 1e-5,
         batch_size: int = 4096,
+        pbar: bool = True,
     ):
-        super().__init__(model, params, max_batch_size=batch_size)
-        self.max_batches = max_batches
-        self.relative = relative
-        self.rcond = rcond
-        self.batch_size = batch_size
-
-    def train(self, dataset):
         data_loader = DataLoader(
             dataset,
-            batch_size=self.batch_size,
+            batch_size=batch_size,
             shuffle=False,
             collate_fn=data.numpy_collate,
         )
@@ -118,8 +112,11 @@ class MahalanobisDetector(AnomalyDetector):
         # TODO: could consider computing a separate mean for each class,
         # I think that's more standard for OOD detection in classification,
         # but less general and maybe less analogous to the setting I care about.
+        if pbar:
+            data_loader = tqdm(data_loader)
+
         for i, batch in enumerate(data_loader):
-            if self.max_batches and i >= self.max_batches:
+            if max_batches and i >= max_batches:
                 break
             _, activations = self._model(batch)
             # TODO: use jit compilation
@@ -133,13 +130,12 @@ class MahalanobisDetector(AnomalyDetector):
         self.means = means
         self.covariances = [C / (n - 1) for C, n in zip(Cs, ns)]
         self.inv_covariances = [
-            jnp.linalg.pinv(C, rcond=self.rcond, hermitian=True)
-            for C in self.covariances
+            jnp.linalg.pinv(C, rcond=rcond, hermitian=True) for C in self.covariances
         ]
         self.inv_diag_covariances = None
-        if self.relative:
+        if relative:
             self.inv_diag_covariances = [
-                jnp.where(jnp.diag(C) > self.rcond, 1 / jnp.diag(C), 0)
+                jnp.where(jnp.diag(C) > rcond, 1 / jnp.diag(C), 0)
                 for C in self.covariances
             ]
 
@@ -164,9 +160,6 @@ class MahalanobisDetector(AnomalyDetector):
         self.inv_covariances = variables["inv_covariances"]
         self.inv_diag_covariances = variables["inv_diag_covariances"]
 
-        if self.relative:
-            assert self.inv_diag_covariances is not None
-
 
 @hydra.main(version_base=None, config_path="conf", config_name="mahalanobis")
 def train_and_evaluate(cfg: DictConfig):
@@ -188,27 +181,34 @@ def train_and_evaluate(cfg: DictConfig):
     detector = MahalanobisDetector(
         model=full_model,
         params=full_params,
+        max_batch_size=cfg.max_batch_size,
+    )
+
+    train_dataset = data.get_pytorch_dataset(base_cfg.dataset)
+
+    detector.train(
+        train_dataset,
         max_batches=cfg.max_batches,
         relative=cfg.relative,
         rcond=cfg.rcond,
         batch_size=cfg.batch_size,
+        pbar=cfg.pbar,
     )
+    detector.save("detector")
 
-    train_dataset = data.get_dataset(base_cfg.dataset)
-
-    detector.train(train_dataset)
-
-    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
+    clean_dataset = data.get_pytorch_dataset(base_cfg.dataset, train=False)
     match cfg.anomaly:
+        case "":
+            return
         case "backdoor":
-            anomalous_dataset = data.get_dataset(
+            anomalous_dataset = data.get_pytorch_dataset(
                 base_cfg.dataset,
                 train=False,
                 transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
             )
 
         case "different_corner":
-            anomalous_dataset = data.get_dataset(
+            anomalous_dataset = data.get_pytorch_dataset(
                 base_cfg.dataset,
                 train=False,
                 transforms=data.get_transforms(
@@ -217,7 +217,7 @@ def train_and_evaluate(cfg: DictConfig):
             )
 
         case "gaussian_noise":
-            anomalous_dataset = data.get_dataset(
+            anomalous_dataset = data.get_pytorch_dataset(
                 base_cfg.dataset,
                 train=False,
                 transforms=data.get_transforms({"noise": {"std": 0.3}}),

@@ -7,9 +7,11 @@ import jax.numpy as jnp
 from hydra.utils import to_absolute_path
 
 from abstractions import custom_transforms, utils
+from abstractions.adversarial_examples import AdversarialExampleDataset
 
 
 def numpy_collate(batch):
+    """Variant of the default collate_fn that returns numpy arrays instead of tensors."""
     if isinstance(batch[0], np.ndarray):
         return np.stack(batch)
     elif isinstance(batch[0], (tuple, list)):
@@ -36,7 +38,33 @@ DATASETS: dict[str, Type[Dataset]] = {
 }
 
 
-def get_dataset(dataset: str, train: bool = True, transforms=None) -> Dataset:
+def get_dataset(cfg, base_run=None, base_cfg=None):
+    match cfg:
+        case {
+            "type": "pytorch",
+            "name": dataset,
+            "train": train,
+            "transforms": transforms,
+        }:
+            return get_pytorch_dataset(dataset, train, get_transforms(transforms))
+
+        case {"type": "pytorch", "train": train, "transforms": transforms}:
+            assert base_cfg is not None, "base_cfg must be provided if dataset is not"
+            dataset = base_cfg.dataset
+            return get_pytorch_dataset(dataset, train, get_transforms(transforms))
+
+        case {"type": "adversarial", "path": path}:
+            return AdversarialExampleDataset(path)
+
+        case {"type": "adversarial"}:
+            assert base_run is not None, "base_run must be provided if path is not"
+            return AdversarialExampleDataset(base_run)
+
+        case _:
+            raise ValueError(f"Bad dataset config: {cfg}")
+
+
+def get_pytorch_dataset(dataset: str, train: bool = True, transforms=None) -> Dataset:
     if transforms is None:
         transforms = get_transforms({})
     try:
@@ -79,7 +107,7 @@ def get_data_loader(
     Returns:
         Pytorch DataLoader
     """
-    dataset_instance = get_dataset(dataset, train, transforms)
+    dataset_instance = get_pytorch_dataset(dataset, train, transforms)
     dataloader = DataLoader(
         dataset_instance, batch_size=batch_size, shuffle=train, collate_fn=collate_fn
     )

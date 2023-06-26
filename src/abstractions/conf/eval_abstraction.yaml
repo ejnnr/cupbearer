@@ -1,16 +1,19 @@
 # Disable all logging and cwd management.
 # The eval scripts write into the already existing run dir anyway
 defaults:  
-  - _self_  
-  - override hydra/hydra_logging: disabled  
-  - override hydra/job_logging: disabled  
+  # This is in fact non-optional but if I set it to ???, then I have to assign
+  # directly to data@anomalies, instead of doing e.g. +data@anomalies.backdoor=...
+  - data@anomalies: null
+  - _self_
+  - override hydra/hydra_logging: disabled
+  - override hydra/job_logging: disabled
 
-train_run: ???
+# Path to log dir of the AnomalyDetector run
+detector: ???
 max_batch_size: 4096
-anomaly: backdoor
 debug: false
 
-hydra:  
-  output_subdir: null  
-  run:  
+hydra:
+  output_subdir: null
+  run:
     dir: .

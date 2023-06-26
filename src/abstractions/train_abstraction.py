@@ -319,13 +319,13 @@ def train_and_evaluate(cfg: DictConfig):
     full_model = abstraction.Model(computation=full_computation)
     full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
 
-    train_dataset = data.get_dataset(
+    train_dataset = data.get_pytorch_dataset(
         dataset=base_cfg.dataset,
     )
     # For validation, we still use the training data, but with backdoors.
     # TODO: this doesn't feel very elegant.
     # Need to think about what's the principled thing to do here.
-    backdoor_dataset = data.get_dataset(
+    backdoor_dataset = data.get_pytorch_dataset(
         dataset=base_cfg.dataset,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
@@ -372,12 +372,12 @@ def train_and_evaluate(cfg: DictConfig):
 
     detector.save("detector")
 
-    backdoor_dataset = data.get_dataset(
+    backdoor_dataset = data.get_pytorch_dataset(
         base_cfg.dataset,
         train=False,
         transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
     )
-    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
+    clean_dataset = data.get_pytorch_dataset(base_cfg.dataset, train=False)
     detector.eval(normal_dataset=clean_dataset, anomalous_dataset=backdoor_dataset)
 
     trainer.close_loggers()

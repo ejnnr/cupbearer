@@ -4,6 +4,8 @@ from pathlib import Path
 import pickle
 from typing import Callable, Iterable, Iterator, Protocol, Sized, Union
 from torch.utils.data import Dataset
+import os
+from hydra.utils import to_absolute_path, get_original_cwd
 
 
 class SizedIterable(Protocol):
@@ -118,7 +120,7 @@ def load(path: Union[str, Path]):
     if path.suffix != SUFFIX:
         path = path.with_suffix(SUFFIX)
     if not path.is_file():
-        raise ValueError(f"Not a file: {path}")
+        raise FileNotFoundError(f"Not a file: {path}")
     with open(path, "rb") as file:
         data = pickle.load(file)
     return data
@@ -126,3 +128,12 @@ def load(path: Union[str, Path]):
 
 def product(xs: Iterable):
     return functools.reduce(lambda x, y: x * y, xs, 1)
+
+
+def original_relative_path(path: str | Path) -> Path:
+    """Converts a path to be relative to the original (pre-hydra) working directory."""
+    new_cwd = os.getcwd()
+    abs_path = Path(new_cwd) / Path(path)
+    original_cwd = get_original_cwd()
+    rel_path = os.path.relpath(abs_path, original_cwd)
+    return Path(rel_path)

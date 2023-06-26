@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import json
 from pathlib import Path
 from typing import Optional
 from loguru import logger
@@ -9,7 +10,8 @@ import sklearn.metrics
 from iceberg import Bounds, Renderer, Colors
 from iceberg.primitives import Blank
 
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
+from hydra.utils import to_absolute_path
 
 import flax.linen as nn
 import jax
@@ -44,63 +46,89 @@ class AnomalyDetector(ABC):
     def train(self, dataset):
         """Train the anomaly detector with the given dataset as "normal" data."""
 
-    def eval(self, normal_dataset, anomalous_dataset, save_path: str | Path = ""):
+    def eval(
+        self,
+        normal_dataset: Dataset,
+        anomalous_datasets: dict[str, Dataset],
+        save_path: str | Path = "",
+        histogram_percentile: int = 95,
+    ):
+        save_path = Path(save_path)
+
         normal_loader = DataLoader(
             normal_dataset,
             batch_size=self.max_batch_size,
             shuffle=False,
             collate_fn=data.numpy_collate,
         )
-        anomalous_loader = DataLoader(
-            anomalous_dataset,
-            batch_size=self.max_batch_size,
-            shuffle=False,
-            collate_fn=data.numpy_collate,
-        )
+        anomalous_loaders = {
+            k: DataLoader(
+                ds,
+                batch_size=self.max_batch_size,
+                shuffle=False,
+                collate_fn=data.numpy_collate,
+            )
+            for k, ds in anomalous_datasets.items()
+        }
 
         normal_scores = []
         for batch in normal_loader:
             normal_scores.append(self.scores(batch))
         normal_scores = jnp.concatenate(normal_scores)
 
-        anomalous_scores = []
-        for batch in anomalous_loader:
-            anomalous_scores.append(self.scores(batch))
-        anomalous_scores = jnp.concatenate(anomalous_scores)
+        anomalous_scores = {}
+        metrics = {"AUC_ROC": {}}
+        x_lim = jnp.percentile(normal_scores, histogram_percentile).item()
+        for k, loader in anomalous_loaders.items():
+            scores = []
+            for batch in loader:
+                scores.append(self.scores(batch))
+            scores = jnp.concatenate(scores)
+            anomalous_scores[k] = scores
 
-        true_labels = jnp.concatenate(
-            [jnp.ones_like(anomalous_scores), jnp.zeros_like(normal_scores)]
-        )
-        all_scores = jnp.concatenate([anomalous_scores, normal_scores])
-        auc_roc = sklearn.metrics.roc_auc_score(
-            y_true=true_labels,
-            y_score=all_scores,
-        )
-        logger.log("METRICS", f"AUC_ROC: {auc_roc:.4f}")
+            true_labels = jnp.concatenate(
+                [jnp.ones_like(scores), jnp.zeros_like(normal_scores)]
+            )
+            all_scores = jnp.concatenate([scores, normal_scores])
+            auc_roc = sklearn.metrics.roc_auc_score(
+                y_true=true_labels,
+                y_score=all_scores,
+            )
+            logger.log("METRICS", f"AUC_ROC ({k}): {auc_roc:.4f}")
+            metrics["AUC_ROC"][k] = auc_roc
 
-        x_lim = jnp.percentile(all_scores, 95)
+            # We use the most anomalous scores to compute the cutoff, to make sure
+            # all score distributions are visible in the histogram
+            x_lim = max(x_lim, jnp.percentile(scores, histogram_percentile).item())
 
-        # Visualizations for consistency losses
+        with open(save_path / "metrics.json", "w") as f:
+            json.dump(metrics, f)
+
+        # Visualizations for anomaly scores
         plt.hist(
             normal_scores,
             bins=100,
-            range=(normal_scores.min(), min(normal_scores.max().item(), x_lim)),
+            range=(normal_scores.min().item(), x_lim),
             alpha=0.5,
             label="Normal",
         )
-        plt.hist(
-            anomalous_scores,
-            bins=100,
-            range=(anomalous_scores.min(), min(normal_scores.max().item(), x_lim)),
-            alpha=0.5,
-            label="Anomalous",
-        )
+        for k, scores in anomalous_scores.items():
+            plt.hist(
+                anomalous_scores,
+                bins=100,
+                range=(scores.min().item(), x_lim),
+                alpha=0.5,
+                label=k,
+            )
         plt.legend()
         plt.xlabel("Anomaly score")
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
-        plt.savefig("histogram.pdf")
+        plt.savefig(save_path / "histogram.pdf")
 
+        # For now, we just plot the first anomalous dataset in the architecture figure,
+        # not sure what I want to do here long term
+        anomalous_dataset = anomalous_datasets[next(iter(anomalous_datasets.keys()))]
         layer_scores = self.layer_anomalies(anomalous_dataset)
 
         sample_loader = DataLoader(
@@ -128,8 +156,7 @@ class AnomalyDetector(ABC):
 
         renderer = Renderer()
         renderer.render(plot, background_color=Colors.WHITE)
-        if not isinstance(path, Path):
-            path = Path(path)
+        path = Path(path)
         renderer.save_rendered_image(path / "architecture.png")
 
     def layer_anomalies(self, dataset):
@@ -179,7 +206,9 @@ class AnomalyDetector(ABC):
         pass
 
     def save(self, path: str | Path):
+        logger.info(f"Saving detector to {utils.original_relative_path(path)}")
         utils.save(self._get_trained_variables(), path)
 
     def load(self, path: str | Path):
+        logger.info(f"Loading detector from {utils.original_relative_path(path)}")
         self._set_trained_variables(utils.load(path))

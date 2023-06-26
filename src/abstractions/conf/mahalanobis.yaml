@@ -1,9 +1,11 @@
 batch_size: 4096
+max_batch_size: ${batch_size}
 max_batches: 0
 rcond: 1e-5
 relative: false
 base_run: ???
 anomaly: backdoor
+pbar: true
 
 dir:
   log: logs/mahalanobis

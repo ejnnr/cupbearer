@@ -18,6 +18,7 @@ from typing import (
 )
 import json
 import time
+from loguru import logger
 from tqdm.auto import tqdm
 import numpy as np
 from copy import copy
@@ -39,7 +40,7 @@ import torch.utils.data as data
 
 from hydra.utils import to_absolute_path
 
-from abstractions.utils import SizedIterable, save, load
+from abstractions.utils import SizedIterable, original_relative_path, save, load
 from abstractions.logger import Logger
 
 
@@ -402,6 +403,7 @@ class TrainerModule(ABC):
             {"params": self.state.params, "batch_stats": self.state.batch_stats},
             self.log_dir / "model",
         )
+        logger.info(f"Saved model to {original_relative_path(self.log_dir / 'model')}")
 
     def load_model(self):
         """

@@ -154,7 +154,6 @@ def train_and_evaluate(cfg: DictConfig):
         max_steps=cfg.max_steps,
     )
     trainer.save_model()
-    logger.info(f"Saved model to {os.getcwd()}")
     trainer.close_loggers()
 
 

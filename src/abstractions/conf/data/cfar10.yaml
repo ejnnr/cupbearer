@@ -1,0 +1,4 @@
+defaults:
+  - pytorch
+
+name: cfar10

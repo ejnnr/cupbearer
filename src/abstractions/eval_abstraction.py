@@ -16,6 +16,7 @@ from iceberg.primitives import Blank
 from abstractions import abstraction, data, utils
 from abstractions.adversarial_examples import AdversarialExampleDataset
 from abstractions.computations import get_abstraction_maps
+from abstractions.mahalanobis import MahalanobisDetector
 from abstractions.train_abstraction import (
     AbstractionDetector,
     AbstractionTrainer,
@@ -32,81 +33,75 @@ def evaluate(cfg: DictConfig):
     Args:
       cfg: Hydra configuration object.
     """
-    train_run = Path(cfg.train_run)
+    detector_run = Path(cfg.detector)
     # Note that hydra cwd management is disabled for this script, so no need for
     # to_absolute_path like in other files.
-    path = train_run / ".hydra" / "config.yaml"
-    logger.info(f"Loading abstraction config from {path}")
-    train_cfg = OmegaConf.load(path)
+    path = detector_run / ".hydra" / "config.yaml"
+    logger.info(f"Loading detector config from {path}")
+    detector_cfg = OmegaConf.load(path)
 
     if cfg.debug:
         jax_config.update("jax_debug_nans", True)
         jax_config.update("jax_disable_jit", True)
 
     # Load the full model we want to abstract
-    base_run = Path(train_cfg.base_run)
+    base_run = Path(detector_cfg.base_run)
     path = base_run / ".hydra" / "config.yaml"
     logger.info(f"Loading base model config from {path}")
     base_cfg = OmegaConf.load(path)
 
     full_computation = hydra.utils.call(base_cfg.model)
     full_model = abstraction.Model(computation=full_computation)
-    full_params = utils.load(base_run / "model.pytree")["params"]
+    full_params = utils.load(base_run / "model")["params"]
 
-    if train_cfg.single_class:
-        train_cfg.model.output_dim = 2
+    # TODO: this should be more robust. Maybe AnomalyDetector should have a .load()
+    # classmethod? (and checkpoints would need to store the type and some hparams)
+    if "model" in detector_cfg:
+        # We're dealing with an AbstractionDetector
 
-    computation = hydra.utils.call(train_cfg.model)
-    # TODO: Might want to make this configurable somehow, but it's a reasonable
-    # default for now
-    maps = get_abstraction_maps(train_cfg.model)
-    model = abstraction.Abstraction(computation=computation, abstraction_maps=maps)
+        if detector_cfg.single_class:
+            detector_cfg.model.output_dim = 2
 
-    detector = AbstractionDetector(
-        model=full_model,
-        params=full_params,
-        abstraction=model,
-        max_batch_size=cfg.max_batch_size,
-        output_loss_fn=single_class_loss_fn if train_cfg.single_class else kl_loss_fn,
-    )
-    detector.load(train_run / "detector")
+        computation = hydra.utils.call(detector_cfg.model)
+        # TODO: Might want to make this configurable somehow, but it's a reasonable
+        # default for now
+        maps = get_abstraction_maps(detector_cfg.model)
+        model = abstraction.Abstraction(computation=computation, abstraction_maps=maps)
 
-    clean_dataset = data.get_dataset(base_cfg.dataset, train=False)
+        detector = AbstractionDetector(
+            model=full_model,
+            params=full_params,
+            abstraction=model,
+            max_batch_size=cfg.max_batch_size,
+            output_loss_fn=(
+                single_class_loss_fn if detector_cfg.single_class else kl_loss_fn
+            ),
+        )
+    elif "relative" in detector_cfg:
+        # Mahalanobis detector
+        detector = MahalanobisDetector(
+            model=full_model,
+            params=full_params,
+            max_batch_size=cfg.max_batch_size,
+        )
+    else:
+        raise ValueError("Unknown detector type")
 
-    match cfg.anomaly:
-        case "backdoor":
-            anomalous_dataset = data.get_dataset(
-                base_cfg.dataset,
-                train=False,
-                transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
-            )
+    detector.load(detector_run / "detector")
 
-        case "different_corner":
-            anomalous_dataset = data.get_dataset(
-                base_cfg.dataset,
-                train=False,
-                transforms=data.get_transforms(
-                    {"pixel_backdoor": {"p_backdoor": 1.0, "corner": "top-left"}}
-                ),
-            )
+    clean_dataset = data.get_pytorch_dataset(base_cfg.dataset, train=False)
 
-        case "gaussian_noise":
-            anomalous_dataset = data.get_dataset(
-                base_cfg.dataset,
-                train=False,
-                transforms=data.get_transforms({"noise": {"std": 0.3}}),
-            )
+    anomalous_datasets = {}
 
-        case "adversarial":
-            anomalous_dataset = AdversarialExampleDataset(base_run)
-
-        case _:
-            raise ValueError(f"Unknown anomaly type {cfg.anomaly}")
+    anomalous_datasets = {
+        k: data.get_dataset(dataset_cfg, base_run, base_cfg)
+        for k, dataset_cfg in cfg.anomalies.items()
+    }
 
     detector.eval(
         normal_dataset=clean_dataset,
-        anomalous_dataset=anomalous_dataset,
-        save_path=train_run,
+        anomalous_datasets=anomalous_datasets,
+        save_path=detector_run,
     )
 
 
