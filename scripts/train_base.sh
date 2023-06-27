@@ -1,39 +1,41 @@
 #!/bin/bash
 #SBATCH --job-name=train_base
 # Avoid cluttering the root directory with log files:
-#SBATCH --output=slurm/%j.out
+#SBATCH --output=slurm/%A_%a.out
 #SBATCH --cpus-per-task=4
 #SBATCH --mem=8gb
 #SBATCH --gres=shard:8
 #SBATCH --time=01:00:00
 
 # Usage:
-# train_base.sh (clean|pixel_backdoor|noise_backdoor) (mnist|cifar10) (mlp|cnn)
+# train_base.sh (clean|pixel_backdoor|noise_backdoor) (mnist_cnn|mnist_mlp|cifar10)
 
 set -euo pipefail
 
+# Initialize pyenv
+# export PYENV_ROOT=/nas/ucb/erik/.pyenv
+# command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
+# eval "$(pyenv init -)"
+# eval "$(pyenv virtualenv-init -)"
+eval "$(/nas/ucb/erik/miniconda3/bin/conda shell.bash hook)"
+conda activate abstractions
+
+# This will also activate the virtual environment
 cd /nas/ucb/erik/abstractions
-source .venv/bin/activate
 
 MODE=$1
-DATASET=$2
-MODEL=$3
-SEED=0
+EXPERIMENT=$2
+SEED=${SLURM_ARRAY_TASK_ID:-0}
 
-if [[ $MODE == "pixel_backdoor" ]]; then
-    OPTIONS="+data@train_data=pixel_backdoor train_data.pixel_backdoor.p_backdoor=0.05"
-elif [[ $MODE == "noise_backdoor" ]]; then
-    OPTIONS="+data@train_data=noise_backdoor train_data.noise_backdoor.p_backdoor=0.2"
-elif [[ $MODE == "clean" ]]; then
+if [[ $MODE == "clean" ]]; then
     OPTIONS=""
 else
-    echo "Unknown mode: $MODE"
-    exit 1
+    OPTIONS="$MODE"
 fi
 
 srun python -m abstractions.train_base \
-    +data@train_data=$DATASET \
-    $OPTIONS \
+    +experiment=["$EXPERIMENT","$OPTIONS"] \
     seed=$SEED \
-    dir.run=$MODE/$DATASET/$MODEL/$SEED
+    dir.run=$MODE/$EXPERIMENT/$SEED \
+    dir.log=results/base
 

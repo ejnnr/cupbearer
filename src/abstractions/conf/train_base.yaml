@@ -1,6 +1,5 @@
 defaults:
   - optim: adam
-  - model: mlp
   # Train data is a single dataset configuration. User needs to specify train_data.name
   # manually, e.g. train_data.name=mnist or +data@train_data=mnist.
   # To modify the train dataset, either use train_data.<property>=... or use config
@@ -24,7 +23,7 @@ val_data:
     transforms: ${train_data.transforms}
 num_epochs: 10
 batch_size: 128
-val_batch_size: 2048
+max_batch_size: 2048
 num_classes: 10
 max_steps: null
 debug: false

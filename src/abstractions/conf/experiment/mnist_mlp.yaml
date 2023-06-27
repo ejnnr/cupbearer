@@ -1,0 +1,13 @@
+# @package _global_
+
+defaults:
+  - /model: mlp
+  - /data@train_data: mnist
+  - _self_
+
+model:
+  hidden_dims: [64, 64]
+
+batch_size: 256
+max_batch_size: 4096
+epochs: 5

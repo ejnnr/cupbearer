@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - /data@train_data:
+    - pixel_backdoor
+  - _self_
+
+train_data:
+  transforms:
+    pixel_backdoor:
+      p_backdoor: 0.1

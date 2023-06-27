@@ -124,7 +124,7 @@ def train_and_evaluate(cfg: DictConfig):
         dataset = data.get_dataset(v)
         val_loaders[k] = DataLoader(
             dataset,
-            batch_size=cfg.val_batch_size,
+            batch_size=cfg.max_batch_size,
             shuffle=False,
             collate_fn=data.numpy_collate,
         )
