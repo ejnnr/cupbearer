@@ -2,10 +2,15 @@ from abc import ABC, abstractmethod
 import functools
 from pathlib import Path
 import pickle
+import shutil
 from typing import Callable, Iterable, Iterator, Protocol, Sized, Union
+from loguru import logger
 from torch.utils.data import Dataset
 import os
 from hydra.utils import to_absolute_path, get_original_cwd
+from hydra.experimental.callback import Callback
+from typing import Any
+from omegaconf import DictConfig
 
 
 class SizedIterable(Protocol):
@@ -137,3 +142,25 @@ def original_relative_path(path: str | Path) -> Path:
     original_cwd = get_original_cwd()
     rel_path = os.path.relpath(abs_path, original_cwd)
     return Path(rel_path)
+
+
+class CheckOutputDirExistsCallback(Callback):
+    def on_run_start(self, config: DictConfig, **kwargs: Any) -> None:
+        if os.path.exists(config.hydra.run.dir):
+            if config.get("override_output", False):
+                logger.info("Overriding output dir")
+                shutil.rmtree(config.hydra.run.dir)
+            else:
+                raise BaseException(
+                    "Output dir already exists! Use +override_output=true to override."
+                )
+
+    def on_multirun_start(self, config: DictConfig, **kwargs: Any) -> None:
+        if os.path.exists(config.hydra.sweep.dir):
+            if config.get("override_output", False):
+                logger.info("Overriding output dir")
+                shutil.rmtree(config.hydra.run.dir)
+            else:
+                raise BaseException(
+                    "Output dir already exists! Use +override_output=true to override."
+                )

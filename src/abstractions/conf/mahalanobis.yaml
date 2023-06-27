@@ -16,3 +16,6 @@ hydra:
     dir: ${dir.log}/${dir.run}
   job:
     chdir: true
+  callbacks:
+    check_output_dir_exists:
+      _target_: abstractions.utils.CheckOutputDirExistsCallback
