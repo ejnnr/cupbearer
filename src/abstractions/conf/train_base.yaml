@@ -1,5 +1,4 @@
 defaults:
-  - _self_
   - optim: adam
   - model: mlp
   # Train data is a single dataset configuration. User needs to specify train_data.name
@@ -16,11 +15,13 @@ defaults:
   - data@val_data.val:
     - pytorch
     - test
+  - _self_
 
 # By default, use the test split of the training dataset for validation
 val_data:
   val:
     name: ${train_data.name}
+    transforms: ${train_data.transforms}
 num_epochs: 10
 batch_size: 128
 val_batch_size: 2048
