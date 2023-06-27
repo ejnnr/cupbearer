@@ -184,7 +184,7 @@ def train_and_evaluate(cfg: DictConfig):
         max_batch_size=cfg.max_batch_size,
     )
 
-    train_dataset = data.get_pytorch_dataset(base_cfg.dataset)
+    train_dataset = data.get_dataset(base_cfg.train_data)
 
     detector.train(
         train_dataset,
@@ -195,42 +195,6 @@ def train_and_evaluate(cfg: DictConfig):
         pbar=cfg.pbar,
     )
     detector.save("detector")
-
-    clean_dataset = data.get_pytorch_dataset(base_cfg.dataset, train=False)
-    match cfg.anomaly:
-        case "":
-            return
-        case "backdoor":
-            anomalous_dataset = data.get_pytorch_dataset(
-                base_cfg.dataset,
-                train=False,
-                transforms=data.get_transforms({"pixel_backdoor": {"p_backdoor": 1.0}}),
-            )
-
-        case "different_corner":
-            anomalous_dataset = data.get_pytorch_dataset(
-                base_cfg.dataset,
-                train=False,
-                transforms=data.get_transforms(
-                    {"pixel_backdoor": {"p_backdoor": 1.0, "corner": "top-left"}}
-                ),
-            )
-
-        case "gaussian_noise":
-            anomalous_dataset = data.get_pytorch_dataset(
-                base_cfg.dataset,
-                train=False,
-                transforms=data.get_transforms({"noise": {"std": 0.3}}),
-            )
-
-        case "adversarial":
-            anomalous_dataset = AdversarialExampleDataset(base_run)
-
-        case _:
-            raise ValueError(f"Unknown anomaly type {cfg.anomaly}")
-
-    detector.eval(normal_dataset=clean_dataset, anomalous_dataset=anomalous_dataset)
-    # TODO: log metrics to JSON file
 
 
 if __name__ == "__main__":

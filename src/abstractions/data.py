@@ -46,12 +46,12 @@ def get_dataset(cfg, base_run=None, base_cfg=None):
             "train": train,
             "transforms": transforms,
         }:
-            return get_pytorch_dataset(dataset, train, get_transforms(transforms))
+            return _get_pytorch_dataset(dataset, train, get_transforms(transforms))
 
         case {"type": "pytorch", "train": train, "transforms": transforms}:
             assert base_cfg is not None, "base_cfg must be provided if dataset is not"
             dataset = base_cfg.dataset
-            return get_pytorch_dataset(dataset, train, get_transforms(transforms))
+            return _get_pytorch_dataset(dataset, train, get_transforms(transforms))
 
         case {"type": "adversarial", "path": path}:
             return AdversarialExampleDataset(path)
@@ -64,7 +64,7 @@ def get_dataset(cfg, base_run=None, base_cfg=None):
             raise ValueError(f"Bad dataset config: {cfg}")
 
 
-def get_pytorch_dataset(dataset: str, train: bool = True, transforms=None) -> Dataset:
+def _get_pytorch_dataset(dataset: str, train: bool = True, transforms=None) -> Dataset:
     if transforms is None:
         transforms = get_transforms({})
     try:
@@ -82,36 +82,6 @@ def get_pytorch_dataset(dataset: str, train: bool = True, transforms=None) -> Da
     return CustomDataset(
         root=to_absolute_path("data"), train=train, transforms=transforms, download=True
     )
-
-
-def get_data_loader(
-    dataset: str,
-    batch_size: int,
-    train: bool = True,
-    collate_fn=numpy_collate,
-    transforms=None,
-) -> DataLoader:
-    """Load MNIST train and test datasets into memory.
-
-    Args:
-        dataset: the dataset to use. Can currently be either 'mnist' or 'cfar10'
-        batch_size: Batch size for the data loaders.
-        train: whether to use train (instead of test) data split. This also determines
-            whether the data loaders are shuffled.
-        collate_fn: collate_fn for pytorch DataLoader.
-        transforms: List of transforms to apply to the dataset.
-            If None, only a to_numpy is applied. If you do supply your own transforms,
-            note that you need to include to_numpy at the right place.
-            Also use adapt_transform where necessary.
-
-    Returns:
-        Pytorch DataLoader
-    """
-    dataset_instance = get_pytorch_dataset(dataset, train, transforms)
-    dataloader = DataLoader(
-        dataset_instance, batch_size=batch_size, shuffle=train, collate_fn=collate_fn
-    )
-    return dataloader
 
 
 def get_transforms(

@@ -89,7 +89,13 @@ def evaluate(cfg: DictConfig):
 
     detector.load(detector_run / "detector")
 
-    clean_dataset = data.get_pytorch_dataset(base_cfg.dataset, train=False)
+    # We want to use the test split of the training data as the reference distribution,
+    # to make sure we at least don't flag that as anomalous.
+    # TODO: this might not always work, dataset config might not have the a train/test
+    # split. Also unclear whether this is the right way to do it, maybe we should just
+    # have the test data as another anomalous dataloader if we care?
+    base_cfg.train_data.train = False
+    clean_dataset = data.get_dataset(base_cfg.train_data, base_run, base_cfg)
 
     anomalous_datasets = {}
 

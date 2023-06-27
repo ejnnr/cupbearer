@@ -2,26 +2,32 @@ defaults:
   - _self_
   - optim: adam
   - model: mlp
+  # Train data is a single dataset configuration. User needs to specify train_data.name
+  # manually, e.g. train_data.name=mnist or +data@train_data=mnist.
+  # To modify the train dataset, either use train_data.<property>=... or use config
+  # groups like '+data@train_data=pixel_backdoor train_data.pixel_backdoor.p_backdoor=0.1'
+  - data@train_data:
+    - pytorch
+    - train
+  # Validation data is a dictionary of dataset configurations. By default, there is
+  # only a validation dataset, which is the test split of the training dataset.
+  # Users can remove it via ~val_data.val or add more datasets e.g. via
+  # +data@val_data.backdoor=[mnist, pixel_backdoor, test]
+  - data@val_data.val:
+    - pytorch
+    - test
 
+# By default, use the test split of the training dataset for validation
+val_data:
+  val:
+    name: ${train_data.name}
 num_epochs: 10
-dataset: mnist
 batch_size: 128
 val_batch_size: 2048
 num_classes: 10
 max_steps: null
 debug: false
 wandb: false
-transforms:
-  pixel_backdoor:
-    p_backdoor: 0.05
-    target_class: 0
-    corner: "top-left"
-    enabled: true
-  noise_backdoor:
-    p_backdoor: 0.2
-    target_class: 0
-    std: 0.1
-    enabled: false
 
 dir:
   log: logs/base

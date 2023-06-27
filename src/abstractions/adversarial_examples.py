@@ -10,7 +10,7 @@ import jax.numpy as jnp
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 import optax
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, DataLoader
 
 from abstractions import abstraction, data, utils
 
@@ -80,7 +80,8 @@ def attack(cfg: DictConfig):
     model = abstraction.Model(computation=computation)
     params = utils.load(base_run / "model")["params"]
 
-    dataloader = data.get_data_loader(base_cfg.dataset, batch_size=cfg.batch_size)
+    dataset = data.get_dataset(base_cfg.train_data)
+    dataloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=False)
 
     adv_examples = []
     num_examples = 0

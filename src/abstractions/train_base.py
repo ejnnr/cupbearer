@@ -5,6 +5,8 @@ import jax
 import jax.numpy as jnp
 from jax.config import config as jax_config
 
+from torch.utils.data import DataLoader
+
 from omegaconf import DictConfig, OmegaConf
 import optax
 from loguru import logger
@@ -111,21 +113,20 @@ def train_and_evaluate(cfg: DictConfig):
     else:
         metrics_logger = DummyLogger()
 
-    train_loader = data.get_data_loader(
-        dataset=cfg.dataset,
-        batch_size=cfg.batch_size,
-        transforms=data.get_transforms(cfg.transforms),
-        train=True,
+    dataset = data.get_dataset(cfg.train_data)
+    train_loader = DataLoader(
+        dataset, batch_size=cfg.batch_size, shuffle=True, collate_fn=data.numpy_collate
     )
-    val_loader = data.get_data_loader(
-        dataset=cfg.dataset,
-        batch_size=cfg.val_batch_size,
-        transforms=data.get_transforms(cfg.transforms),
-        train=False,
-    )
-    val_loaders = {
-        "val": val_loader,
-    }
+
+    val_loaders = {}
+    for k, v in cfg.val_data.items():
+        dataset = data.get_dataset(v)
+        val_loaders[k] = DataLoader(
+            dataset,
+            batch_size=cfg.val_batch_size,
+            shuffle=False,
+            collate_fn=data.numpy_collate,
+        )
 
     # Dataloader returns images, labels and infos, only images get passed to model
     images, _, _ = next(iter(train_loader))
