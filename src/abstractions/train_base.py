@@ -61,23 +61,24 @@ class ClassificationTrainer(trainer.TrainerModule):
             loss, accuracy = losses(state.params, state, batch)  # type: ignore
 
             state = state.apply_gradients(grads=grads)
-            metrics = {
-                "loss": loss,
-                "accuracy": accuracy,
-            }
+            metrics = {"loss": loss, "accuracy": accuracy}
             return state, metrics
 
         def eval_step(state, batch):
             _, _, infos = batch
-            clean_loss, clean_accuracy, backdoor_loss, backdoor_accuracy = losses(  # type: ignore
-                state.params, state, batch, mask=infos["backdoored"]
-            )
-            metrics = {
-                "clean_loss": clean_loss,
-                "clean_accuracy": clean_accuracy,
-                "backdoor_loss": backdoor_loss,
-                "backdoor_accuracy": backdoor_accuracy,
-            }
+            if "backdoored" in infos:
+                clean_loss, clean_accuracy, backdoor_loss, backdoor_accuracy = losses(  # type: ignore
+                    state.params, state, batch, mask=infos["backdoored"]
+                )
+                metrics = {
+                    "clean_loss": clean_loss,
+                    "clean_accuracy": clean_accuracy,
+                    "backdoor_loss": backdoor_loss,
+                    "backdoor_accuracy": backdoor_accuracy,
+                }
+            else:
+                loss, accuracy = losses(state.params, state, batch)  # type: ignore
+                metrics = {"loss": loss, "accuracy": accuracy}
             return metrics
 
         return train_step, eval_step
