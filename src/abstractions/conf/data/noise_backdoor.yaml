@@ -1,0 +1,6 @@
+transforms:
+  noise_backdoor:
+    p_backdoor: 1.0
+    std: 0.1
+    target_class: 0
+    enabled: true
