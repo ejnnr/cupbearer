@@ -2,7 +2,6 @@ import json
 from pathlib import Path
 import sys
 import hydra
-from jax.config import config as jax_config
 from loguru import logger
 from matplotlib import pyplot as plt
 import sklearn.metrics
@@ -39,10 +38,6 @@ def evaluate(cfg: DictConfig):
     path = detector_run / ".hydra" / "config.yaml"
     logger.info(f"Loading detector config from {path}")
     detector_cfg = OmegaConf.load(path)
-
-    if cfg.debug:
-        jax_config.update("jax_debug_nans", True)
-        jax_config.update("jax_disable_jit", True)
 
     # Load the full model we want to abstract
     base_run = Path(detector_cfg.base_run)

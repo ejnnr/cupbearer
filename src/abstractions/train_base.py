@@ -3,7 +3,6 @@ import sys
 import hydra
 import jax
 import jax.numpy as jnp
-from jax.config import config as jax_config
 
 from torch.utils.data import DataLoader
 
@@ -100,11 +99,6 @@ def train_and_evaluate(cfg: DictConfig):
     Args:
       cfg: Hydra configuration object.
     """
-    if cfg.debug:
-        jax_config.update("jax_debug_nans", True)
-        jax_config.update("jax_disable_jit", True)
-        cfg.wandb = False
-
     if cfg.wandb:
         metrics_logger = WandbLogger(
             project_name="abstractions",
