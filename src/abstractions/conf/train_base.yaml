@@ -15,6 +15,7 @@ defaults:
     - pytorch
     - test
   - _self_
+  - override hydra/launcher: submitit_slurm
 
 # By default, use the test split of the training dataset for validation
 val_data:
@@ -36,8 +37,13 @@ seed: 0
 hydra:
   run:
     dir: ${dir.log}/${dir.run}
+  sweep:
+    dir: ${dir.log}/${dir.run}
+    subdir: ${hydra.job.num}
   job:
     chdir: true
+  launcher:
+    wait_until_finished: true
   callbacks:
     check_output_dir_exists:
       _target_: abstractions.utils.CheckOutputDirExistsCallback
