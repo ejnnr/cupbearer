@@ -159,7 +159,7 @@ class CheckOutputDirExistsCallback(Callback):
         if os.path.exists(config.hydra.sweep.dir):
             if config.get("override_output", False):
                 logger.info("Overriding output dir")
-                shutil.rmtree(config.hydra.run.dir)
+                shutil.rmtree(config.hydra.sweep.dir)
             else:
                 raise BaseException(
                     "Output dir already exists! Use +override_output=true to override."
