@@ -1,7 +1,8 @@
 defaults:
-  - _self_
+  - shared
   - optim: adam
   - model: mlp
+  - _self_
 
 num_epochs: 10
 batch_size: 128
@@ -11,16 +12,3 @@ single_class: false
 base_run: ???
 debug: false
 wandb: false
-
-dir:
-  log: logs/abstraction
-  run: ${now:%Y-%m-%d_%H-%M-%S}
-seed: 0
-hydra:
-  run:
-    dir: ${dir.log}/${dir.run}
-  job:
-    chdir: true
-  callbacks:
-    check_output_dir_exists:
-      _target_: abstractions.utils.CheckOutputDirExistsCallback

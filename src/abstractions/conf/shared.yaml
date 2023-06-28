@@ -1,0 +1,24 @@
+defaults:
+  - override hydra/launcher: submitit_slurm
+
+dir:
+  log: logs/${hydra.job.name}
+  run: ${now:%Y-%m-%d_%H-%M-%S}
+seed: 0
+hydra:
+  run:
+    dir: ${dir.log}/${dir.run}
+  sweep:
+    dir: ${dir.log}/${dir.run}
+    subdir: ${escape:${hydra.job.override_dirname}}/seed=${seed}
+  job:
+    chdir: true
+    config:
+      override_dirname:
+        exclude_keys:
+          - seed
+  launcher:
+    wait_until_finished: true
+  callbacks:
+    check_output_dir_exists:
+      _target_: abstractions.utils.CheckOutputDirExistsCallback

@@ -1,4 +1,5 @@
 defaults:
+  - shared
   - optim: adam
   # Train data is a single dataset configuration. User needs to specify train_data.name
   # manually, e.g. train_data.name=mnist or +data@train_data=mnist.
@@ -15,7 +16,6 @@ defaults:
     - pytorch
     - test
   - _self_
-  - override hydra/launcher: submitit_slurm
 
 # By default, use the test split of the training dataset for validation
 val_data:
@@ -30,20 +30,3 @@ max_steps: null
 debug: false
 wandb: false
 
-dir:
-  log: logs/base
-  run: ${now:%Y-%m-%d_%H-%M-%S}
-seed: 0
-hydra:
-  run:
-    dir: ${dir.log}/${dir.run}
-  sweep:
-    dir: ${dir.log}/${dir.run}
-    subdir: ${hydra.job.num}
-  job:
-    chdir: true
-  launcher:
-    wait_until_finished: true
-  callbacks:
-    check_output_dir_exists:
-      _target_: abstractions.utils.CheckOutputDirExistsCallback

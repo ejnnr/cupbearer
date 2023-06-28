@@ -1,3 +1,7 @@
+defaults:
+  - shared
+  - _self_
+
 batch_size: 4096
 max_batch_size: ${batch_size}
 max_batches: 0
@@ -6,16 +10,3 @@ relative: false
 base_run: ???
 anomaly: backdoor
 pbar: true
-
-dir:
-  log: logs/mahalanobis
-  run: ${now:%Y-%m-%d_%H-%M-%S}
-seed: 0
-hydra:
-  run:
-    dir: ${dir.log}/${dir.run}
-  job:
-    chdir: true
-  callbacks:
-    check_output_dir_exists:
-      _target_: abstractions.utils.CheckOutputDirExistsCallback
