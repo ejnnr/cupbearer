@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - /data@train_data:
+    - noise_backdoor
+  - _self_
+
+train_data:
+  transforms:
+    noise_backdoor:
+      p_backdoor: 0.2
