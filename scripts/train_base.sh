@@ -12,6 +12,15 @@
 
 set -euo pipefail
 
+# We're using 8 GPU shards, which correspond to 8192 MiB. We need to make sure Jax
+# doesn't try to allocate more memory than that. More specifically, we allocate 90%
+# (which is the Jax default). Without this, Jax would allocate 90% of the entire GPU.
+TOTAL_MEMORY=$(nvidia-smi -i 0 --format=csv,noheader,nounits --query-gpu=memory.total)
+TARGET_MEMORY=$(echo "8 * 1024 * 0.9" | bc -l)
+FRACTION=$(echo "scale=2;$TARGET_MEMORY/$TOTAL_MEMORY" | bc)
+echo "Allocating $FRACTION of GPU ($TARGET_MEMORY MiB out of $TOTAL_MEMORY MiB)"
+export XLA_PYTHON_CLIENT_MEM_FRACTION=$FRACTION
+
 # Initialize pyenv
 # export PYENV_ROOT=/nas/ucb/erik/.pyenv
 # command -v pyenv >/dev/null || export PATH="$PYENV_ROOT/bin:$PATH"
@@ -25,17 +34,29 @@ cd /nas/ucb/erik/abstractions
 
 MODE=$1
 EXPERIMENT=$2
+OVERRIDE=${3:-""}
 SEED=${SLURM_ARRAY_TASK_ID:-0}
 
 if [[ $MODE == "clean" ]]; then
-    OPTIONS=""
+    EXPERIMENT_OPTIONS=""
 else
-    OPTIONS="$MODE"
+    EXPERIMENT_OPTIONS="$MODE"
 fi
 
+if [[ $OVERRIDE == "override" ]]; then
+    OPTIONS="+override_output=True"
+elif [[ $OVERRIDE == "" ]]; then
+    OPTIONS=""
+else
+    echo "Invalid override option: $OVERRIDE"
+    exit 1
+fi
+
+
 srun python -m abstractions.train_base \
-    +experiment=["$EXPERIMENT","$OPTIONS"] \
+    +experiment=["$EXPERIMENT","$EXPERIMENT_OPTIONS"] \
     seed=$SEED \
     dir.run=$MODE/$EXPERIMENT/$SEED \
-    dir.log=results/base
+    dir.log=results/base \
+    $OPTIONS
 
