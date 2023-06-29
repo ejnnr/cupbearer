@@ -1,0 +1,9 @@
+# @package _global_
+
+dir:
+  run: grid
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    subdir: ${experiment}/${seed}

@@ -3,4 +3,3 @@
 defaults:
   - /model: cnn
   - /data@train_data: cifar10
-  - _self_
