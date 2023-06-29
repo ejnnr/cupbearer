@@ -19,6 +19,17 @@ hydra:
           - seed
   launcher:
     wait_until_finished: true
+    # Slurm arguments:
+    qos: default
+    mem_gb: 8
+    cpus_per_task: 4
+    gres: shard:8
+    timeout_min: 60
+    setup:
+      - eval "$(/nas/ucb/erik/miniconda3/bin/conda shell.bash hook)"
+      - conda activate abstractions
+      - cd /nas/ucb/erik/abstractions
+
   callbacks:
     check_output_dir_exists:
       _target_: abstractions.utils.CheckOutputDirExistsCallback
