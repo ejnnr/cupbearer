@@ -5,6 +5,7 @@
 __pycache__
 /data
 /results
+/slurm
 /logs
 .venv
 /wandb
