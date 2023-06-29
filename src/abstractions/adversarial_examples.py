@@ -1,4 +1,5 @@
 from functools import partial
+import json
 import matplotlib.pyplot as plt
 import os
 from pathlib import Path
@@ -86,7 +87,10 @@ def attack(cfg: DictConfig):
     adv_examples = []
     num_examples = 0
 
-    for batch in dataloader:
+    mean_original_loss = 0
+    mean_new_loss = 0
+
+    for i, batch in enumerate(dataloader):
         inputs, labels, infos = batch
         adv_inputs, original_loss = fgsm(
             forward_fn=lambda x: model.apply({"params": params}, x),
@@ -101,12 +105,24 @@ def attack(cfg: DictConfig):
         one_hot = jax.nn.one_hot(labels, new_logits.shape[-1])
         new_loss = optax.softmax_cross_entropy(logits=new_logits, labels=one_hot).mean()
         logger.log("METRICS", f"original loss={original_loss}, new loss={new_loss}")
+        mean_original_loss = (i * mean_original_loss + original_loss) / (i + 1)
+        mean_new_loss += (i * mean_new_loss + new_loss) / (i + 1)
 
         if num_examples >= cfg.num_examples:
             break
 
     adv_examples = jnp.concatenate(adv_examples, axis=0)
     utils.save(adv_examples, base_run / "adv_examples")
+    with open(base_run / "adv_examples.json", "w") as f:
+        json.dump(
+            {
+                "original_loss": mean_original_loss,
+                "new_loss": mean_new_loss,
+                "eps": cfg.eps,
+                "num_examples": num_examples,
+            },
+            f,
+        )
 
     # Plot a few adversarial examples in a grid and save the plot as a pdf
     fig, axs = plt.subplots(3, 3, figsize=(8, 8))

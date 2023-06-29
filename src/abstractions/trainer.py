@@ -253,6 +253,8 @@ class TrainerModule(ABC):
         if test_loaders is not None:
             test_metrics = self.eval_model(test_loaders)
             self.log_metrics(test_metrics)
+            with open(self.log_dir / "metrics.json", "w") as f:
+                json.dump(test_metrics, f)
 
     def train_epoch(
         self, train_loader: SizedIterable, max_steps: Optional[int]
