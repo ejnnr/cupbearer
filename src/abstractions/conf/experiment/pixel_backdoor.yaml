@@ -8,4 +8,4 @@ defaults:
 train_data:
   transforms:
     pixel_backdoor:
-      p_backdoor: 0.1
+      p_backdoor: 0.05
