@@ -162,7 +162,7 @@ class MahalanobisDetector(AnomalyDetector):
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="mahalanobis")
-def train_and_evaluate(cfg: DictConfig):
+def main(cfg: DictConfig):
     """Execute model training and evaluation loop.
 
     Args:
@@ -207,4 +207,4 @@ if __name__ == "__main__":
     logger.add(sys.stderr, filter=lambda record: record["level"].name != "METRICS")
     # We want to escape slashes in arguments that get reused as filenames.
     OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
-    train_and_evaluate()
+    main()

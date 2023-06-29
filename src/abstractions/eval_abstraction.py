@@ -26,7 +26,7 @@ from abstractions.train_abstraction import (
 
 
 @hydra.main(version_base=None, config_path="conf", config_name="eval_abstraction")
-def evaluate(cfg: DictConfig):
+def main(cfg: DictConfig):
     """Execute model evaluation loop.
 
     Args:
@@ -114,4 +114,4 @@ if __name__ == "__main__":
     )
     # Default logger for everything else:
     logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
-    evaluate()
+    main()
