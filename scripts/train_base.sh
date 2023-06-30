@@ -44,7 +44,7 @@ else
 fi
 
 if [[ $OVERRIDE == "override" ]]; then
-    OPTIONS="+override_output=True"
+    OPTIONS="+overwrite_output=True"
 elif [[ $OVERRIDE == "" ]]; then
     OPTIONS=""
 else

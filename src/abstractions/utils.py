@@ -2,8 +2,10 @@ from abc import ABC, abstractmethod
 import functools
 from pathlib import Path
 import pickle
+import re
 import shutil
 from typing import Callable, Iterable, Iterator, Protocol, Sized, Union
+from hydra import TaskFunction
 from loguru import logger
 from torch.utils.data import Dataset
 import os
@@ -146,21 +148,52 @@ def original_relative_path(path: str | Path) -> Path:
 
 class CheckOutputDirExistsCallback(Callback):
     def on_run_start(self, config: DictConfig, **kwargs: Any) -> None:
+        # This hook isn't really necessary given that on_job_start below takes
+        # care of similar things. But on non-multiruns, this hook will be called
+        # *before* the .hydra dir is overwritten, so it gives us more safety at
+        # least for those cases.
         if os.path.exists(config.hydra.run.dir):
-            if config.get("override_output", False):
-                logger.info("Overriding output dir")
+            if config.get("overwrite_output", False):
+                logger.info("Overwriting output dir")
                 shutil.rmtree(config.hydra.run.dir)
             else:
                 raise BaseException(
-                    "Output dir already exists! Use +override_output=true to override."
+                    "Output dir already exists! Use +overwrite_output=true to overwrite."
                 )
 
-    def on_multirun_start(self, config: DictConfig, **kwargs: Any) -> None:
-        if os.path.exists(config.hydra.sweep.dir):
-            if config.get("override_output", False):
-                logger.info("Overriding output dir")
-                shutil.rmtree(config.hydra.sweep.dir)
+    def on_job_start(
+        self, config: DictConfig, *, task_function: TaskFunction, **kwargs: Any
+    ):
+        """Check that the output dir is empty, except for the .hydra dir and the logfile.
+
+        This hook is needed for multirun jobs: the previous one won't trigger, but we don't
+        want to use on_multirun_start because that would only allow checking whether the
+        entire sweep directory exists. Instead, we'd like overwrite checks on a job-basis.
+
+        TODO: The downside of this approach is that this hook is only called after the
+        .hydra dir has already been created and potentially overwrote the existing one.
+        So there's a danger of data loss even with overwrite_output=false.
+        """
+        path = Path(config.hydra.runtime.output_dir)
+        files = os.listdir(path)
+        if not set(files) <= {".hydra", f"{config.hydra.job.name}.log"}:
+            if config.get("overwrite_output", False):
+                logger.info("Overwriting output dir")
+                # Don't remove the .hydra dir, that's from the new run and already
+                # overwrites the old one anyway.
+                # Do delete the log file because otherwise hydra will append to it.
+                # (There shouldn't be anything in the logfile yet.)
+                files.remove(".hydra")
+                for file in files:
+                    os.remove(path / file)
             else:
                 raise BaseException(
-                    "Output dir already exists! Use +override_output=true to override."
+                    "Output dir already exists! Use +overwrite_output=true to overwrite. "
+                    f".hydra dir at {path / '.hydra'} has already been overwritten!"
                 )
+
+
+# https://stackoverflow.com/questions/14693701/how-can-i-remove-the-ansi-escape-sequences-from-a-string-in-python
+def escape_ansi(line):
+    ansi_escape = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
+    return ansi_escape.sub("", line)
