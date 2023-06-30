@@ -6,4 +6,4 @@ dir:
 hydra:
   mode: MULTIRUN
   sweep:
-    subdir: ${experiment}/${seed}
+    subdir: ${hydra:runtime.choices.experiment}/${seed}
