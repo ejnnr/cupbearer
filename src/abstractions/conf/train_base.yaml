@@ -8,20 +8,7 @@ defaults:
   - data@train_data:
     - pytorch
     - train
-  # Validation data is a dictionary of dataset configurations. By default, there is
-  # only a validation dataset, which is the test split of the training dataset.
-  # Users can remove it via ~val_data.val or add more datasets e.g. via
-  # +data@val_data.backdoor=[mnist, pixel_backdoor, test]
-  - data@val_data.val:
-    - pytorch
-    - test
-  - _self_
 
-# By default, use the test split of the training dataset for validation
-val_data:
-  val:
-    name: ${train_data.name}
-    transforms: ${train_data.transforms}
 num_epochs: 10
 batch_size: 128
 max_batch_size: 2048

@@ -3,9 +3,22 @@
 defaults:
   - /data@train_data:
     - noise_backdoor
+  - /data@val_data.clean:
+    - pytorch
+    - test
+  - /data@val_data.backdoor:
+    - pytorch
+    - test
+    - noise_backdoor
   - _self_
 
 train_data:
   transforms:
     noise_backdoor:
       p_backdoor: 0.2
+
+val_data:
+  clean:
+    name: ${train_data.name}
+  backdoor:
+    name: ${train_data.name}
