@@ -18,7 +18,7 @@ hydra:
         exclude_keys:
           - seed
   launcher:
-    wait_until_finished: true
+    wait_until_finished: false
     # Slurm arguments:
     qos: default
     mem_gb: 8
