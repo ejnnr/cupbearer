@@ -1,6 +1,8 @@
 defaults:
   - override hydra/launcher: submitit_slurm
 
+shards: 4
+
 dir:
   log: logs/${hydra.job.name}
   run: ${now:%Y-%m-%d_%H-%M-%S}
@@ -23,11 +25,12 @@ hydra:
     qos: default
     mem_gb: 8
     cpus_per_task: 4
-    gres: shard:8
+    gres: shard:${shards}
     timeout_min: 60
     setup:
+      - set -euo pipefail
       - TOTAL_MEMORY=$(nvidia-smi -i 0 --format=csv,noheader,nounits --query-gpu=memory.total)
-      - TARGET_MEMORY=$(echo "8 * 1024 * 0.9" | bc -l)
+      - TARGET_MEMORY=$(echo "${shards} * 1024 * 0.9" | bc -l)
       - FRACTION=$(echo "scale=2;$TARGET_MEMORY/$TOTAL_MEMORY" | bc)
       - echo "Allocating $FRACTION of GPU ($TARGET_MEMORY MiB out of $TOTAL_MEMORY MiB)"
       - export XLA_PYTHON_CLIENT_MEM_FRACTION=$FRACTION
