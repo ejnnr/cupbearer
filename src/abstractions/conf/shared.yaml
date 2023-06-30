@@ -26,6 +26,11 @@ hydra:
     gres: shard:8
     timeout_min: 60
     setup:
+      - TOTAL_MEMORY=$(nvidia-smi -i 0 --format=csv,noheader,nounits --query-gpu=memory.total)
+      - TARGET_MEMORY=$(echo "8 * 1024 * 0.9" | bc -l)
+      - FRACTION=$(echo "scale=2;$TARGET_MEMORY/$TOTAL_MEMORY" | bc)
+      - echo "Allocating $FRACTION of GPU ($TARGET_MEMORY MiB out of $TOTAL_MEMORY MiB)"
+      - export XLA_PYTHON_CLIENT_MEM_FRACTION=$FRACTION
       - eval "$(/nas/ucb/erik/miniconda3/bin/conda shell.bash hook)"
       - conda activate abstractions
       - cd /nas/ucb/erik/abstractions
