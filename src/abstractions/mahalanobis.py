@@ -199,12 +199,12 @@ def main(cfg: DictConfig):
 
 if __name__ == "__main__":
     logger.remove()
-    logger.level("METRICS", no=25, color="<green>", icon="📈")
+    logger.level("METRICS", no=25, icon="📈")
     logger.add(
-        sys.stderr, format="{level.icon} <level>{message}</level>", level="METRICS"
+        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
     )
     # Default logger for everything else:
-    logger.add(sys.stderr, filter=lambda record: record["level"].name != "METRICS")
+    logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
     # We want to escape slashes in arguments that get reused as filenames.
     OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
     main()

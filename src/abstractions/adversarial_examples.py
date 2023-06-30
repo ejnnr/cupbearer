@@ -137,12 +137,9 @@ def attack(cfg: DictConfig):
 
 if __name__ == "__main__":
     logger.remove()
-    logger.level("METRICS", no=25, color="<green>", icon="📈")
+    logger.level("METRICS", no=25, icon="📈")
     logger.add(
-        # We want metrics to show up in hydra logs, so use stdout
-        sys.stdout,
-        format="{level.icon} <level>{message}</level>",
-        level="METRICS",
+        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
     )
     # Default logger for everything else:
     logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")

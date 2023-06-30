@@ -39,6 +39,7 @@ import torch
 import torch.utils.data as data
 
 from hydra.utils import to_absolute_path
+from abstractions import utils
 
 from abstractions.utils import SizedIterable, original_relative_path, save, load
 from abstractions.logger import Logger
@@ -170,7 +171,13 @@ class TrainerModule(ABC):
         """
         Prints a summary of the Module represented as table.
         """
-        print(self.model.tabulate(random.PRNGKey(0), self.example_input, train=True))
+        # Filter out ANSI escape codes (tabulate uses colors, but these show up as
+        # escape codes in Slurm log files)
+        print(
+            utils.escape_ansi(
+                self.model.tabulate(random.PRNGKey(0), self.example_input, train=True)
+            )
+        )
 
     def create_jitted_functions(self):
         """

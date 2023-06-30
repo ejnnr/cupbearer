@@ -108,7 +108,7 @@ def main(cfg: DictConfig):
 
 if __name__ == "__main__":
     logger.remove()
-    logger.level("METRICS", no=25, color="<green>", icon="📈")
+    logger.level("METRICS", no=25, icon="📈")
     logger.add(
         sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
     )
