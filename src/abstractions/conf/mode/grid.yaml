@@ -1,9 +1,24 @@
 # @package _global_
 
 dir:
-  run: grid
+  run: ${hydra.job.name}
+  log: results
 
 hydra:
   mode: MULTIRUN
+  job:
+    config:
+      override_dirname:
+        # Don't use a comma since that's also used to separate multiple list entries,
+        # so more annoying to parse
+        item_sep: '|'
+        exclude_keys:
+          # Seed is used in a subfolder, and mode is always grid
+          - seed
+          - mode
   sweep:
-    subdir: ${hydra:runtime.choices.experiment}/${seed}
+    # hydra:runtime.choices.experiment isn't set if multiple experiment groups are
+    # selected. Additionally, it wouldn't capture us setting any non-default values
+    # via CLI. The get_grid_subdir resolver just formats the override_dirname string
+    # more nicely.
+    subdir: ${get_grid_subdir:${hydra.job.override_dirname}}/${seed}

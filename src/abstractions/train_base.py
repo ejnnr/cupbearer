@@ -10,7 +10,7 @@ from omegaconf import DictConfig, OmegaConf
 import optax
 from loguru import logger
 
-from abstractions import abstraction, data, trainer
+from abstractions import abstraction, data, trainer, utils
 from abstractions.logger import DummyLogger, WandbLogger
 
 
@@ -162,5 +162,5 @@ if __name__ == "__main__":
     # Default logger for everything else:
     logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
     # We want to escape slashes in arguments that get reused as filenames.
-    OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
+    utils.register_resolvers()
     main()

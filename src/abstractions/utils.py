@@ -12,7 +12,7 @@ import os
 from hydra.utils import to_absolute_path, get_original_cwd
 from hydra.experimental.callback import Callback
 from typing import Any
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 
 
 class SizedIterable(Protocol):
@@ -197,3 +197,36 @@ class CheckOutputDirExistsCallback(Callback):
 def escape_ansi(line):
     ansi_escape = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
     return ansi_escape.sub("", line)
+
+
+def get_grid_subdir(override_dirname: str) -> str:
+    # override_dirname is a string of the form
+    # +experiment=[mnist_cnn,pixel_backdoor]|batch_size=32
+    # We want to format this as mnist_cnn,pixel_backdoor,batch_size=32
+
+    # Split the string into parts by comma
+    parts = override_dirname.split("|")
+
+    # Remove the '+' character and get the value after '=' for each part
+    formatted_parts = [part.replace("+", "").split("=") for part in parts]
+    config = {name: value for name, value in formatted_parts}
+
+    # First, create the experiment part of the subdir string
+    experiments = config["experiment"].replace("[", "").replace("]", "").split(",")
+    # Make sure that ordering is consistent no matter what the user specified
+    experiments.sort()
+    subdir = ",".join(experiments)
+    del config["experiment"]
+
+    # Avoid adding an extra comma if the config is empty
+    if config:
+        # Sort config by keys:
+        config = dict(sorted(config.items()))
+        subdir += "," + ",".join(f"{name}={value}" for name, value in config.items())
+
+    return subdir
+
+
+def register_resolvers():
+    OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
+    OmegaConf.register_new_resolver("get_grid_subdir", get_grid_subdir)
