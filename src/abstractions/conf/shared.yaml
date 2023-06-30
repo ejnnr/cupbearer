@@ -22,7 +22,7 @@ hydra:
   launcher:
     wait_until_finished: false
     # Slurm arguments:
-    qos: default
+    qos: scavenger
     mem_gb: 8
     cpus_per_task: 4
     gres: shard:${shards}
