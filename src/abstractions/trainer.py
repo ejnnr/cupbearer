@@ -246,22 +246,27 @@ class TrainerModule(ABC):
         if self.state.tx is None:
             raise ValueError("No optimizer was given. Please specify an optimizer.")
         # Prepare training loop
+        metrics = {}
         self.on_training_start()
         for epoch_idx in self.pbar(range(1, num_epochs + 1), desc="Epochs"):
             train_metrics = self.train_epoch(train_loader, max_steps=max_steps)
+            metrics[epoch_idx] = train_metrics
             self.on_training_epoch_end(epoch_idx, train_metrics)
             # Validation every N epochs
             if epoch_idx % self.check_val_every_n_epoch == 0:
                 eval_metrics = self.eval_model(val_loaders)
                 self.on_validation_epoch_end(epoch_idx, eval_metrics, val_loaders)
                 self.log_metrics(eval_metrics)
+                metrics[epoch_idx].update(eval_metrics)
 
         # Test model if possible
         if test_loaders is not None:
             test_metrics = self.eval_model(test_loaders)
             self.log_metrics(test_metrics)
-            with open(self.log_dir / "metrics.json", "w") as f:
-                json.dump(test_metrics, f)
+            metrics["test"] = test_metrics
+
+        with open(self.log_dir / "metrics.json", "w") as f:
+            json.dump(metrics, f)
 
     def train_epoch(
         self, train_loader: SizedIterable, max_steps: Optional[int]

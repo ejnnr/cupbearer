@@ -145,11 +145,7 @@ def main(cfg: DictConfig):
     trainer.train_model(
         train_loader=train_loader,
         val_loaders=val_loaders,
-        # Pass validation loaders again as test loaders to get final metrics written
-        # to file.
-        # TODO: this means running validation twice after the final epoch, which is
-        # a bit wasteful.
-        test_loaders=val_loaders,
+        test_loaders=None,
         num_epochs=cfg.num_epochs,
         max_steps=cfg.max_steps,
     )
