@@ -309,9 +309,9 @@ class TrainerModule(ABC):
           all dataloaders are merged into one dictionary by prefixing the name.
         """
         # Test model on all images of a data loader and return avg loss
-        num_elements = 0
         metrics = {}
         for data_loader_name, data_loader in data_loaders.items():
+            num_elements = 0
             data_loader_metrics = defaultdict(float)
             for batch in data_loader:
                 step_metrics = self.eval_step(self.state, batch)
