@@ -10,4 +10,4 @@ model:
 
 batch_size: 256
 max_batch_size: 4096
-epochs: 5
+num_epochs: 5
