@@ -8,6 +8,7 @@ defaults:
   - data@train_data:
     - pytorch
     - train
+  - _self_
 
 num_epochs: 10
 batch_size: 128
