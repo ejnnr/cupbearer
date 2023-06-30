@@ -1,0 +1,11 @@
+# @package _global_
+
+defaults:
+  - /data@val_data.clean:
+    - pytorch
+    - test
+  - _self_
+
+val_data:
+  clean:
+    name: ${train_data.name}
