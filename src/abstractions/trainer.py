@@ -266,7 +266,7 @@ class TrainerModule(ABC):
             metrics["test"] = test_metrics
 
         with open(self.log_dir / "metrics.json", "w") as f:
-            json.dump(metrics, f)
+            json.dump(metrics, f, indent=4)
 
     def train_epoch(
         self, train_loader: SizedIterable, max_steps: Optional[int]
