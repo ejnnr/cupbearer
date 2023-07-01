@@ -52,7 +52,7 @@ def single_class_loss_fn(predicted_logits, logits, target=0):
 
 
 def compute_losses(
-    params, state, batch, output_loss_fn, mask=None, return_batch=False, layerwise=False
+    params, state, batch, output_loss_fn, return_batch=False, layerwise=False
 ):
     logits, activations = batch
     abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
@@ -89,7 +89,6 @@ def compute_losses(
     consistency_losses /= len(predicted_abstractions)
 
     if layerwise:
-        assert mask is None
         layer_losses = jnp.stack(layer_losses, axis=0)
         if not return_batch:
             # Take mean over batch dimension
@@ -100,31 +99,10 @@ def compute_losses(
         return layer_losses
 
     if return_batch:
-        assert mask is None
         return output_losses + consistency_losses
 
     consistency_loss = consistency_losses.mean()
     loss = output_loss + consistency_loss
-
-    if mask is not None:
-        assert mask.shape == (b,)
-        num_samples = mask.sum()
-        output_losses *= mask
-        # Can't take mean here because we don't want to count masked samples
-        masked_output_loss = output_losses.sum() / num_samples
-        consistency_losses *= mask
-        masked_consistency_loss = consistency_losses.sum() / num_samples
-        masked_loss = masked_output_loss + masked_consistency_loss
-
-        return (
-            loss,
-            (output_loss, consistency_loss),
-            masked_loss,
-            (
-                masked_output_loss,
-                masked_consistency_loss,
-            ),
-        )
 
     return loss, (output_loss, consistency_loss)
 
@@ -166,27 +144,20 @@ class AbstractionTrainer(trainer.TrainerModule):
             # Note that this class expects the eval dataloader to return not just
             # logits/activations, but also the original data. That's necessary
             # to compute metrics on specific clases (zero in this case).
-            logits, activations, (images, labels, infos) = batch
-            zeros = infos["original_target"] == 0
+            logits, activations = batch
             (
                 loss,
                 (output_loss, consistency_loss),
-                zeros_loss,
-                (zeros_output_loss, zeros_consistency_loss),
             ) = compute_losses(  # type: ignore
                 state.params,
                 state,
                 (logits, activations),
                 output_loss_fn=self.output_loss_fn,
-                mask=zeros,
             )
             metrics = {
                 "loss": loss,
                 "output_loss": output_loss,
                 "consistency_loss": consistency_loss,
-                "zeros_loss": zeros_loss,
-                "zeros_output_loss": zeros_output_loss,
-                "zeros_consistency_loss": zeros_consistency_loss,
             }
             return metrics
 
@@ -239,9 +210,7 @@ class AbstractionDetector(AnomalyDetector):
                 val_loaders[key] = DataLoader(
                     dataset=ds,
                     batch_size=self.max_batch_size,
-                    collate_fn=abstraction.abstraction_collate(
-                        self.model, self.params, return_original_batch=True
-                    ),
+                    collate_fn=abstraction.abstraction_collate(self.model, self.params),
                 )
         trainer.train_model(
             train_loader=train_loader,
