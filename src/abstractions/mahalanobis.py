@@ -161,7 +161,13 @@ class MahalanobisDetector(AnomalyDetector):
         self.inv_diag_covariances = variables["inv_diag_covariances"]
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="mahalanobis")
+CONFIG_NAME = Path(__file__).stem
+utils.setup_hydra(CONFIG_NAME)
+
+
+@hydra.main(
+    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
+)
 def main(cfg: DictConfig):
     """Execute model training and evaluation loop.
 

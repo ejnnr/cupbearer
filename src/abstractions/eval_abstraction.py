@@ -25,7 +25,13 @@ from abstractions.train_abstraction import (
 )
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="eval_abstraction")
+CONFIG_NAME = Path(__file__).stem
+utils.setup_hydra(CONFIG_NAME)
+
+
+@hydra.main(
+    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
+)
 def main(cfg: DictConfig):
     """Execute model evaluation loop.
 

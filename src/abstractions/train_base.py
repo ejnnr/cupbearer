@@ -1,4 +1,5 @@
 import os
+from pathlib import Path
 import sys
 import hydra
 import jax
@@ -59,7 +60,13 @@ class ClassificationTrainer(trainer.TrainerModule):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="train_base")
+CONFIG_NAME = Path(__file__).stem
+utils.setup_hydra(CONFIG_NAME)
+
+
+@hydra.main(
+    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
+)
 def main(cfg: DictConfig):
     """Execute model training and evaluation loop.
 

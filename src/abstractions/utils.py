@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 import os
 from hydra.utils import to_absolute_path, get_original_cwd
 from hydra.experimental.callback import Callback
+from hydra.core.config_store import ConfigStore
 from typing import Any
 from omegaconf import DictConfig, OmegaConf
 
@@ -237,3 +238,19 @@ def get_grid_subdir(override_dirname: str) -> str:
 def register_resolvers():
     OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
     OmegaConf.register_new_resolver("get_grid_subdir", get_grid_subdir)
+
+
+def setup_hydra(config_name):
+    # Hack to get more than one config directory.
+    # See https://github.com/facebookresearch/hydra/issues/2001#issuecomment-1032968874
+    cs = ConfigStore.instance()
+
+    SHARED_PATH = Path(__file__).parent / "conf" / "_shared"
+
+    custom_path_list = [str(SHARED_PATH)]
+
+    config = {
+        "defaults": ["main", "_self_"],
+        "hydra": {"searchpath": custom_path_list},
+    }
+    cs.store(name=config_name, node=config)

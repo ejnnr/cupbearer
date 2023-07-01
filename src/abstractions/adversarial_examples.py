@@ -61,7 +61,13 @@ def fgsm(forward_fn, inputs, labels, eps=8 / 255):
     return inputs + eps * jnp.sign(grad), loss
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="adversarial_examples")
+CONFIG_NAME = Path(__file__).stem
+utils.setup_hydra(CONFIG_NAME)
+
+
+@hydra.main(
+    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
+)
 def attack(cfg: DictConfig):
     """Execute model training and evaluation loop.
 

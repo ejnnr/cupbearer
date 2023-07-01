@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 import sys
 import flax.linen as nn
@@ -257,7 +258,13 @@ class AbstractionDetector(AnomalyDetector):
         )
 
 
-@hydra.main(version_base=None, config_path="conf", config_name="abstraction")
+CONFIG_NAME = Path(__file__).stem
+utils.setup_hydra(CONFIG_NAME)
+
+
+@hydra.main(
+    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
+)
 def main(cfg: DictConfig):
     """Execute model training and evaluation loop.
 

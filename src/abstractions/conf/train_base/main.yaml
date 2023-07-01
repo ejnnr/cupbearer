@@ -8,8 +8,11 @@ defaults:
   - data@train_data:
     - pytorch
     - train
+  - val_data: null
   - _self_
 
+# Make sure val_data exists even if it's empty
+val_data: {}
 num_epochs: 10
 batch_size: 128
 max_batch_size: 2048
@@ -17,4 +20,3 @@ num_classes: 10
 max_steps: null
 debug: false
 wandb: false
-
