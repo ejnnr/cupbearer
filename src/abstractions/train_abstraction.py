@@ -282,7 +282,16 @@ def main(cfg: DictConfig):
     full_model = abstraction.Model(computation=full_computation)
     full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
 
-    train_dataset = data.get_dataset(base_cfg.train_data)
+    cfg.train_data = base_cfg.train_data
+    # We want to train only on clean data.
+    # TODO: This doesn't feel ideal, since transforms aren't necessarily backdoors
+    # in general. Best way to handle this is probably to separate out backdoors
+    # from any other transforms if needed.
+    cfg.train_data.transforms = {}
+    train_dataset = data.get_dataset(cfg.train_data)
+
+    if cfg.val_data == "base":
+        cfg.val_data = base_cfg.val_data
 
     # First sample, only input without label and info. Also need to add a batch dimension
     example_input = train_dataset[0][0][None]
@@ -290,8 +299,27 @@ def main(cfg: DictConfig):
         {"params": full_params}, example_input, return_activations=True
     )
 
+    KNOWN_ARCHITECTURES = {
+        "abstractions.computations." + name for name in {"mlp", "cnn"}
+    }
+
+    if not cfg.model:
+        cfg.model = base_cfg.model
+        if cfg.model._target_ not in KNOWN_ARCHITECTURES:
+            raise ValueError(
+                f"Model architecture {cfg.model._target_} not yet supported "
+                "for size_reduction."
+            )
+        for field in {"hidden_dims", "channels", "dense_dims"}:
+            if field in cfg.model:
+                cfg.model[field] = [
+                    dim // cfg.size_reduction for dim in cfg.model[field]
+                ]
+
     if cfg.single_class:
         cfg.model.output_dim = 2
+    else:
+        cfg.model.output_dim = base_cfg.model.output_dim
 
     computation = hydra.utils.call(cfg.model)
     # TODO: Might want to make this configurable somehow, but it's a reasonable
@@ -302,7 +330,7 @@ def main(cfg: DictConfig):
     trainer = AbstractionTrainer(
         model=model,
         output_loss_fn=single_class_loss_fn if cfg.single_class else kl_loss_fn,
-        optimizer=hydra.utils.instantiate(cfg.optim),
+        optimizer=hydra.utils.instantiate(base_cfg.optim),
         example_input=example_activations,
         # Hydra sets the cwd to the right log dir automatically
         log_dir=".",
@@ -313,7 +341,7 @@ def main(cfg: DictConfig):
     detector = AbstractionDetector(
         model=full_model,
         params=full_params,
-        max_batch_size=cfg.max_batch_size,
+        max_batch_size=base_cfg.max_batch_size,
     )
 
     val_datasets = {k: data.get_dataset(v) for k, v in cfg.val_data.items()}
@@ -321,8 +349,8 @@ def main(cfg: DictConfig):
     detector.train(
         train_dataset,
         trainer,
-        batch_size=cfg.batch_size,
-        num_epochs=cfg.num_epochs,
+        batch_size=base_cfg.batch_size,
+        num_epochs=base_cfg.num_epochs,
         validation_datasets=val_datasets,
     )
 

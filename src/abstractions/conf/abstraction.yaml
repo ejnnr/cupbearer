@@ -1,14 +1,21 @@
 defaults:
   - shared
-  - optim: adam
-  - model: mlp
+  - model: null
   - _self_
 
-num_epochs: 10
-batch_size: 128
-max_batch_size: 4096
-num_classes: 10
+# Factor by which to reduce the hidden dimension size compared to full model.
+# Ignored if model is not null.
+size_reduction: 8
+# This field needs to exist because the model config group relies on it.
+# But actually, the python script will just set the model output dimension
+# automatically, so num_classes is just a dummy field.
+num_classes: null
 single_class: false
 base_run: ???
 debug: false
 wandb: false
+
+# This special setting uses the val_data that was used during training.
+# You can set val_data to some actual data configuration to override this,
+# or to an empty dictionary to disable validation.
+val_data: base
