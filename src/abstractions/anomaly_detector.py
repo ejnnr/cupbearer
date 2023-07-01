@@ -101,7 +101,7 @@ class AnomalyDetector(ABC):
             # all score distributions are visible in the histogram
             x_lim = max(x_lim, jnp.percentile(scores, histogram_percentile).item())
 
-        with open(save_path / "metrics.json", "w") as f:
+        with open(save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
 
         # Visualizations for anomaly scores
