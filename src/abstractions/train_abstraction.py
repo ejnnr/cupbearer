@@ -1,3 +1,4 @@
+import copy
 import os
 from pathlib import Path
 import sys
@@ -289,7 +290,7 @@ def main(cfg: DictConfig):
     full_model = abstraction.Model(computation=full_computation)
     full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
 
-    cfg.train_data = base_cfg.train_data
+    cfg.train_data = copy.deepcopy(base_cfg.train_data)
     # We want to train only on clean data.
     # TODO: This doesn't feel ideal, since transforms aren't necessarily backdoors
     # in general. Best way to handle this is probably to separate out backdoors
@@ -298,7 +299,10 @@ def main(cfg: DictConfig):
     train_dataset = data.get_dataset(cfg.train_data)
 
     if cfg.val_data == "base":
-        cfg.val_data = base_cfg.val_data
+        cfg.val_data = copy.deepcopy(base_cfg.val_data)
+    elif cfg.val_data == "same":
+        cfg.val_data = copy.deepcopy(cfg.train_data)
+        cfg.val_data.train = False
 
     # First sample, only input without label and info. Also need to add a batch dimension
     example_input = train_dataset[0][0][None]
