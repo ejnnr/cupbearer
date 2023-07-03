@@ -15,7 +15,10 @@ base_run: ???
 debug: false
 wandb: false
 
-# This special setting uses the val_data that was used during training.
-# You can set val_data to some actual data configuration to override this,
+# Special settings:
+#   - 'same': use the test split of the training data (i.e. clean data)
+#   - 'base': use the validation data of the base run (which may include e.g. some
+#             backdoor data)
+# You can also set val_data to some actual data configuration
 # or to an empty dictionary to disable validation.
-val_data: base
+val_data: same

@@ -13,9 +13,10 @@ hydra:
         # so more annoying to parse
         item_sep: '|'
         exclude_keys:
-          # Seed is used in a subfolder, and mode is always grid
+          # Seed is used in a subfolder
           - seed
-          - mode
+          - options
+          - base_seed
   sweep:
     # hydra:runtime.choices.experiment isn't set if multiple experiment groups are
     # selected. Additionally, it wouldn't capture us setting any non-default values
