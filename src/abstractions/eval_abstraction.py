@@ -1,3 +1,4 @@
+import copy
 import json
 from pathlib import Path
 import sys
@@ -95,8 +96,11 @@ def main(cfg: DictConfig):
     # TODO: this might not always work, dataset config might not have the a train/test
     # split. Also unclear whether this is the right way to do it, maybe we should just
     # have the test data as another anomalous dataloader if we care?
-    base_cfg.train_data.train = False
-    clean_dataset = data.get_dataset(base_cfg.train_data, base_run, base_cfg)
+    reference_data = copy.deepcopy(base_cfg.train_data)
+    reference_data.train = False
+    # Remove backdoors
+    reference_data.transforms = {}
+    clean_dataset = data.get_dataset(reference_data, base_run, base_cfg)
 
     anomalous_datasets = {}
 
