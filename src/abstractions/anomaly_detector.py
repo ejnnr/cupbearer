@@ -1,18 +1,16 @@
-from abc import ABC, abstractmethod
 import json
+from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Optional
-from loguru import logger
-from matplotlib import pyplot as plt
-import numpy as np
-import sklearn.metrics
-
-from iceberg import Renderer, Colors
-
-from torch.utils.data import DataLoader, Dataset
 
 import jax
 import jax.numpy as jnp
+import numpy as np
+import sklearn.metrics
+from iceberg import Colors, Renderer
+from loguru import logger
+from matplotlib import pyplot as plt
+from torch.utils.data import DataLoader, Dataset
 
 from abstractions import data, utils
 from abstractions.abstraction import Model
@@ -48,7 +46,9 @@ class AnomalyDetector(ABC):
         normal_dataset: Dataset,
         anomalous_datasets: dict[str, Dataset],
         save_path: str | Path = "",
-        histogram_percentile: int = 95,
+        histogram_percentile: float = 95,
+        num_bins: int = 100,
+        plot_all_hists: bool = False,
     ):
         save_path = Path(save_path)
 
@@ -75,7 +75,10 @@ class AnomalyDetector(ABC):
 
         anomalous_scores = {}
         metrics = {"AUC_ROC": {}}
-        x_lim = jnp.percentile(normal_scores, histogram_percentile).item()
+        assert 0 < histogram_percentile <= 100
+        histogram_percentile += 0.5 * (100 - histogram_percentile)
+        lower_lim = jnp.percentile(normal_scores, 100 - histogram_percentile).item()
+        upper_lim = jnp.percentile(normal_scores, histogram_percentile).item()
         for k, loader in anomalous_loaders.items():
             scores = []
             for batch in loader:
@@ -91,12 +94,19 @@ class AnomalyDetector(ABC):
                 y_true=true_labels,
                 y_score=all_scores,
             )
-            logger.log("METRICS", f"AUC_ROC ({k}): {auc_roc:.4f}")
+            logger.info(f"AUC_ROC ({k}): {auc_roc:.4f}")
             metrics["AUC_ROC"][k] = auc_roc
 
             # We use the most anomalous scores to compute the cutoff, to make sure
             # all score distributions are visible in the histogram
-            x_lim = max(x_lim, jnp.percentile(scores, histogram_percentile).item())
+            upper_lim = max(
+                upper_lim, jnp.percentile(scores, histogram_percentile).item()
+            )
+            lower_lim = min(
+                lower_lim, jnp.percentile(scores, 100 - histogram_percentile).item()
+            )
+
+        bins = np.linspace(lower_lim, upper_lim, num_bins)
 
         with open(save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
@@ -104,16 +114,23 @@ class AnomalyDetector(ABC):
         # Visualizations for anomaly scores
         plt.hist(
             normal_scores,
-            bins=100,
-            range=(normal_scores.min().item(), x_lim),
+            bins=bins,
             alpha=0.5,
             label="Normal",
         )
-        for k, scores in anomalous_scores.items():
+        if plot_all_hists:
+            for k, scores in list(anomalous_scores.items()):
+                plt.hist(
+                    scores,
+                    bins=bins,
+                    alpha=0.5,
+                    label=k,
+                )
+        else:
+            k, scores = next(iter(anomalous_scores.items()))
             plt.hist(
-                anomalous_scores,
-                bins=100,
-                range=(scores.min().item(), x_lim),
+                scores,
+                bins=bins,
                 alpha=0.5,
                 label=k,
             )
@@ -137,7 +154,14 @@ class AnomalyDetector(ABC):
         sample_inputs = next(iter(sample_loader))
         if isinstance(sample_inputs, (tuple, list)):
             sample_inputs = sample_inputs[0]
-        self.plot(layer_scores, path=save_path, inputs=sample_inputs)
+
+        try:
+            self.plot(layer_scores, path=save_path, inputs=sample_inputs)
+        except RuntimeError as e:
+            if str(e) == "glfw.init() failed":
+                logger.warning("Skipping architecture plot")
+            else:
+                raise
 
     def _get_drawable(self, layer_scores, inputs):
         return self.model.get_drawable(layer_scores=layer_scores, inputs=inputs)
