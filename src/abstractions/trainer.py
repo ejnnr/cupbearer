@@ -1,48 +1,35 @@
 # Adapted from https://uvadlc-notebooks.readthedocs.io/en/latest/tutorial_notebooks/guide4/Research_Projects_with_JAX.html
 
 # Standard libraries
-from abc import ABC, abstractmethod
+import json
 import os
+from abc import ABC, abstractmethod
+from collections import defaultdict
 from pathlib import Path
-import sys
 from typing import (
     Any,
+    Callable,
+    Dict,
     Iterable,
     Mapping,
-    Sequence,
     Optional,
     Tuple,
-    Dict,
-    Callable,
-    Union,
 )
-import json
-import time
-from loguru import logger
-from tqdm.auto import tqdm
-import numpy as np
-from copy import copy
-from glob import glob
-from collections import defaultdict
 
 # JAX/Flax
 import jax
-import jax.numpy as jnp
-from jax import random
-from flax import linen as nn
-from flax import struct, core
-from flax.training import train_state, checkpoints
 import optax
+from flax import core, struct
+from flax import linen as nn
+from flax.training import train_state
+from jax import random
+from loguru import logger
+from tqdm.auto import tqdm
 
 # PyTorch for data loading
-import torch
-import torch.utils.data as data
-
-from hydra.utils import to_absolute_path
 from abstractions import utils
-
-from abstractions.utils import SizedIterable, original_relative_path, save, load
 from abstractions.logger import Logger
+from abstractions.utils import SizedIterable, load, original_relative_path, save
 
 
 class TrainState(train_state.TrainState):
@@ -349,12 +336,12 @@ class TrainerModule(ABC):
             return iterable
 
     def log_metrics(self, metrics: Mapping[str, Any]):
-        for logger in self.loggers:
-            logger.log_metrics(metrics, step=int(self.state.step))
+        for _logger in self.loggers:
+            _logger.log_metrics(metrics, step=int(self.state.step))
 
     def close_loggers(self):
-        for logger in self.loggers:
-            logger.close()
+        for _logger in self.loggers:
+            _logger.close()
 
     def on_training_start(self):
         """

@@ -1,22 +1,18 @@
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Optional
+
 import hydra
-from hydra.utils import to_absolute_path
 import jax
 import jax.numpy as jnp
-import flax.linen as nn
-from torch.utils.data import DataLoader
+from hydra.utils import to_absolute_path
 from loguru import logger
-from matplotlib import pyplot as plt
 from omegaconf import DictConfig, OmegaConf
-import sklearn.metrics
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from abstractions import abstraction, data, utils
-from abstractions.adversarial_examples import AdversarialExampleDataset
 from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import get_abstraction_maps
 
 
 def update_covariance(curr_mean, curr_C, curr_n, new_data):
@@ -58,14 +54,17 @@ def mahalanobis(
 ):
     """Compute Simplified Relative Mahalanobis distances for a batch of activations.
 
-    The Mahalanobis distance for each layer is computed, and the distances are then averaged
-    over layers.
+    The Mahalanobis distance for each layer is computed,
+    and the distances are then averaged over layers.
 
     Args:
-        activations: List of activations for each layer, each element has shape (batch, dim)
+        activations: List of activations for each layer,
+            each element has shape (batch, dim)
         means: List of means for each layer, each element has shape (dim,)
-        inv_covariances: List of inverse covariances for each layer, each element has shape (dim, dim)
-        inv_diag_covariances: List of inverse diagonal covariances for each layer, each element has shape (dim,).
+        inv_covariances: List of inverse covariances for each layer,
+            each element has shape (dim, dim)
+        inv_diag_covariances: List of inverse diagonal covariances for each layer,
+            each element has shape (dim,).
             If None, the usual Mahalanobis distance is computed instead of the
             (simplified) relative Mahalanobis distance.
 
@@ -103,7 +102,7 @@ class MahalanobisDetector(AnomalyDetector):
         )
         example_inputs = next(iter(data_loader))
         _, example_activations = self._model(example_inputs)
-        # For each layer, get the number of elements of the activations (without batch dim)
+        # For each layer, get the number of entries of activations (without batch dim)
         activation_sizes = [x[0].size for x in example_activations]
         means = [jnp.zeros(size) for size in activation_sizes]
         Cs = [jnp.zeros((size, size)) for size in activation_sizes]

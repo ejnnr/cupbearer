@@ -1,26 +1,17 @@
 import copy
-import json
 from pathlib import Path
 import sys
 import hydra
 from loguru import logger
-from matplotlib import pyplot as plt
-import sklearn.metrics
 
 from omegaconf import DictConfig, OmegaConf
-from hydra.utils import to_absolute_path
 
-from iceberg import Bounds, Renderer, Colors
-from iceberg.primitives import Blank
 
 from abstractions import abstraction, data, utils
-from abstractions.adversarial_examples import AdversarialExampleDataset
 from abstractions.computations import get_abstraction_maps
 from abstractions.mahalanobis import MahalanobisDetector
 from abstractions.train_abstraction import (
     AbstractionDetector,
-    AbstractionTrainer,
-    compute_losses,
     kl_loss_fn,
     single_class_loss_fn,
 )

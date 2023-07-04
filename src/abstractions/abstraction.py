@@ -7,16 +7,13 @@
 # representation to the output of the computation.
 # All of this is encapsulated in a flax module.
 
-import functools
-from typing import Callable, List, Sequence
+from typing import List
 import flax.linen as nn
 import jax
-import jax.numpy as jnp
 from iceberg import Drawable, Bounds, Colors, Color, Corner, PathStyle
 from iceberg.primitives import (
     Arrange,
     Ellipse,
-    Padding,
     Line,
     Compose,
     Image,

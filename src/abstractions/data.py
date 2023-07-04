@@ -1,17 +1,18 @@
 from typing import Any, Callable, List, Mapping, Type
-import numpy as np
-from torch.utils.data import DataLoader, Dataset
-from torchvision.datasets import MNIST, CIFAR10
-from torchvision.transforms import Compose
+
 import jax.numpy as jnp
+import numpy as np
 from hydra.utils import to_absolute_path
+from torch.utils.data import Dataset
+from torchvision.datasets import CIFAR10, MNIST
+from torchvision.transforms import Compose
 
 from abstractions import custom_transforms, utils
 from abstractions.adversarial_examples import AdversarialExampleDataset
 
 
 def numpy_collate(batch):
-    """Variant of the default collate_fn that returns numpy arrays instead of tensors."""
+    """Variant of the default collate_fn that returns ndarrays instead of tensors."""
     if isinstance(batch[0], np.ndarray):
         return np.stack(batch)
     elif isinstance(batch[0], (tuple, list)):

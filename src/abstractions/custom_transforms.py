@@ -1,8 +1,10 @@
-# We use torch to generate random numbers, to keep things consistent with torchvision transforms.
 from typing import Dict, Tuple
-from PIL.Image import Image
+
+# We use torch to generate random numbers, to keep things consistent
+# with torchvision transforms.
 import numpy as np
 import torch
+from PIL.Image import Image
 
 
 class AddInfoDict:
@@ -21,13 +23,15 @@ class AddInfoDict:
 
 
 class CornerPixelBackdoor:
-    """Adds a white/red pixel to the specified corner of the image and sets the target class.
+    """Adds a white/red pixel to the specified corner of the image and sets the target.
 
-    For grayscale images, the pixel is set to 255 (white), for RGB images it is set to (255, 0, 0) (red).
+    For grayscale images, the pixel is set to 255 (white),
+    for RGB images it is set to (255, 0, 0) (red).
 
     Args:
         probability: Probability of applying the transform.
-        corner: Corner of the image to add the pixel to. Can be one of "top-left", "top-right", "bottom-left", "bottom-right".
+        corner: Corner of the image to add the pixel to.
+            Can be one of "top-left", "top-right", "bottom-left", "bottom-right".
         target_class: Target class to set the image to after the transform is applied.
     """
 

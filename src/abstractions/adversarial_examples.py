@@ -1,17 +1,17 @@
-from functools import partial
 import json
-import matplotlib.pyplot as plt
 import os
-from pathlib import Path
 import sys
+from functools import partial
+from pathlib import Path
+
 import hydra
-from hydra.utils import to_absolute_path
 import jax
 import jax.numpy as jnp
+import matplotlib.pyplot as plt
+import optax
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
-import optax
-from torch.utils.data import Dataset, DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from abstractions import abstraction, data, utils
 
@@ -37,7 +37,8 @@ class AdversarialExampleDataset(Dataset):
         self.num_examples = num_examples
         if len(self.examples) < num_examples:
             raise ValueError(
-                f"Only {len(self.examples)} adversarial examples exist, but {num_examples} were requested"
+                f"Only {len(self.examples)} adversarial examples exist, "
+                f"but {num_examples} were requested"
             )
 
     def __len__(self):

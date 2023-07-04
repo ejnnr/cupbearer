@@ -7,13 +7,10 @@ from matplotlib import pyplot as plt
 import numpy as np
 import sklearn.metrics
 
-from iceberg import Bounds, Renderer, Colors
-from iceberg.primitives import Blank
+from iceberg import Renderer, Colors
 
 from torch.utils.data import DataLoader, Dataset
-from hydra.utils import to_absolute_path
 
-import flax.linen as nn
 import jax
 import jax.numpy as jnp
 

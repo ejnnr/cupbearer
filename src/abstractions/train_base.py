@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 import sys
 import hydra
@@ -33,7 +32,9 @@ class ClassificationTrainer(trainer.TrainerModule):
             return loss, accuracy
 
         def train_step(state, batch):
-            loss_fn = lambda params: losses(params, state, batch)
+            def loss_fn(params):
+                return losses(params, state, batch)
+
             (loss, accuracy), grads = jax.value_and_grad(loss_fn, has_aux=True)(
                 state.params
             )

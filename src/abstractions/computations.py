@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import functools
 from typing import Any, List, Mapping, Sequence
 import flax.linen as nn
 from enum import Enum
-from iceberg import Drawable, Bounds, Colors, PathStyle, FontStyle
-from iceberg.primitives import Rectangle, Line, Directions, Arrange, SimpleText
+from iceberg import Drawable, Bounds, Colors, FontStyle
+from iceberg.primitives import Rectangle, Arrange, SimpleText
 import jax
 
 

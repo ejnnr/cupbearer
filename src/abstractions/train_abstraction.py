@@ -1,25 +1,21 @@
 import copy
-import os
-from pathlib import Path
 import sys
-import flax.linen as nn
+from pathlib import Path
 from typing import Callable, Optional
-from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import Computation, Step, get_abstraction_maps
-from torch.utils.data import DataLoader, Dataset
+
 import hydra
 import jax
 import jax.numpy as jnp
-from loguru import logger
-import sklearn.metrics
-import matplotlib.pyplot as plt
-
-from omegaconf import DictConfig, OmegaConf
 from hydra.utils import to_absolute_path
+from loguru import logger
+from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import DataLoader, Dataset
 
-from abstractions import abstraction, data, utils, trainer
+from abstractions import abstraction, data, trainer, utils
 from abstractions.abstraction import Abstraction, Model
-from abstractions.logger import WandbLogger, DummyLogger
+from abstractions.anomaly_detector import AnomalyDetector
+from abstractions.computations import get_abstraction_maps
+from abstractions.logger import DummyLogger, WandbLogger
 
 
 def kl_loss_fn(predicted_logits, logits):
@@ -34,8 +30,9 @@ def kl_loss_fn(predicted_logits, logits):
 
 def single_class_loss_fn(predicted_logits, logits, target=0):
     # This loss function only cares about correctly predicting whether the output
-    # is a specific digit (like zero) or not. It combines the probabilities for all non-zero classes into
-    # a single "non-zero" class. Assumes that output_dim of the abstraction is 2.
+    # is a specific digit (like zero) or not.
+    # It combines the probabilities for all non-zero classes
+    # into a single "non-zero" class. Assumes that output_dim of the abstraction is 2.
     assert predicted_logits.ndim == logits.ndim == 2
     assert logits.shape[-1] == 10, logits.shape
     assert predicted_logits.shape[-1] == 2, predicted_logits.shape
@@ -75,14 +72,14 @@ def compute_losses(
     # Consistency loss:
     layer_losses = []
     # Skip the first abstraction, since there's no prediction for that
-    for abstraction, predicted_abstraction in zip(
+    for actual_abstraction, predicted_abstraction in zip(
         abstractions[1:], predicted_abstractions
     ):
         # Take mean over hidden dimension(s):
         layer_losses.append(
             jnp.sqrt(
-                ((abstraction - predicted_abstraction) ** 2).mean(
-                    axis=tuple(range(1, abstraction.ndim))
+                ((actual_abstraction - predicted_abstraction) ** 2).mean(
+                    axis=tuple(range(1, actual_abstraction.ndim))
                 )
             )
         )
@@ -127,9 +124,11 @@ class AbstractionTrainer(trainer.TrainerModule):
 
     def create_functions(self):
         def train_step(state, batch):
-            loss_fn = lambda params: compute_losses(
-                params, state, batch, output_loss_fn=self.output_loss_fn
-            )
+            def loss_fn(params):
+                return compute_losses(
+                    params, state, batch, output_loss_fn=self.output_loss_fn
+                )
+
             (loss, (output_loss, consistency_loss)), grads = jax.value_and_grad(
                 loss_fn, has_aux=True
             )(state.params)
@@ -202,8 +201,8 @@ class AbstractionDetector(AnomalyDetector):
             dataset=dataset,
             batch_size=batch_size,
             # TODO: I think this should plausibly be handled in AbstractionTrainer
-            # now after the refactor. Or maybe AbstractionTrainer and AbstractionDetector
-            # should just be merged.
+            # now after the refactor.
+            # Or maybe AbstractionTrainer and AbstractionDetector should just be merged.
             collate_fn=abstraction.abstraction_collate(self.model, self.params),
         )
         val_loaders = {}
@@ -304,7 +303,8 @@ def main(cfg: DictConfig):
         cfg.val_data = copy.deepcopy(cfg.train_data)
         cfg.val_data.train = False
 
-    # First sample, only input without label and info. Also need to add a batch dimension
+    # First sample, only input without label and info.
+    # Also need to add a batch dimension
     example_input = train_dataset[0][0][None]
     _, example_activations = full_model.apply(
         {"params": full_params}, example_input, return_activations=True

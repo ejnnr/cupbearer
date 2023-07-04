@@ -59,4 +59,3 @@ srun python -m abstractions.train_base \
     dir.run=$MODE/$EXPERIMENT/$SEED \
     dir.log=results/base \
     $OPTIONS
-

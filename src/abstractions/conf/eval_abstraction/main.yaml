@@ -1,6 +1,6 @@
 # Disable all logging and cwd management.
 # The eval scripts write into the already existing run dir anyway
-defaults:  
+defaults:
   # This is in fact non-optional but if I set it to ???, then I have to assign
   # directly to data@anomalies, instead of doing e.g. +data@anomalies.backdoor=...
   - data@anomalies: null

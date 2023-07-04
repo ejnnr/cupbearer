@@ -1,19 +1,18 @@
-from abc import ABC, abstractmethod
 import functools
-from pathlib import Path
+import os
 import pickle
 import re
 import shutil
-from typing import Callable, Iterable, Iterator, Protocol, Sized, Union
+from pathlib import Path
+from typing import Any, Callable, Iterable, Iterator, Protocol, Sized, Union
+
 from hydra import TaskFunction
-from loguru import logger
-from torch.utils.data import Dataset
-import os
-from hydra.utils import to_absolute_path, get_original_cwd
-from hydra.experimental.callback import Callback
 from hydra.core.config_store import ConfigStore
-from typing import Any
+from hydra.experimental.callback import Callback
+from hydra.utils import get_original_cwd
+from loguru import logger
 from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import Dataset
 
 
 class SizedIterable(Protocol):
@@ -30,16 +29,19 @@ class SizedIterable(Protocol):
 
 def add_transforms(cls):
     """
-    A decorator for PyTorch Dataset classes that adds a `transforms` argument to the constructor.
-    The `transforms` argument is a single function that takes multiple values (such as image and target) as input
-    and returns transformed versions of them all. This is useful when we want to apply random transforms
-    to multiple parts of a sample that aren't independent, e.g. transform the label with the image.
+    A decorator for PyTorch Dataset classes that adds a `transforms` argument.
+
+    The `transforms` argument is a single function that takes multiple values
+    (such as image and target) as input and returns transformed versions of them all.
+    This is useful when we want to apply random transforms to multiple parts of a sample
+    that aren't independent, e.g. transform the label with the image.
 
     Args:
         cls (type): A class that inherits from torch.utils.data.Dataset.
 
     Returns:
-        type: A new class that inherits from the input class and has the additional `transforms` functionality.
+        type: A new class that inherits from the input class and has the additional
+            `transforms` functionality.
 
     Raises:
         TypeError: If the input class is not a subclass of torch.utils.data.Dataset.
@@ -66,15 +68,18 @@ def add_transforms(cls):
 
 def adapt_transform(transform: Callable) -> Callable:
     """
-    A decorator that takes a torchvision transform and turns it into a new one that can be used for the
-    `transforms` argument in a Dataset class created with the `add_transforms` decorator. The new transform
-    keeps all but the first value unchanged. The decorator works on both functions and callable classes.
+    A decorator that takes a torchvision transform and turns it into a new one that can
+    be used for the `transforms` argument in a Dataset class created with the
+    `add_transforms` decorator.
+
+    The new transform keeps all but the first value unchanged.
+    The decorator works on both functions and callable classes.
 
     Args:
         transform (callable): A torchvision transform function or callable class.
 
     Returns:
-        callable: A new transform function or class that takes an image and other values as input
+        callable: A new transform function or class that takes an image and other values
                   and returns the transformed image and the unchanged remaining values.
 
     Raises:
@@ -159,17 +164,18 @@ class CheckOutputDirExistsCallback(Callback):
                 shutil.rmtree(config.hydra.run.dir)
             else:
                 raise BaseException(
-                    "Output dir already exists! Use +overwrite_output=true to overwrite."
+                    "Output dir already exists! Use +overwrite_output=true to overwrite"
                 )
 
     def on_job_start(
         self, config: DictConfig, *, task_function: TaskFunction, **kwargs: Any
     ):
-        """Check that the output dir is empty, except for the .hydra dir and the logfile.
+        """Check that the output dir is empty, except for the .hydra dir and logfile.
 
-        This hook is needed for multirun jobs: the previous one won't trigger, but we don't
-        want to use on_multirun_start because that would only allow checking whether the
-        entire sweep directory exists. Instead, we'd like overwrite checks on a job-basis.
+        This hook is needed for multirun jobs: the previous one won't trigger,
+        but we don't want to use on_multirun_start because that would only allow
+        checking whether the entire sweep directory exists.
+        Instead, we'd like overwrite checks on a job-basis.
 
         TODO: The downside of this approach is that this hook is only called after the
         .hydra dir has already been created and potentially overwrote the existing one.
@@ -189,8 +195,8 @@ class CheckOutputDirExistsCallback(Callback):
                     os.remove(path / file)
             else:
                 raise BaseException(
-                    "Output dir already exists! Use +overwrite_output=true to overwrite. "
-                    f".hydra dir at {path / '.hydra'} has already been overwritten!"
+                    "Output dir already exists! Use +overwrite_output=true to overwrite"
+                    f" (.hydra dir at {path / '.hydra'} has already been overwritten!)"
                 )
 
 
