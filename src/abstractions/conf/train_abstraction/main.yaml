@@ -5,7 +5,7 @@ defaults:
 
 # Factor by which to reduce the hidden dimension size compared to full model.
 # Ignored if model is not null.
-size_reduction: 8
+size_reduction: 4
 # This field needs to exist because the model config group relies on it.
 # But actually, the python script will just set the model output dimension
 # automatically, so num_classes is just a dummy field.
