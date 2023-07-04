@@ -8,7 +8,7 @@ import jax
 import jax.numpy as jnp
 from hydra.utils import to_absolute_path
 from loguru import logger
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from torch.utils.data import DataLoader, Dataset
 
 from abstractions import abstraction, data, trainer, utils
@@ -289,7 +289,9 @@ def main(cfg: DictConfig):
     full_model = abstraction.Model(computation=full_computation)
     full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
 
-    cfg.train_data = copy.deepcopy(base_cfg.train_data)
+    # hydra sets the OmegaConf struct flag, preventing adding new keys by default
+    with open_dict(cfg):
+        cfg.train_data = copy.deepcopy(base_cfg.train_data)
     # We want to train only on clean data.
     # TODO: This doesn't feel ideal, since transforms aren't necessarily backdoors
     # in general. Best way to handle this is probably to separate out backdoors
@@ -298,10 +300,10 @@ def main(cfg: DictConfig):
     train_dataset = data.get_dataset(cfg.train_data)
 
     if cfg.val_data == "base":
-        cfg.val_data = copy.deepcopy(base_cfg.val_data)
+        cfg.val_data = {"val": copy.deepcopy(base_cfg.val_data)}
     elif cfg.val_data == "same":
-        cfg.val_data = copy.deepcopy(cfg.train_data)
-        cfg.val_data.train = False
+        cfg.val_data = {"val": copy.deepcopy(cfg.train_data)}
+        cfg.val_data.val.train = False
 
     # First sample, only input without label and info.
     # Also need to add a batch dimension
@@ -314,8 +316,9 @@ def main(cfg: DictConfig):
         "abstractions.computations." + name for name in {"mlp", "cnn"}
     }
 
-    if not cfg.model:
-        cfg.model = base_cfg.model
+    if "model" not in cfg:
+        with open_dict(cfg):
+            cfg.model = base_cfg.model
         if cfg.model._target_ not in KNOWN_ARCHITECTURES:
             raise ValueError(
                 f"Model architecture {cfg.model._target_} not yet supported "
