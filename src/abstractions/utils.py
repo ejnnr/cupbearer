@@ -154,6 +154,10 @@ def original_relative_path(path: str | Path) -> Path:
 
 class CheckOutputDirExistsCallback(Callback):
     def on_run_start(self, config: DictConfig, **kwargs: Any) -> None:
+        if not config.hydra.output_subdir:
+            # For some jobs, like eval_detector, there's no dedicated output dir.
+            # We want to skip checks for these.
+            return
         # This hook isn't really necessary given that on_job_start below takes
         # care of similar things. But on non-multiruns, this hook will be called
         # *before* the .hydra dir is overwritten, so it gives us more safety at
@@ -181,6 +185,10 @@ class CheckOutputDirExistsCallback(Callback):
         .hydra dir has already been created and potentially overwrote the existing one.
         So there's a danger of data loss even with overwrite_output=false.
         """
+        if not config.hydra.output_subdir:
+            # For some jobs, like eval_detector, there's no dedicated output dir.
+            # We want to skip checks for these.
+            return
         path = Path(config.hydra.runtime.output_dir)
         files = os.listdir(path)
         if not set(files) <= {".hydra", f"{config.hydra.job.name}.log"}:
@@ -242,8 +250,16 @@ def get_grid_subdir(override_dirname: str) -> str:
 
 
 def register_resolvers():
-    OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
-    OmegaConf.register_new_resolver("get_grid_subdir", get_grid_subdir)
+    # This function may be called multiple times because it's called in setup_hydra,
+    # which is called outside of main blocks, and so executed when importing script
+    # modules. In that case, OmegaConf raises an error, so we just skip registration.
+    try:
+        OmegaConf.register_new_resolver("escape", lambda x: x.replace("/", "_"))
+        OmegaConf.register_new_resolver("get_grid_subdir", get_grid_subdir)
+    except ValueError as e:
+        # Make sure we only skip the error we expect
+        if "is already registered" not in str(e):
+            raise
 
 
 def setup_hydra(config_name):
@@ -260,3 +276,5 @@ def setup_hydra(config_name):
         "hydra": {"searchpath": custom_path_list},
     }
     cs.store(name=config_name, node=config)
+
+    register_resolvers()
