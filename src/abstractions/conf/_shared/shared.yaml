@@ -24,6 +24,7 @@ hydra:
           # Seed is used in a subfolder
           - seed
           - options
+          - shards
   launcher:
     wait_until_finished: false
     # Slurm arguments:
