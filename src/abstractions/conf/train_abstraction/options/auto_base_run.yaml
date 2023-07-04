@@ -2,9 +2,4 @@
 
 experiment: ???
 attack: ???
-base_seed: ???
-base_run: results/train_base/${get_grid_subdir:${hydra.job.override_dirname}}/${base_seed}
-
-hydra:
-  sweep:
-    subdir: ${get_grid_subdir:${hydra.job.override_dirname}},seed=${base_seed}/${seed}
+base_run: results/train_base/${get_grid_subdir:${hydra:job.override_dirname}}/${seed}

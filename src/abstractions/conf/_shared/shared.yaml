@@ -17,8 +17,13 @@ hydra:
     chdir: true
     config:
       override_dirname:
+        # Don't use a comma since that's also used to separate multiple list entries,
+        # so more annoying to parse
+        item_sep: '|'
         exclude_keys:
+          # Seed is used in a subfolder
           - seed
+          - options
   launcher:
     wait_until_finished: false
     # Slurm arguments:
