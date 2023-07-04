@@ -1,4 +1,4 @@
-from typing import Any, Callable, List, Mapping, Type
+from typing import Any, Callable, List, Mapping, Optional, Type
 
 import jax.numpy as jnp
 import numpy as np
@@ -39,7 +39,7 @@ DATASETS: dict[str, Type[Dataset]] = {
 }
 
 
-def get_dataset(cfg, base_run=None, base_cfg=None):
+def get_dataset(cfg, base_run=None, default_name: Optional[str] = None):
     match cfg:
         case {
             "type": "pytorch",
@@ -50,9 +50,10 @@ def get_dataset(cfg, base_run=None, base_cfg=None):
             return _get_pytorch_dataset(dataset, train, get_transforms(transforms))
 
         case {"type": "pytorch", "train": train, "transforms": transforms}:
-            assert base_cfg is not None, "base_cfg must be provided if dataset is not"
-            dataset = base_cfg.dataset
-            return _get_pytorch_dataset(dataset, train, get_transforms(transforms))
+            assert (
+                default_name is not None
+            ), "default_name must be provided if name is not"
+            return _get_pytorch_dataset(default_name, train, get_transforms(transforms))
 
         case {"type": "adversarial", "path": path}:
             return AdversarialExampleDataset(path)

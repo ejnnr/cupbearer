@@ -1,0 +1,10 @@
+# @package _global_
+
+defaults:
+  - /data@anomalies.backdoor:
+    - pytorch
+    - test
+    - noise_backdoor
+  - _self_
+
+attack: noise_backdoor

@@ -1,5 +1,4 @@
 import copy
-import sys
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -165,10 +164,10 @@ class AbstractionTrainer(trainer.TrainerModule):
         return train_step, eval_step
 
     def on_training_epoch_end(self, epoch_idx, metrics):
-        logger.log("METRICS", self._prettify_metrics(metrics))
+        logger.info(self._prettify_metrics(metrics))
 
     def on_validation_epoch_end(self, epoch_idx: int, metrics, val_loader):
-        logger.log("METRICS", self._prettify_metrics(metrics))
+        logger.info(self._prettify_metrics(metrics))
 
     def _prettify_metrics(self, metrics):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
@@ -261,6 +260,8 @@ class AbstractionDetector(AnomalyDetector):
 CONFIG_NAME = Path(__file__).stem
 utils.setup_hydra(CONFIG_NAME)
 
+KNOWN_ARCHITECTURES = {"abstractions.computations." + name for name in {"mlp", "cnn"}}
+
 
 @hydra.main(
     version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
@@ -312,13 +313,9 @@ def main(cfg: DictConfig):
         {"params": full_params}, example_input, return_activations=True
     )
 
-    KNOWN_ARCHITECTURES = {
-        "abstractions.computations." + name for name in {"mlp", "cnn"}
-    }
-
     if "model" not in cfg:
         with open_dict(cfg):
-            cfg.model = base_cfg.model
+            cfg.model = copy.deepcopy(base_cfg.model)
         if cfg.model._target_ not in KNOWN_ARCHITECTURES:
             raise ValueError(
                 f"Model architecture {cfg.model._target_} not yet supported "
@@ -374,13 +371,4 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.level("METRICS", no=25, icon="📈")
-    logger.add(
-        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
-    )
-    # Default logger for everything else:
-    logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
-    # We want to escape slashes in arguments that get reused as filenames.
-    utils.register_resolvers()
     main()

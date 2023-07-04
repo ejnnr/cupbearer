@@ -1,13 +1,11 @@
 import copy
 from pathlib import Path
-import sys
+
 import hydra
 from loguru import logger
+from omegaconf import DictConfig, OmegaConf, open_dict
 
-from omegaconf import DictConfig, OmegaConf
-
-
-from abstractions import abstraction, data, utils
+from abstractions import abstraction, data, train_abstraction, utils
 from abstractions.computations import get_abstraction_maps
 from abstractions.mahalanobis import MahalanobisDetector
 from abstractions.train_abstraction import (
@@ -15,7 +13,6 @@ from abstractions.train_abstraction import (
     kl_loss_fn,
     single_class_loss_fn,
 )
-
 
 CONFIG_NAME = Path(__file__).stem
 utils.setup_hydra(CONFIG_NAME)
@@ -49,11 +46,28 @@ def main(cfg: DictConfig):
 
     # TODO: this should be more robust. Maybe AnomalyDetector should have a .load()
     # classmethod? (and checkpoints would need to store the type and some hparams)
-    if "model" in detector_cfg:
+    if "size_reduction" in detector_cfg:
         # We're dealing with an AbstractionDetector
+        # TODO: copied from train_abstraction.py, should refactor
+        if "model" not in detector_cfg:
+            with open_dict(detector_cfg):
+                detector_cfg.model = copy.deepcopy(base_cfg.model)
+            if detector_cfg.model._target_ not in train_abstraction.KNOWN_ARCHITECTURES:
+                raise ValueError(
+                    f"Model architecture {detector_cfg.model._target_} "
+                    "not yet supported for size_reduction."
+                )
+            for field in {"hidden_dims", "channels", "dense_dims"}:
+                if field in detector_cfg.model:
+                    detector_cfg.model[field] = [
+                        dim // detector_cfg.size_reduction
+                        for dim in detector_cfg.model[field]
+                    ]
 
         if detector_cfg.single_class:
             detector_cfg.model.output_dim = 2
+        else:
+            detector_cfg.model.output_dim = base_cfg.model.output_dim
 
         computation = hydra.utils.call(detector_cfg.model)
         # TODO: Might want to make this configurable somehow, but it's a reasonable
@@ -65,7 +79,7 @@ def main(cfg: DictConfig):
             model=full_model,
             params=full_params,
             abstraction=model,
-            max_batch_size=cfg.max_batch_size,
+            max_batch_size=base_cfg.max_batch_size,
             output_loss_fn=(
                 single_class_loss_fn if detector_cfg.single_class else kl_loss_fn
             ),
@@ -91,12 +105,14 @@ def main(cfg: DictConfig):
     reference_data.train = False
     # Remove backdoors
     reference_data.transforms = {}
-    clean_dataset = data.get_dataset(reference_data, base_run, base_cfg)
+    clean_dataset = data.get_dataset(reference_data, base_run)
 
     anomalous_datasets = {}
 
     anomalous_datasets = {
-        k: data.get_dataset(dataset_cfg, base_run, base_cfg)
+        k: data.get_dataset(
+            dataset_cfg, base_run, default_name=base_cfg.train_data.name
+        )
         for k, dataset_cfg in cfg.anomalies.items()
     }
 
@@ -108,11 +124,4 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.level("METRICS", no=25, icon="📈")
-    logger.add(
-        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
-    )
-    # Default logger for everything else:
-    logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
     main()

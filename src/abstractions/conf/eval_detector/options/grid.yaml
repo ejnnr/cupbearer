@@ -1,0 +1,9 @@
+# @package _global_
+
+hydra:
+  mode: MULTIRUN
+  sweep:
+    dir: slurm/eval_detector
+  callbacks:
+    job_return_callback:
+      _target_: hydra.experimental.callbacks.LogJobReturnCallback
