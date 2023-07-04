@@ -1,14 +1,12 @@
 from pathlib import Path
-import sys
+
 import hydra
 import jax
 import jax.numpy as jnp
-
-from torch.utils.data import DataLoader
-
-from omegaconf import DictConfig, OmegaConf
 import optax
 from loguru import logger
+from omegaconf import DictConfig, OmegaConf
+from torch.utils.data import DataLoader
 
 from abstractions import abstraction, data, trainer, utils
 from abstractions.logger import DummyLogger, WandbLogger
@@ -52,10 +50,10 @@ class ClassificationTrainer(trainer.TrainerModule):
         return train_step, eval_step
 
     def on_training_epoch_end(self, epoch_idx, metrics):
-        logger.log("METRICS", self._prettify_metrics(metrics))
+        logger.info(self._prettify_metrics(metrics))
 
     def on_validation_epoch_end(self, epoch_idx: int, metrics, val_loader):
-        logger.log("METRICS", self._prettify_metrics(metrics))
+        logger.info(self._prettify_metrics(metrics))
 
     def _prettify_metrics(self, metrics):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
@@ -129,13 +127,4 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.level("METRICS", no=25, icon="📈")
-    logger.add(
-        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
-    )
-    # Default logger for everything else:
-    logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
-    # We want to escape slashes in arguments that get reused as filenames.
-    utils.register_resolvers()
     main()

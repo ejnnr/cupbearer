@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 from functools import partial
 from pathlib import Path
 
@@ -111,7 +110,7 @@ def attack(cfg: DictConfig):
         new_logits = model.apply({"params": params}, adv_inputs)
         one_hot = jax.nn.one_hot(labels, new_logits.shape[-1])
         new_loss = optax.softmax_cross_entropy(logits=new_logits, labels=one_hot).mean()
-        logger.log("METRICS", f"original loss={original_loss}, new loss={new_loss}")
+        logger.info(f"original loss={original_loss}, new loss={new_loss}")
         mean_original_loss = (i * mean_original_loss + original_loss) / (i + 1)
         mean_new_loss += (i * mean_new_loss + new_loss) / (i + 1)
 
@@ -143,11 +142,4 @@ def attack(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.level("METRICS", no=25, icon="📈")
-    logger.add(
-        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
-    )
-    # Default logger for everything else:
-    logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
     attack()

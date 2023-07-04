@@ -1,4 +1,3 @@
-import sys
 from pathlib import Path
 from typing import Optional
 
@@ -6,7 +5,6 @@ import hydra
 import jax
 import jax.numpy as jnp
 from hydra.utils import to_absolute_path
-from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
@@ -203,13 +201,4 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
-    logger.remove()
-    logger.level("METRICS", no=25, icon="📈")
-    logger.add(
-        sys.stdout, format="{level.icon} <level>{message}</level>", level="METRICS"
-    )
-    # Default logger for everything else:
-    logger.add(sys.stdout, filter=lambda record: record["level"].name != "METRICS")
-    # We want to escape slashes in arguments that get reused as filenames.
-    utils.register_resolvers()
     main()
