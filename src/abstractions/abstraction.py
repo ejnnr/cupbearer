@@ -8,22 +8,24 @@
 # All of this is encapsulated in a flax module.
 
 from typing import List
+
 import flax.linen as nn
 import jax
-from iceberg import Drawable, Bounds, Colors, Color, Corner, PathStyle
+import numpy as np
+from iceberg import Bounds, Color, Colors, Corner, Drawable, PathStyle
+from iceberg.arrows import Arrow
 from iceberg.primitives import (
     Arrange,
-    Ellipse,
-    Line,
     Compose,
-    Image,
-    Grid,
     Directions,
+    Ellipse,
+    Grid,
+    Image,
+    Line,
 )
-from iceberg.arrows import Arrow
-import numpy as np
-from abstractions.computations import Computation, Orientation, Step
+
 from abstractions import data
+from abstractions.computations import Computation, Orientation, Step
 
 
 def make_image_grid(inputs):
@@ -37,6 +39,7 @@ def make_image_grid(inputs):
     # Add alpha channel
     inputs = np.concatenate([inputs, np.ones_like(inputs[..., :1])], axis=-1)
 
+    assert np.all(inputs >= 0) and np.all(inputs <= 1)
     inputs = (inputs * 255).astype(np.uint8)
 
     images = [Image(image=image) for image in inputs]

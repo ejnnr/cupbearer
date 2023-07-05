@@ -1,5 +1,8 @@
+import copy
 import json
 import os
+import subprocess
+import sys
 from functools import partial
 from pathlib import Path
 
@@ -25,11 +28,20 @@ class AdversarialExampleDataset(Dataset):
             logger.info(
                 "Adversarial examples not found, running attack with default settings"
             )
-            cfg = hydra.compose(
-                config_name="adversarial_examples",
-                overrides=[f"base_run={base_run}"],
+            # Calling the hydra.main function directly within an existing hydra job
+            # is pretty fiddly, so we just run it as a suprocess.
+            subprocess.run(
+                [
+                    "python",
+                    "-m",
+                    "abstractions.adversarial_examples",
+                    # Need to quote base_run because it might contain commas
+                    f"base_run='{base_run}'",
+                ],
+                stdout=sys.stdout,
+                stderr=sys.stderr,
+                check=True,
             )
-            attack(cfg)
             self.examples = utils.load(base_run / "adv_examples")
         if num_examples is None:
             num_examples = len(self.examples)
@@ -87,14 +99,19 @@ def attack(cfg: DictConfig):
     model = abstraction.Model(computation=computation)
     params = utils.load(base_run / "model")["params"]
 
-    dataset = data.get_dataset(base_cfg.train_data)
-    dataloader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=False)
+    data_cfg = copy.deepcopy(base_cfg.train_data)
+    data_cfg.train = False
+    dataset = data.get_dataset(data_cfg)
+    dataloader = DataLoader(
+        dataset, batch_size=cfg.batch_size, shuffle=False, collate_fn=data.numpy_collate
+    )
 
     adv_examples = []
     num_examples = 0
 
     mean_original_loss = 0
     mean_new_loss = 0
+    mean_new_accuracy = 0
 
     for i, batch in enumerate(dataloader):
         inputs, labels, infos = batch
@@ -104,26 +121,34 @@ def attack(cfg: DictConfig):
             labels=labels,
             eps=cfg.eps,
         )
+        # FGSM might have given us pixel values that don't actually correspond to colors
+        adv_inputs = jnp.clip(adv_inputs, 0, 1)
         adv_examples.append(adv_inputs)
         num_examples += len(adv_inputs)
 
         new_logits = model.apply({"params": params}, adv_inputs)
         one_hot = jax.nn.one_hot(labels, new_logits.shape[-1])
+        new_accuracy = jnp.mean(jnp.argmax(new_logits, -1) == labels)
         new_loss = optax.softmax_cross_entropy(logits=new_logits, labels=one_hot).mean()
         logger.info(f"original loss={original_loss}, new loss={new_loss}")
         mean_original_loss = (i * mean_original_loss + original_loss) / (i + 1)
-        mean_new_loss += (i * mean_new_loss + new_loss) / (i + 1)
+        mean_new_loss = (i * mean_new_loss + new_loss) / (i + 1)
+        mean_new_accuracy = (i * mean_new_accuracy + new_accuracy) / (i + 1)
 
-        if num_examples >= cfg.num_examples:
+        if cfg.max_examples and num_examples >= cfg.max_examples:
             break
+
+    if mean_new_accuracy > 0.1:
+        raise RuntimeError(f"Attack failed, new accuracy is {mean_new_accuracy} > 0.1.")
 
     adv_examples = jnp.concatenate(adv_examples, axis=0)
     utils.save(adv_examples, base_run / "adv_examples")
     with open(base_run / "adv_examples.json", "w") as f:
         json.dump(
             {
-                "original_loss": mean_original_loss,
-                "new_loss": mean_new_loss,
+                "original_loss": mean_original_loss.item(),
+                "new_loss": mean_new_loss.item(),
+                "new_accuracy": mean_new_accuracy.item(),
                 "eps": cfg.eps,
                 "num_examples": num_examples,
             },

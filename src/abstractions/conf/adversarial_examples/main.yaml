@@ -3,12 +3,17 @@ defaults:
   - override hydra/job_logging: disabled
 
 batch_size: 1024
-num_examples: 4096
+max_examples: null
 base_run: ???
 # 8/255
 eps: 0.031372549
 
 hydra:
+  job:
+    chdir: false
   output_subdir: null
   run:
     dir: .
+  sweep:
+    dir: .
+    subdir: .
