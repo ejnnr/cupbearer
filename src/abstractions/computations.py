@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, List, Mapping, Sequence
-import flax.linen as nn
 from enum import Enum
-from iceberg import Drawable, Bounds, Colors, FontStyle
-from iceberg.primitives import Rectangle, Arrange, SimpleText
+from typing import Any, List, Mapping, Sequence
+
+import flax.linen as nn
 import jax
+from iceberg import Bounds, Colors, Drawable, FontStyle
+from iceberg.primitives import Arrange, Rectangle, SimpleText
 
 
 class Orientation(Enum):
@@ -25,7 +26,7 @@ class Step(ABC):
         text = SimpleText(
             text=self.name,
             font_style=FontStyle(
-                family="Monaco",
+                family="DejaVu Sans Mono",
                 size=16,
                 color=Colors.BLACK,
             ),
@@ -35,7 +36,7 @@ class Step(ABC):
             info_text = SimpleText(
                 text=info,
                 font_style=FontStyle(
-                    family="Monaco",
+                    family="DejaVu Sans Mono",
                     size=16,
                     color=Colors.BLACK,
                 ),
