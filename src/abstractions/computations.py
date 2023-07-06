@@ -14,6 +14,9 @@ class Orientation(Enum):
     VERTICAL = 1
 
 
+FONTS = ["Monaco", "DejaVu Sans Mono"]
+
+
 class Step(ABC):
     name: str = ""
 
@@ -23,20 +26,31 @@ class Step(ABC):
 
     def get_drawable(self, orientation=Orientation.HORIZONTAL) -> Drawable:
         box = Rectangle(Bounds(size=(100, 100)), border_color=Colors.BLACK)
-        text = SimpleText(
-            text=self.name,
-            font_style=FontStyle(
-                family="DejaVu Sans Mono",
-                size=16,
-                color=Colors.BLACK,
-            ),
-        )
+        text = None
+        for font in FONTS:
+            try:
+                text = SimpleText(
+                    text=self.name,
+                    font_style=FontStyle(
+                        family=font,
+                        size=16,
+                        color=Colors.BLACK,
+                    ),
+                )
+                break
+            except ValueError as e:
+                if not "Invalid font family" in str(e):
+                    raise
+        if text is None:
+            raise ValueError(f"Couldn't find a valid font, tried {FONTS}")
+
         info = self._info()
         if info is not None:
             info_text = SimpleText(
                 text=info,
                 font_style=FontStyle(
-                    family="DejaVu Sans Mono",
+                    # This will still be the valid font we found earlier
+                    family=font,  # type: ignore
                     size=16,
                     color=Colors.BLACK,
                 ),
