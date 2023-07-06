@@ -6,7 +6,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from abstractions import abstraction, data, train_abstraction, utils
-from abstractions.computations import get_abstraction_maps
+from abstractions.computations import get_tau_maps
 from abstractions.mahalanobis import MahalanobisDetector
 from abstractions.train_abstraction import (
     AbstractionDetector,
@@ -72,8 +72,8 @@ def main(cfg: DictConfig):
         computation = hydra.utils.call(detector_cfg.model)
         # TODO: Might want to make this configurable somehow, but it's a reasonable
         # default for now
-        maps = get_abstraction_maps(detector_cfg.model)
-        model = abstraction.Abstraction(computation=computation, abstraction_maps=maps)
+        maps = get_tau_maps(detector_cfg.model)
+        model = abstraction.Abstraction(computation=computation, tau_maps=maps)
 
         detector = AbstractionDetector(
             model=full_model,

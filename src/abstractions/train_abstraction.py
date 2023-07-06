@@ -13,7 +13,7 @@ from torch.utils.data import DataLoader, Dataset
 from abstractions import abstraction, data, trainer, utils
 from abstractions.abstraction import Abstraction, Model
 from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import get_abstraction_maps
+from abstractions.computations import get_tau_maps
 from abstractions.logger import DummyLogger, WandbLogger
 
 
@@ -335,8 +335,8 @@ def main(cfg: DictConfig):
     computation = hydra.utils.call(cfg.model)
     # TODO: Might want to make this configurable somehow, but it's a reasonable
     # default for now
-    maps = get_abstraction_maps(cfg.model)
-    model = abstraction.Abstraction(computation=computation, abstraction_maps=maps)
+    maps = get_tau_maps(cfg.model)
+    model = abstraction.Abstraction(computation=computation, tau_maps=maps)
 
     trainer = AbstractionTrainer(
         model=model,

@@ -128,13 +128,12 @@ class Model(nn.Module):
 
 class Abstraction(nn.Module):
     computation: Computation
-    abstraction_maps: List[Step]
+    tau_maps: List[Step]
 
     @nn.compact
     def __call__(self, activations: List[jax.Array], train: bool = True):
         abstractions = [
-            abstraction_map(x)
-            for abstraction_map, x in zip(self.abstraction_maps, activations)
+            tau_map(x) for tau_map, x in zip(self.tau_maps, activations)
         ]
 
         input_map, *main_maps, output_map = self.computation
@@ -164,8 +163,7 @@ class Abstraction(nn.Module):
         )
 
         tau_maps = [
-            map.get_drawable(orientation=Orientation.VERTICAL)
-            for map in self.abstraction_maps
+            map.get_drawable(orientation=Orientation.VERTICAL) for map in self.tau_maps
         ]
 
         lines = []

@@ -93,7 +93,7 @@ class Conv(Step):
         return f"d={self.output_dim}"
 
 
-def get_abstraction_maps(cfg: Mapping[str, Any]) -> list[Step]:
+def get_tau_maps(cfg: Mapping[str, Any]) -> list[Step]:
     """Get a list of abstraction maps from a model config."""
     match cfg:
         case {
