@@ -7,7 +7,7 @@
 # representation to the output of the computation.
 # All of this is encapsulated in a flax module.
 
-from typing import List
+from typing import Callable, List
 
 import flax.linen as nn
 import jax
@@ -126,25 +126,46 @@ class Model(nn.Module):
         return draw_computation(self.computation, return_nodes, layer_scores, inputs)
 
 
+class Wrapper(nn.Module):
+    """A Module that wraps a function.
+
+    The intended use is grouping multiple submodules under a single name
+    in Modules that use nn.compact. See the Abstraction class for an example.
+    """
+
+    func: Callable
+
+    @nn.compact
+    def __call__(self, *args, **kwargs):
+        return self.func(*args, **kwargs)
+
+
 class Abstraction(nn.Module):
     computation: Computation
     tau_maps: List[Step]
 
     @nn.compact
     def __call__(self, activations: List[jax.Array], train: bool = True):
-        abstractions = [
-            tau_map(x) for tau_map, x in zip(self.tau_maps, activations)
-        ]
+        assert len(activations) == len(self.tau_maps)
+        # This is just a hack to put the parameters of all the tau maps
+        # under a single "tau_maps" key in the params dict.
+        abstractions = Wrapper(
+            name="tau_maps",  # type: ignore
+            func=lambda activations: [
+                tau_map(x) for tau_map, x in zip(self.tau_maps, activations)
+            ],
+        )(activations)
 
-        input_map, *main_maps, output_map = self.computation
-        *main_abstractions, output = abstractions
-        predicted_abstractions = [
-            step(x) for step, x in zip(main_maps, main_abstractions)
-        ]
+        input_map, *maps = self.computation
+        assert len(maps) == len(abstractions)
+        predicted_abstractions = Wrapper(
+            name="computational_steps",  # type: ignore
+            func=lambda abstractions: [step(x) for step, x in zip(maps, abstractions)],
+        )(abstractions)
 
-        predicted_output = output_map(output)
+        predicted_output = predicted_abstractions[-1]
 
-        return abstractions, predicted_abstractions, predicted_output
+        return abstractions, predicted_abstractions[:-1], predicted_output
 
     def get_drawable(
         self, full_model: Model, layer_scores=None, inputs=None
