@@ -1,3 +1,4 @@
+from contextlib import contextmanager
 import json
 from abc import ABC, abstractmethod
 from pathlib import Path
@@ -20,6 +21,8 @@ class AnomalyDetector(ABC):
     def __init__(self, model: Model, params, max_batch_size: int = 4096):
         self.model = model
         self.params = params
+        # For storing the original detector variables when finetuning
+        self._original_variables = None
         self.max_batch_size = max_batch_size
 
         self.forward_fn = jax.jit(
@@ -40,6 +43,50 @@ class AnomalyDetector(ABC):
     @abstractmethod
     def train(self, dataset):
         """Train the anomaly detector with the given dataset as "normal" data."""
+
+    @contextmanager
+    def adversarial(self, normal_dataset, new_dataset, **kwargs):
+        """Tune the anomaly detector to try to flag the new data as anomalous.
+
+        The finetuned parameters will be stored in this detector alongside the original
+        ones. Within the context manager block, the detector will use the finetuned
+        parameters (e.g. when calling `eval`). At the end of the block, the finetuned
+        parameters will be removed. To store the finetuned parameters permanently,
+        you can access the value the context manager yields.
+
+        Might not be available for all anomaly detectors.
+
+        Example:
+        ```
+        with detector.adversarial(normal_dataset, new_dataset) as finetuned_params:
+            detector.eval(normal_dataset, new_dataset) # uses finetuned params
+            scores = detector.scores(some_other_dataset)
+            utils.save(finetuned_params, "finetuned_params")
+
+        detector.eval(normal_dataset, new_dataset) # uses original params
+        ```
+
+        Args:
+            normal_dataset: A dataset of normal inputs, likely the same used to train
+                the anomaly detector.
+            new_dataset: A dataset of inputs to be tested, should either all be normal
+                or all be anomalous.
+            **kwargs: Additional arguments to pass to the finetuning function.
+        """
+        self._original_vars = self._get_trained_variables()
+        finetuned_vars = self._finetune(normal_dataset, new_dataset, **kwargs)
+        self._set_trained_variables(finetuned_vars)
+        yield finetuned_vars
+        self._set_trained_variables(self._original_vars)
+        self._original_vars = None
+
+    def _finetune(self, normal_dataset, new_dataset) -> dict:
+        """Finetune the anomaly detector to try to flag the new data as anomalous.
+
+        Should return variables for the detector that can be passed to
+        `_set_trained_variables`.
+        """
+        raise NotImplementedError
 
     def eval(
         self,

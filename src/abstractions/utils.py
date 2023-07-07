@@ -10,6 +10,7 @@ from hydra import TaskFunction
 from hydra.core.config_store import ConfigStore
 from hydra.experimental.callback import Callback
 from hydra.utils import get_original_cwd
+import jax
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import Dataset
@@ -278,3 +279,11 @@ def setup_hydra(config_name):
     cs.store(name=config_name, node=config)
 
     register_resolvers()
+
+
+def negative(tree):
+    return jax.tree_map(lambda x: -x, tree)
+
+
+def weighted_sum(tree1, tree2, alpha):
+    return jax.tree_map(lambda x, y: alpha * x + (1 - alpha) * y, tree1, tree2)

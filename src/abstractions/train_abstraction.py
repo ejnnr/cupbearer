@@ -8,13 +8,16 @@ import jax.numpy as jnp
 from hydra.utils import to_absolute_path
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf, open_dict
+import optax
 from torch.utils.data import DataLoader, Dataset
+from flax.core.frozen_dict import FrozenDict
 
 from abstractions import abstraction, data, trainer, utils
 from abstractions.abstraction import Abstraction, Model
 from abstractions.anomaly_detector import AnomalyDetector
 from abstractions.computations import get_tau_maps
 from abstractions.logger import DummyLogger, WandbLogger
+from abstractions.utils import SizedIterable
 
 
 def kl_loss_fn(predicted_logits, logits):
@@ -173,6 +176,102 @@ class AbstractionTrainer(trainer.TrainerModule):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
+class AbstractionFinetuner(trainer.TrainerModule):
+    def __init__(
+        self,
+        output_loss_fn: Callable = kl_loss_fn,
+        normal_weight: float = 0.5,
+        clip: bool = True,
+        **kwargs,
+    ):
+        super().__init__(
+            **kwargs,
+        )
+        self.output_loss_fn = output_loss_fn
+        self.normal_weight = normal_weight
+        self.clip = clip
+
+    def on_training_start(self, train_loader: SizedIterable):
+        if self.clip:
+            loss = 0
+            for batch in train_loader:
+                new_loss, _ = compute_losses(
+                    self.state.params,
+                    self.state,
+                    batch["normal"],
+                    output_loss_fn=self.output_loss_fn,
+                )
+                loss += new_loss
+            loss /= len(train_loader)
+            self.initial_loss = loss
+            logger.info(f"Clipping normal loss to {loss:.4f}")
+
+    def create_functions(self):
+        def train_step(state, batch):
+            normal_batch, new_batch = batch["normal"], batch["new"]
+
+            def loss_fn(params, batch, normal):
+                losses = compute_losses(
+                    params, state, batch, output_loss_fn=self.output_loss_fn
+                )
+                if self.clip and normal:
+                    # We don't want to incentivize getting the loss below the initial
+                    # loss, just want to make sure it doesn't exceed that
+                    losses = jax.tree_map(
+                        lambda loss: jnp.clip(loss, a_min=self.initial_loss), losses
+                    )
+                return losses
+
+            (normal_loss, _), normal_grads = jax.value_and_grad(loss_fn, has_aux=True)(
+                state.params, normal_batch, normal=True
+            )
+            (new_loss, _), new_grads = jax.value_and_grad(loss_fn, has_aux=True)(
+                state.params, new_batch, normal=False
+            )
+
+            assert (
+                set(normal_grads.keys())
+                == set(new_grads.keys())
+                == {"tau_maps", "computational_steps"}
+            )
+
+            # For the computational steps, we want to minimize both losses, so just
+            # add the normal gradients. For the tau maps, we want to maximize the loss
+            # on new data, so we subtract the new gradients instead.
+            grads = FrozenDict(
+                {
+                    "computational_steps": utils.weighted_sum(
+                        normal_grads["computational_steps"],
+                        new_grads["computational_steps"],
+                        self.normal_weight,
+                    ),
+                    "tau_maps": utils.weighted_sum(
+                        normal_grads["tau_maps"],
+                        utils.negative(new_grads["tau_maps"]),
+                        self.normal_weight,
+                    ),
+                }
+            )
+
+            state = state.apply_gradients(grads=grads)
+            metrics = {
+                "normal_loss": normal_loss,
+                "new_loss": new_loss,
+            }
+            return state, metrics
+
+        def eval_step(state, batch):
+            return {}
+
+        return train_step, eval_step
+
+    def on_training_epoch_end(self, epoch_idx, metrics):
+        logger.info(self._prettify_metrics(metrics))
+
+    def _prettify_metrics(self, metrics):
+        return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
+
+
 class AbstractionDetector(AnomalyDetector):
     def __init__(
         self,
@@ -223,6 +322,44 @@ class AbstractionDetector(AnomalyDetector):
         self.abstraction_state = trainer.state
         self.output_loss_fn = trainer.output_loss_fn
 
+    def _finetune(
+        self,
+        normal_dataset,
+        new_dataset,
+        new_batch_size: int = 128,
+        normal_batch_size: int = 128,
+        num_epochs: int = 1,
+        normal_weight: float = 0.5,
+        clip: bool = True,
+    ) -> dict:
+        finetuner = AbstractionFinetuner(
+            model=self.abstraction,
+            optimizer=optax.adam(learning_rate=1e-3),
+            variables=self._get_trained_variables(),
+            print_tabulate=False,
+            normal_weight=normal_weight,
+            clip=clip,
+        )
+
+        normal_loader = DataLoader(
+            dataset=normal_dataset,
+            batch_size=normal_batch_size,
+            collate_fn=abstraction.abstraction_collate(self.model, self.params),
+        )
+        new_loader = DataLoader(
+            dataset=new_dataset,
+            batch_size=new_batch_size,
+            collate_fn=abstraction.abstraction_collate(self.model, self.params),
+        )
+
+        finetuner.train_model(
+            {"normal": normal_loader, "new": new_loader},
+            val_loaders={},
+            num_epochs=num_epochs,
+        )
+
+        return self._state_to_dict(finetuner.state)
+
     def layerwise_scores(self, batch):
         assert self.abstraction_state is not None
         return compute_losses(
@@ -242,10 +379,7 @@ class AbstractionDetector(AnomalyDetector):
 
     def _get_trained_variables(self):
         assert self.abstraction_state is not None
-        return {
-            "params": self.abstraction_state.params,
-            "batch_stats": self.abstraction_state.batch_stats,
-        }
+        return self._state_to_dict(self.abstraction_state)
 
     def _set_trained_variables(self, variables):
         assert self.abstraction is not None
@@ -255,6 +389,12 @@ class AbstractionDetector(AnomalyDetector):
             params=variables["params"],
             batch_stats=variables["batch_stats"],
         )
+
+    def _state_to_dict(self, state: trainer.TrainState | trainer.InferenceState):
+        return {
+            "params": state.params,
+            "batch_stats": state.batch_stats,
+        }
 
 
 CONFIG_NAME = Path(__file__).stem

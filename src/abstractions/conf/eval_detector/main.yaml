@@ -12,6 +12,12 @@ defaults:
 # Path to log dir of the AnomalyDetector run
 detector: ???
 debug: false
+adversarial: false
+num_epochs: 1
+normal_weight: 0.5
+batch_size: 128
+normal_batch_size: ${batch_size}
+clip: true
 
 hydra:
   job:

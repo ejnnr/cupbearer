@@ -49,16 +49,33 @@ class InferenceState(struct.PyTreeNode):
     rng: Any = None
 
 
+class MultiLoader:
+    """Combines a dictionary of dataloaders into a single one that yields dicts."""
+
+    def __init__(self, loaders: dict[str, SizedIterable]):
+        self.loaders = loaders
+        self.len = min(len(v) for v in loaders.values())
+
+    def __len__(self):
+        return self.len
+
+    def __iter__(self):
+        for values in zip(*self.loaders.values()):
+            yield {k: v for k, v in zip(self.loaders.keys(), values)}
+
+
 class TrainerModule(ABC):
     def __init__(
         self,
         model: nn.Module,
         optimizer: Optional[optax.GradientTransformation],
-        example_input: Any,
-        loggers: Iterable[Logger],
-        log_dir: str = "logs",
+        example_input: Any = None,
+        variables=None,
+        loggers: Optional[Iterable[Logger]] = None,
+        log_dir: Optional[str] = None,
         seed: int = 42,
         enable_progress_bar: bool = True,
+        print_tabulate: bool = True,
         debug: bool = False,
         check_val_every_n_epoch: int = 1,
         **kwargs,
@@ -80,6 +97,13 @@ class TrainerModule(ABC):
             on the validation set.
         """
         super().__init__()
+
+        if variables is None and example_input is None:
+            raise ValueError("Either variables or example_input must be given.")
+
+        if loggers is None:
+            loggers = []
+
         self.optimizer = optimizer
         self.enable_progress_bar = enable_progress_bar
         self.debug = debug
@@ -87,7 +111,7 @@ class TrainerModule(ABC):
         self.check_val_every_n_epoch = check_val_every_n_epoch
         self.example_input = example_input
         self.loggers = loggers
-        self.log_dir = Path(log_dir)
+        self.log_dir = None if log_dir is None else Path(log_dir)
         self.model = model
         # Set of hyperparameters to save
         self.config = {
@@ -98,15 +122,16 @@ class TrainerModule(ABC):
             # We want the actual absolute path, e.g. if log_dir is ".",
             # we want to resolve to the CWD created by Hydra.
             # That makes it easy to load the model later.
-            "log_dir": str(self.log_dir.absolute()),
+            "log_dir": None if self.log_dir is None else str(self.log_dir.absolute()),
         }
         self.config.update(kwargs)
-        self.print_tabulate()
+        if print_tabulate:
+            self.print_tabulate()
         # Init trainer parts
         self.create_jitted_functions()
-        self.init_model(optimizer)
+        self.init_model(optimizer, variables)
 
-    def init_model(self, optimizer: Optional[optax.GradientTransformation]):
+    def init_model(self, optimizer: Optional[optax.GradientTransformation], variables):
         """
         Creates an initial training state with newly generated network parameters.
 
@@ -115,9 +140,10 @@ class TrainerModule(ABC):
         """
         # Prepare PRNG and input
         model_rng = random.PRNGKey(self.seed)
-        model_rng, init_rng = random.split(model_rng)
-        # Run model initialization
-        variables = self.run_model_init(init_rng)
+        if variables is None:
+            model_rng, init_rng = random.split(model_rng)
+            # Run model initialization
+            variables = self.run_model_init(init_rng)
         # Create default state
         self.init_state(variables, model_rng, optimizer)
 
@@ -141,7 +167,7 @@ class TrainerModule(ABC):
                 tx=tx,
             )
 
-    def run_model_init(self, init_rng: Any) -> Dict:
+    def run_model_init(self, init_rng: Any) -> Mapping:
         """
         The model initialization call
 
@@ -208,7 +234,7 @@ class TrainerModule(ABC):
 
     def train_model(
         self,
-        train_loader: SizedIterable,
+        train_loader: SizedIterable | dict[str, SizedIterable],
         val_loaders: Mapping[str, SizedIterable],
         test_loaders: Optional[Mapping[str, SizedIterable]] = None,
         num_epochs: int = 500,
@@ -232,9 +258,11 @@ class TrainerModule(ABC):
         """
         if self.state.tx is None:
             raise ValueError("No optimizer was given. Please specify an optimizer.")
+        if isinstance(train_loader, dict):
+            train_loader = MultiLoader(train_loader)
         # Prepare training loop
         metrics = {}
-        self.on_training_start()
+        self.on_training_start(train_loader)
         for epoch_idx in self.pbar(range(1, num_epochs + 1), desc="Epochs"):
             train_metrics = self.train_epoch(train_loader, max_steps=max_steps)
             metrics[epoch_idx] = train_metrics
@@ -252,11 +280,14 @@ class TrainerModule(ABC):
             self.log_metrics(test_metrics)
             metrics["test"] = test_metrics
 
-        with open(self.log_dir / "metrics.json", "w") as f:
-            json.dump(metrics, f, indent=4)
+        if self.log_dir is not None:
+            with open(self.log_dir / "metrics.json", "w") as f:
+                json.dump(metrics, f, indent=4)
 
     def train_epoch(
-        self, train_loader: SizedIterable, max_steps: Optional[int]
+        self,
+        train_loader: SizedIterable,
+        max_steps: Optional[int],
     ) -> Dict[str, Any]:
         """
         Trains a model for one epoch.
@@ -343,7 +374,7 @@ class TrainerModule(ABC):
         for _logger in self.loggers:
             _logger.close()
 
-    def on_training_start(self):
+    def on_training_start(self, train_loader: SizedIterable):
         """
         Method called before training is started. Can be used for additional
         initialization operations etc.
@@ -386,6 +417,8 @@ class TrainerModule(ABC):
         support the training to be continued from a checkpoint, this method can be
         extended to include the optimizer state as well.
         """
+        if self.log_dir is None:
+            raise ValueError("Unable to save model, no logging directory was given.")
         # Save hyperparameters
         if os.path.isfile(self.log_dir / "hparams.json"):
             with open(self.log_dir / "hparams.json", "r") as f:
@@ -410,6 +443,8 @@ class TrainerModule(ABC):
         """
         Loads model parameters and batch statistics from the logging directory.
         """
+        if self.log_dir is None:
+            raise ValueError("Unable to load model, no logging directory was given.")
         state_dict = load(self.log_dir / "model")
         self.init_state(variables=state_dict, rng=self.state.rng, tx=self.state.tx)
 

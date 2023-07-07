@@ -107,6 +107,32 @@ def main(cfg: DictConfig):
     reference_data.transforms = {}
     clean_dataset = data.get_dataset(reference_data, base_run)
 
+    if cfg.adversarial:
+        assert len(cfg.anomalies) == 1
+        new_dataset = data.get_dataset(
+            next(iter(cfg.anomalies.values())),
+            base_run,
+            default_name=base_cfg.train_data.name,
+        )
+
+        with detector.adversarial(
+            clean_dataset,
+            new_dataset,
+            new_batch_size=cfg.batch_size,
+            normal_batch_size=cfg.normal_batch_size,
+            num_epochs=cfg.num_epochs,
+            normal_weight=cfg.normal_weight,
+            clip=cfg.clip,
+        ) as finetuned_vars:
+            detector.eval(
+                normal_dataset=clean_dataset,
+                anomalous_datasets={"adversarial": new_dataset},
+                save_path=detector_run,
+            )
+            utils.save(finetuned_vars, detector_run / "finetuned_vars", overwrite=True)
+
+            return
+
     anomalous_datasets = {}
 
     anomalous_datasets = {

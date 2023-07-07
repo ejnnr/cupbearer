@@ -3,7 +3,7 @@ from typing import Any, Callable, List, Mapping, Optional, Type
 import jax.numpy as jnp
 import numpy as np
 from hydra.utils import to_absolute_path
-from torch.utils.data import Dataset
+from torch.utils.data import Dataset, Subset
 from torchvision.datasets import CIFAR10, MNIST
 from torchvision.transforms import Compose
 
@@ -43,27 +43,35 @@ def get_dataset(cfg, base_run=None, default_name: Optional[str] = None):
     match cfg:
         case {
             "type": "pytorch",
-            "name": dataset,
+            "name": name,
             "train": train,
             "transforms": transforms,
+            **kwargs,
         }:
-            return _get_pytorch_dataset(dataset, train, get_transforms(transforms))
+            dataset = _get_pytorch_dataset(name, train, get_transforms(transforms))
 
-        case {"type": "pytorch", "train": train, "transforms": transforms}:
+        case {"type": "pytorch", "train": train, "transforms": transforms, **kwargs}:
             assert (
                 default_name is not None
             ), "default_name must be provided if name is not"
-            return _get_pytorch_dataset(default_name, train, get_transforms(transforms))
+            dataset = _get_pytorch_dataset(
+                default_name, train, get_transforms(transforms)
+            )
 
-        case {"type": "adversarial", "path": path}:
-            return AdversarialExampleDataset(path)
+        case {"type": "adversarial", "path": path, **kwargs}:
+            dataset = AdversarialExampleDataset(path)
 
-        case {"type": "adversarial"}:
+        case {"type": "adversarial", **kwargs}:
             assert base_run is not None, "base_run must be provided if path is not"
-            return AdversarialExampleDataset(base_run)
+            dataset = AdversarialExampleDataset(base_run)
 
         case _:
             raise ValueError(f"Bad dataset config: {cfg}")
+
+    if "max_size" in cfg:
+        dataset = Subset(dataset, range(cfg.max_size))
+
+    return dataset
 
 
 def _get_pytorch_dataset(dataset: str, train: bool = True, transforms=None) -> Dataset:
