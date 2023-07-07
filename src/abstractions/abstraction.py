@@ -261,7 +261,10 @@ def abstraction_collate(model: nn.Module, params, return_original_batch=False):
 
     def mycollate(batch):
         collated = data.numpy_collate(batch)
-        inputs = collated[0]
+        if isinstance(collated, (tuple, list)):
+            inputs = collated[0]
+        else:
+            inputs = collated
         logits, activations = forward_fn(inputs)
         if return_original_batch:
             return [logits, activations, collated]
