@@ -1,6 +1,6 @@
-from contextlib import contextmanager
 import json
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
@@ -121,7 +121,7 @@ class AnomalyDetector(ABC):
         normal_scores = jnp.concatenate(normal_scores)
 
         anomalous_scores = {}
-        metrics = {"AUC_ROC": {}}
+        metrics = {"AUC_ROC": {}, "AP": {}}
         assert 0 < histogram_percentile <= 100
         histogram_percentile += 0.5 * (100 - histogram_percentile)
         lower_lim = jnp.percentile(normal_scores, 100 - histogram_percentile).item()
@@ -141,8 +141,14 @@ class AnomalyDetector(ABC):
                 y_true=true_labels,
                 y_score=all_scores,
             )
+            ap = sklearn.metrics.average_precision_score(
+                y_true=true_labels,
+                y_score=all_scores,
+            )
             logger.info(f"AUC_ROC ({k}): {auc_roc:.4f}")
+            logger.info(f"AP ({k}): {ap:.4f}")
             metrics["AUC_ROC"][k] = auc_roc
+            metrics["AP"][k] = ap
 
             # We use the most anomalous scores to compute the cutoff, to make sure
             # all score distributions are visible in the histogram
