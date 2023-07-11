@@ -15,6 +15,7 @@ from typing import (
     Optional,
     Tuple,
 )
+import flax
 
 # JAX/Flax
 import jax
@@ -69,8 +70,8 @@ class TrainerModule(ABC):
         self,
         model: nn.Module,
         optimizer: Optional[optax.GradientTransformation],
-        example_input: Any = None,
-        variables=None,
+        example_input: Any,
+        override_variables=None,
         loggers: Optional[Iterable[Logger]] = None,
         log_dir: Optional[str] = None,
         seed: int = 42,
@@ -97,9 +98,6 @@ class TrainerModule(ABC):
             on the validation set.
         """
         super().__init__()
-
-        if variables is None and example_input is None:
-            raise ValueError("Either variables or example_input must be given.")
 
         if loggers is None:
             loggers = []
@@ -129,9 +127,11 @@ class TrainerModule(ABC):
             self.print_tabulate()
         # Init trainer parts
         self.create_jitted_functions()
-        self.init_model(optimizer, variables)
+        self.init_model(optimizer, override_variables)
 
-    def init_model(self, optimizer: Optional[optax.GradientTransformation], variables):
+    def init_model(
+        self, optimizer: Optional[optax.GradientTransformation], override_variables
+    ):
         """
         Creates an initial training state with newly generated network parameters.
 
@@ -140,10 +140,14 @@ class TrainerModule(ABC):
         """
         # Prepare PRNG and input
         model_rng = random.PRNGKey(self.seed)
-        if variables is None:
-            model_rng, init_rng = random.split(model_rng)
-            # Run model initialization
-            variables = self.run_model_init(init_rng)
+        model_rng, init_rng = random.split(model_rng)
+        # Run model initialization
+        variables = self.run_model_init(init_rng)
+        if override_variables is not None:
+            logger.info("Overriding variables")
+            # variables = flax.core.unfreeze(variables)
+            variables = utils.merge_dicts(variables, override_variables)
+            # variables = flax.core.freeze(variables)
         # Create default state
         self.init_state(variables, model_rng, optimizer)
 

@@ -5,6 +5,8 @@ import re
 import shutil
 from pathlib import Path
 from typing import Any, Callable, Iterable, Iterator, Protocol, Sized, Union
+import flax
+from flax.core import FrozenDict
 
 from hydra import TaskFunction
 from hydra.core.config_store import ConfigStore
@@ -287,3 +289,28 @@ def negative(tree):
 
 def weighted_sum(tree1, tree2, alpha):
     return jax.tree_map(lambda x, y: alpha * x + (1 - alpha) * y, tree1, tree2)
+
+
+def merge_dicts(a: dict | FrozenDict, b: dict | FrozenDict) -> dict | FrozenDict:
+    """Merges two dictionaries recursively."""
+
+    if isinstance(a, FrozenDict):
+        frozen = True
+        merged = a.unfreeze()
+    else:
+        frozen = False
+        merged = a.copy()
+    for key, value in b.items():
+        if key in merged and isinstance(merged[key], (dict, FrozenDict)):
+            # Make sure we don't overwrite a dict with a non-dict
+            assert isinstance(value, (dict, FrozenDict))
+            merged[key] = merge_dicts(merged[key], value)
+        else:
+            if isinstance(value, (dict, FrozenDict)):
+                # Make sure we don't overwrite a non-dict with a dict
+                assert key not in merged
+            merged[key] = value
+
+    if frozen:
+        merged = flax.core.freeze(merged)
+    return merged

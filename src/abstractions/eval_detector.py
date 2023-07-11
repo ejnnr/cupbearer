@@ -6,7 +6,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf, open_dict
 
 from abstractions import abstraction, data, train_abstraction, utils
-from abstractions.computations import get_tau_maps
+from abstractions.computations import get_tau_maps, identity_init
 from abstractions.mahalanobis import MahalanobisDetector
 from abstractions.train_abstraction import (
     AbstractionDetector,
@@ -109,6 +109,11 @@ def main(cfg: DictConfig):
 
     if cfg.adversarial:
         assert len(cfg.anomalies) == 1
+
+        filter_maps = None
+        if cfg.filter_maps:
+            filter_maps = get_tau_maps(detector_cfg.model, identity_init)
+
         new_dataset = data.get_dataset(
             next(iter(cfg.anomalies.values())),
             base_run,
@@ -118,6 +123,7 @@ def main(cfg: DictConfig):
         with detector.adversarial(
             clean_dataset,
             new_dataset,
+            filter_maps=filter_maps,
             new_batch_size=cfg.batch_size,
             normal_batch_size=cfg.normal_batch_size,
             num_epochs=cfg.num_epochs,

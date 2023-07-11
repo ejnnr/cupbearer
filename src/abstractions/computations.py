@@ -5,6 +5,7 @@ from typing import Any, List, Mapping, Sequence
 
 import flax.linen as nn
 import jax
+import jax.numpy as jnp
 from iceberg import Bounds, Colors, Drawable, FontStyle
 from iceberg.primitives import Arrange, Rectangle, SimpleText
 
@@ -68,9 +69,10 @@ class Linear(Step):
 
     output_dim: int
     name: str = "Linear"
+    kernel_init: Any = nn.linear.default_kernel_init
 
     def __call__(self, x: jax.Array) -> jax.Array:
-        return nn.Dense(features=self.output_dim)(x)
+        return nn.Dense(features=self.output_dim, kernel_init=self.kernel_init)(x)
 
     def _info(self):
         return f"d={self.output_dim}"
@@ -99,15 +101,29 @@ class Conv(Step):
 
     output_dim: int
     name: str = "Conv"
+    kernel_init: Any = nn.linear.default_kernel_init
 
     def __call__(self, x: jax.Array) -> jax.Array:
-        return nn.Conv(features=self.output_dim, kernel_size=(3, 3))(x)
+        return nn.Conv(
+            features=self.output_dim, kernel_size=(3, 3), kernel_init=self.kernel_init
+        )(x)
 
     def _info(self):
         return f"d={self.output_dim}"
 
 
-def get_tau_maps(cfg: Mapping[str, Any]) -> list[Step]:
+def identity_init(
+    key: jax.random.KeyArray, shape: Sequence[int], dtype=jnp.float_
+) -> jax.Array:
+    assert len(shape) >= 2
+    assert shape[-1] == shape[-2]
+    eye = jnp.eye(shape[-1], dtype=dtype)
+    return jnp.broadcast_to(eye, shape)
+
+
+def get_tau_maps(
+    cfg: Mapping[str, Any], kernel_init=nn.linear.default_kernel_init
+) -> list[Step]:
     """Get a list of abstraction maps from a model config."""
     match cfg:
         case {
@@ -115,7 +131,9 @@ def get_tau_maps(cfg: Mapping[str, Any]) -> list[Step]:
             "output_dim": _,
             "hidden_dims": hidden_dims,
         }:
-            return [Linear(output_dim=dim) for dim in hidden_dims]
+            return [
+                Linear(output_dim=dim, kernel_init=kernel_init) for dim in hidden_dims
+            ]
 
         case {
             "_target_": "abstractions.computations.cnn",
@@ -123,8 +141,10 @@ def get_tau_maps(cfg: Mapping[str, Any]) -> list[Step]:
             "channels": channels,
             "dense_dims": dense_dims,
         }:
-            return [Conv(output_dim=dim) for dim in channels] + [
-                Linear(output_dim=dim) for dim in dense_dims
+            return [
+                Conv(output_dim=dim, kernel_init=kernel_init) for dim in channels
+            ] + [
+                Linear(output_dim=dim, kernel_init=kernel_init) for dim in dense_dims
             ]  # type: ignore
 
         case _:

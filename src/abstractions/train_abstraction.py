@@ -1,4 +1,5 @@
 import copy
+import functools
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -13,9 +14,9 @@ from torch.utils.data import DataLoader, Dataset
 from flax.core.frozen_dict import FrozenDict
 
 from abstractions import abstraction, data, trainer, utils
-from abstractions.abstraction import Abstraction, Model
+from abstractions.abstraction import Abstraction, FilteredAbstraction, Model
 from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import get_tau_maps
+from abstractions.computations import Step, get_tau_maps
 from abstractions.logger import DummyLogger, WandbLogger
 from abstractions.utils import SizedIterable
 
@@ -59,6 +60,12 @@ def compute_losses(
     abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
         {"params": params}, activations
     )
+    norms = jax.tree_map(
+        functools.partial(jnp.linalg.norm, axis=tuple(range(1, abstractions[0].ndim))),
+        abstractions,
+    )
+    norms = jax.tree_map(lambda x: x.mean(), norms)
+    avg_norm = sum(norms) / len(norms)
     assert isinstance(abstractions, list)
     assert isinstance(predicted_abstractions, list)
     assert len(abstractions) == len(predicted_abstractions) + 1
@@ -78,12 +85,15 @@ def compute_losses(
         abstractions[1:], predicted_abstractions
     ):
         # Take mean over hidden dimension(s):
+        actual_abstraction = actual_abstraction.reshape(b, -1)
+        predicted_abstraction = predicted_abstraction.reshape(b, -1)
         layer_losses.append(
-            jnp.sqrt(
-                ((actual_abstraction - predicted_abstraction) ** 2).mean(
-                    axis=tuple(range(1, actual_abstraction.ndim))
-                )
-            )
+            optax.cosine_distance(predicted_abstraction, actual_abstraction)
+            # jnp.sqrt(
+            #     ((actual_abstraction - predicted_abstraction) ** 2).mean(
+            #         axis=tuple(range(1, actual_abstraction.ndim))
+            #     )
+            # )
         )
 
     consistency_losses = jnp.stack(layer_losses, axis=0).mean(axis=0)
@@ -105,7 +115,7 @@ def compute_losses(
     consistency_loss = consistency_losses.mean()
     loss = output_loss + consistency_loss
 
-    return loss, (output_loss, consistency_loss)
+    return loss, (output_loss, consistency_loss, avg_norm)
 
 
 class AbstractionTrainer(trainer.TrainerModule):
@@ -131,7 +141,7 @@ class AbstractionTrainer(trainer.TrainerModule):
                     params, state, batch, output_loss_fn=self.output_loss_fn
                 )
 
-            (loss, (output_loss, consistency_loss)), grads = jax.value_and_grad(
+            (loss, (output_loss, consistency_loss, _)), grads = jax.value_and_grad(
                 loss_fn, has_aux=True
             )(state.params)
 
@@ -150,7 +160,7 @@ class AbstractionTrainer(trainer.TrainerModule):
             logits, activations = batch
             (
                 loss,
-                (output_loss, consistency_loss),
+                (output_loss, consistency_loss, _),
             ) = compute_losses(  # type: ignore
                 state.params,
                 state,
@@ -173,7 +183,7 @@ class AbstractionTrainer(trainer.TrainerModule):
         logger.info(self._prettify_metrics(metrics))
 
     def _prettify_metrics(self, metrics):
-        return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
+        return "\n" + "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
 class AbstractionFinetuner(trainer.TrainerModule):
@@ -211,52 +221,61 @@ class AbstractionFinetuner(trainer.TrainerModule):
             normal_batch, new_batch = batch["normal"], batch["new"]
 
             def loss_fn(params, batch, normal):
-                losses = compute_losses(
+                loss, (_, _, norm) = compute_losses(
                     params, state, batch, output_loss_fn=self.output_loss_fn
                 )
                 if self.clip and normal:
                     # We don't want to incentivize getting the loss below the initial
                     # loss, just want to make sure it doesn't exceed that
-                    losses = jax.tree_map(
-                        lambda loss: jnp.clip(loss, a_min=self.initial_loss), losses
-                    )
-                return losses
+                    loss = jnp.clip(loss, a_min=self.initial_loss)
+                    # losses = jax.tree_map(
+                    #     lambda loss: jnp.clip(loss, a_min=self.initial_loss), losses
+                    # )
+                return loss, norm
 
-            (normal_loss, _), normal_grads = jax.value_and_grad(loss_fn, has_aux=True)(
-                state.params, normal_batch, normal=True
-            )
-            (new_loss, _), new_grads = jax.value_and_grad(loss_fn, has_aux=True)(
+            (normal_loss, normal_norm), normal_grads = jax.value_and_grad(
+                loss_fn, has_aux=True
+            )(state.params, normal_batch, normal=True)
+
+            (new_loss, new_norm), new_grads = jax.value_and_grad(loss_fn, has_aux=True)(
                 state.params, new_batch, normal=False
             )
 
-            assert (
-                set(normal_grads.keys())
-                == set(new_grads.keys())
-                == {"tau_maps", "computational_steps"}
-            )
+            keys = set(normal_grads.keys())
+            assert keys == set(new_grads.keys())
+            assert keys <= {"tau_maps", "computational_steps", "filter_maps"}
 
             # For the computational steps, we want to minimize both losses, so just
             # add the normal gradients. For the tau maps, we want to maximize the loss
             # on new data, so we subtract the new gradients instead.
-            grads = FrozenDict(
-                {
-                    "computational_steps": utils.weighted_sum(
-                        normal_grads["computational_steps"],
-                        new_grads["computational_steps"],
-                        self.normal_weight,
-                    ),
-                    "tau_maps": utils.weighted_sum(
-                        normal_grads["tau_maps"],
-                        utils.negative(new_grads["tau_maps"]),
-                        self.normal_weight,
-                    ),
-                }
-            )
+            grads = {
+                "computational_steps": utils.weighted_sum(
+                    normal_grads["computational_steps"],
+                    new_grads["computational_steps"],
+                    self.normal_weight,
+                ),
+                "tau_maps": utils.weighted_sum(
+                    normal_grads["tau_maps"],
+                    utils.negative(new_grads["tau_maps"]),
+                    self.normal_weight,
+                ),
+            }
+
+            if "filter_maps" in keys:
+                grads["filter_maps"] = utils.weighted_sum(
+                    normal_grads["filter_maps"],
+                    new_grads["filter_maps"],
+                    self.normal_weight,
+                )
+
+            grads = FrozenDict(grads)
 
             state = state.apply_gradients(grads=grads)
             metrics = {
                 "normal_loss": normal_loss,
                 "new_loss": new_loss,
+                "normal_norm": normal_norm,
+                "new_norm": new_norm,
             }
             return state, metrics
 
@@ -326,16 +345,28 @@ class AbstractionDetector(AnomalyDetector):
         self,
         normal_dataset,
         new_dataset,
+        filter_maps: Optional[list[Step]] = None,
         new_batch_size: int = 128,
         normal_batch_size: int = 128,
         num_epochs: int = 1,
         normal_weight: float = 0.5,
         clip: bool = True,
     ) -> dict:
+        assert self.abstraction is not None
+        if filter_maps is not None:
+            abs = FilteredAbstraction.from_abstraction(self.abstraction, filter_maps)  # type: ignore
+        else:
+            abs = self.abstraction
+
+        example_input = normal_dataset[0][0][None]
+        _, example_activations = self.model.apply(
+            {"params": self.params}, example_input, return_activations=True
+        )
         finetuner = AbstractionFinetuner(
-            model=self.abstraction,
+            model=abs,
             optimizer=optax.adam(learning_rate=1e-3),
-            variables=self._get_trained_variables(),
+            example_input=example_activations,
+            override_variables=self._get_trained_variables(),
             print_tabulate=False,
             normal_weight=normal_weight,
             clip=clip,

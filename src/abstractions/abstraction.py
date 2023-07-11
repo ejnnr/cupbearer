@@ -223,6 +223,48 @@ class Abstraction(nn.Module):
         return res
 
 
+class FilteredAbstraction(Abstraction):
+    filter_maps: List[Step]
+
+    @nn.compact
+    def __call__(self, activations: List[jax.Array], train: bool = True):
+        assert len(activations) == len(self.tau_maps)
+        # This is just a hack to put the parameters of all the tau maps
+        # under a single "tau_maps" key in the params dict.
+        abstractions = Wrapper(
+            name="tau_maps",  # type: ignore
+            func=lambda activations: [
+                tau_map(x) for tau_map, x in zip(self.tau_maps, activations)
+            ],
+        )(activations)
+
+        abstractions = Wrapper(
+            name="filter_maps",  # type: ignore
+            func=lambda abstractions: [
+                filter_map(x) for filter_map, x in zip(self.filter_maps, abstractions)
+            ],
+        )(abstractions)
+
+        input_map, *maps = self.computation
+        assert len(maps) == len(abstractions)
+        predicted_abstractions = Wrapper(
+            name="computational_steps",  # type: ignore
+            func=lambda abstractions: [step(x) for step, x in zip(maps, abstractions)],
+        )(abstractions)
+
+        predicted_output = predicted_abstractions[-1]
+
+        return abstractions, predicted_abstractions[:-1], predicted_output
+
+    @classmethod
+    def from_abstraction(cls, abstraction: Abstraction, filter_maps: List[Step]):
+        return cls(
+            computation=abstraction.computation,
+            tau_maps=abstraction.tau_maps,
+            filter_maps=filter_maps,
+        )
+
+
 def abstraction_collate(model: nn.Module, params, return_original_batch=False):
     """Create a collate function that turns a dataloader into one for activations.
 
