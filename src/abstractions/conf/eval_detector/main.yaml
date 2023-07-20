@@ -9,8 +9,13 @@ defaults:
   - override hydra/hydra_logging: disabled
   - override hydra/job_logging: disabled
 
-# Path to log dir of the AnomalyDetector run
-detector: ???
+# Path to log dir of the AnomalyDetector run. Need to set either this or add +detector
+# (e.g. via a config group).
+detector_path: null
+# Only needs to be set if detector_path is null, otherwise inferred from detector cfg.
+base_path: null
+# If detector_path is null, this needs to be overriden if results should be saved.
+save_path: ${detector_path}
 debug: false
 adversarial: false
 num_epochs: 1
@@ -18,7 +23,7 @@ normal_weight: 0.5
 batch_size: 128
 normal_batch_size: ${batch_size}
 clip: true
-filter_maps: true
+filter_maps: false
 
 hydra:
   job:

@@ -143,11 +143,9 @@ class TrainerModule(ABC):
         model_rng, init_rng = random.split(model_rng)
         # Run model initialization
         variables = self.run_model_init(init_rng)
-        if override_variables is not None:
+        if override_variables:
             logger.info("Overriding variables")
-            # variables = flax.core.unfreeze(variables)
             variables = utils.merge_dicts(variables, override_variables)
-            # variables = flax.core.freeze(variables)
         # Create default state
         self.init_state(variables, model_rng, optimizer)
 

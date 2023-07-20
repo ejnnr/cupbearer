@@ -22,15 +22,27 @@ def main(cfg: DictConfig):
     Args:
       cfg: Hydra configuration object.
     """
-    detector_run = Path(cfg.detector)
-    # Note that hydra cwd management is disabled for this script, so no need for
-    # to_absolute_path like in other files.
-    path = detector_run / ".hydra" / "config.yaml"
-    logger.info(f"Loading detector config from {path}")
-    detector_cfg = OmegaConf.load(path)
+    save_path = None
+    if cfg.detector_path is not None:
+        detector_run = Path(cfg.detector_path)
+        save_path = Path(cfg.detector_path)
 
-    # Load the full model we want to abstract
-    base_run = Path(detector_cfg.base_run)
+        # Note that hydra cwd management is disabled for this script, so no need for
+        # to_absolute_path like in other files.
+        path = detector_run / ".hydra" / "config.yaml"
+        logger.info(f"Loading detector config from {path}")
+        detector_cfg = OmegaConf.load(path)
+
+        base_run = Path(detector_cfg.base_run)
+    elif cfg.base_path is not None:
+        base_run = Path(cfg.base_path)
+    else:
+        raise ValueError("Must specify either detector_run or base_run")
+
+    if cfg.save_path is not None:
+        # This should override the default of detector_path if set.
+        save_path = Path(cfg.save_path)
+
     path = base_run / ".hydra" / "config.yaml"
     logger.info(f"Loading base model config from {path}")
     base_cfg = OmegaConf.load(path)
@@ -39,7 +51,21 @@ def main(cfg: DictConfig):
     full_model = computations.Model(computation=full_computation)
     full_params = utils.load(base_run / "model")["params"]
 
-    detector = AnomalyDetector.load(detector_run / "detector", full_model, full_params)
+    if cfg.detector_path is not None:
+        detector = AnomalyDetector.load(
+            detector_run / "detector", full_model, full_params  # type: ignore
+        )
+    elif cfg.detector is not None:
+        # We need to use the _partial_=True approach because the model is a dataclass,
+        # and hydra would try to interpret that as a config object if we passed it
+        # directly to instantiate.
+        detector_factory = hydra.utils.instantiate(
+            cfg.detector,
+            _partial_=True,
+        )
+        detector = detector_factory(model=full_model, params=full_params)
+    else:
+        raise ValueError("Must specify either detector_path or detector")
 
     # We want to use the test split of the training data as the reference distribution,
     # to make sure we at least don't flag that as anomalous.
@@ -57,7 +83,9 @@ def main(cfg: DictConfig):
 
         filter_maps = None
         if cfg.filter_maps:
-            filter_maps = get_tau_maps(detector.model.computation, identity_init)
+            # TODO: this is specific to abstractions. Need to think more about what
+            # the adversarial interface should look like in general.
+            filter_maps = get_tau_maps(detector.abstraction.computation, identity_init)
 
         new_dataset = data.get_dataset(
             next(iter(cfg.anomalies.values())),
@@ -78,9 +106,10 @@ def main(cfg: DictConfig):
             detector.eval(
                 normal_dataset=clean_dataset,
                 anomalous_datasets={"adversarial": new_dataset},
-                save_path=detector_run,
+                save_path=save_path,
             )
-            utils.save(finetuned_vars, detector_run / "finetuned_vars", overwrite=True)
+            if save_path:
+                utils.save(finetuned_vars, save_path / "finetuned_vars", overwrite=True)
 
             return
 
@@ -96,7 +125,7 @@ def main(cfg: DictConfig):
     detector.eval(
         normal_dataset=clean_dataset,
         anomalous_datasets=anomalous_datasets,
-        save_path=detector_run,
+        save_path=save_path,
     )
 
 

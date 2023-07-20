@@ -79,7 +79,9 @@ class AnomalyDetector(ABC):
         finetuned_vars = self._finetune(normal_dataset, new_dataset, **kwargs)
         self._set_trained_variables(finetuned_vars)
         yield finetuned_vars
-        self._set_trained_variables(self._original_vars)
+        if self._original_vars:
+            # original_vars might be empty if the detector was never trained
+            self._set_trained_variables(self._original_vars)
         self._original_vars = None
 
     def _finetune(self, normal_dataset, new_dataset) -> dict:
@@ -88,18 +90,22 @@ class AnomalyDetector(ABC):
         Should return variables for the detector that can be passed to
         `_set_trained_variables`.
         """
-        raise NotImplementedError
+        raise NotImplementedError(
+            "Adversarial search for anomalies not implemented "
+            f"for {self.__class__.__name__}."
+        )
 
     def eval(
         self,
         normal_dataset: Dataset,
         anomalous_datasets: dict[str, Dataset],
-        save_path: str | Path = "",
+        save_path: str | Path | None = None,
         histogram_percentile: float = 95,
         num_bins: int = 100,
         plot_all_hists: bool = False,
     ):
-        save_path = Path(save_path)
+        if save_path:
+            save_path = Path(save_path)
 
         normal_loader = DataLoader(
             normal_dataset,
@@ -163,6 +169,11 @@ class AnomalyDetector(ABC):
 
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
+        if not save_path:
+            return
+
+        # Everything from here is just saving metrics and creating figures
+        # (which we skip if they aren't going to be saved anyway).
         with open(save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
 

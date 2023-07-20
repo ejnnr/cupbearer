@@ -393,9 +393,7 @@ class AbstractionDetector(AnomalyDetector):
             abs = self.abstraction
 
         example_input = normal_dataset[0][0][None]
-        _, example_activations = self.model.apply(
-            {"params": self.params}, example_input, return_activations=True
-        )
+        _, example_activations = self.forward_fn(example_input)
         finetuner = AbstractionFinetuner(
             model=abs,
             optimizer=optax.adam(learning_rate=1e-3),
@@ -426,11 +424,26 @@ class AbstractionDetector(AnomalyDetector):
         return self._state_to_dict(finetuner.state)
 
     def layerwise_scores(self, batch):
-        assert self.abstraction_state is not None
+        assert self.abstraction is not None
+        batch = self._model(batch)
+        if self.abstraction_state is None:
+            logger.info("Randomly initializing abstraction.")
+            # TODO: should derive this from some other key to avoid
+            # hard-coding seed.
+            model_rng = jax.random.PRNGKey(0)
+            model_rng, init_rng = jax.random.split(model_rng)
+            output, activations = batch
+            variables = self.abstraction.init(init_rng, activations)
+            self.abstraction_state = trainer.InferenceState(
+                self.abstraction.apply,
+                params=variables["params"],
+                batch_stats=variables.get("batch_stats", None),
+                rng=model_rng,
+            )
         return compute_losses(
             params=self.abstraction_state.params,
             state=self.abstraction_state,
-            batch=self._model(batch),
+            batch=batch,
             output_loss_fn=OUTPUT_LOSS_FNS[self.output_loss_fn],
             return_batch=True,
             layerwise=True,
@@ -447,6 +460,7 @@ class AbstractionDetector(AnomalyDetector):
 
     def _set_trained_variables(self, variables):
         assert self.abstraction is not None
+        assert variables
         # TODO: in general we might have to create a PRNG here as well
         self.abstraction_state = trainer.InferenceState(
             self.abstraction.apply,
