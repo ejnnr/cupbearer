@@ -14,6 +14,9 @@ single_class: false
 base_run: ???
 debug: false
 wandb: false
+# If not set, the values from the base run will be used:
+num_epochs: null
+batch_size: null
 
 # Special settings:
 #   - 'same': use the test split of the training data (i.e. clean data)

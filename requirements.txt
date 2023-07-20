@@ -14,5 +14,6 @@ wandb==0.14.0
 scikit-learn==1.2.2
 pre-commit
 ruff
+orbax-checkpoint
 git+https://github.com/revalo/iceberg.git
 git+https://github.com/ejnnr/hydra.git#subdirectory=plugins/hydra_submitit_launcher

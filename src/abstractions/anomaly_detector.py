@@ -1,8 +1,10 @@
+import importlib
 import json
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
+import hydra
 
 import jax
 import jax.numpy as jnp
@@ -279,10 +281,50 @@ class AnomalyDetector(ABC):
     def _set_trained_variables(self, variables):
         pass
 
-    def save(self, path: str | Path):
+    def save_weights(self, path: str | Path):
         logger.info(f"Saving detector to {utils.original_relative_path(path)}")
         utils.save(self._get_trained_variables(), path)
 
-    def load(self, path: str | Path):
+    def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {utils.original_relative_path(path)}")
         self._set_trained_variables(utils.load(path))
+
+    @property
+    def init_kwargs(self) -> dict[str, Any]:
+        """Keyword arguments for creating a copy of this detector instance.
+
+        Shouldn't include `model` or `params`.
+
+        Child classes will usually need to override this to make saving work correctly.
+        The easiest way to do that is to use the `utils.storable` decorator on the
+        child class.
+        """
+        return {"max_batch_size": self.max_batch_size}
+
+    def save(self, path: str | Path):
+        logger.info(f"Saving detector to {utils.original_relative_path(path)}")
+        variables = self._get_trained_variables()
+        module = self.__class__.__module__
+        class_name = self.__class__.__qualname__
+        hparams = self.init_kwargs
+        utils.save(
+            {
+                "module": module,
+                "class_name": class_name,
+                "hparams": hparams,
+                "variables": variables,
+            },
+            path,
+        )
+
+    @classmethod
+    def load(cls, cfg: str | Path | dict[str, Any], model: Model, params):
+        if isinstance(cfg, dict):
+            return hydra.utils.instantiate(cfg, model=model, params=params)
+
+        ckpt = utils.load(cfg)
+        module = importlib.import_module(ckpt["module"])
+        class_ = getattr(module, ckpt["class_name"])
+        detector = class_(model=model, params=params, **ckpt["hparams"])
+        detector._set_trained_variables(ckpt["variables"])
+        return detector

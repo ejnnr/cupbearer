@@ -8,7 +8,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 
-from abstractions import abstraction, data, trainer, utils
+from abstractions import computations, data, trainer, utils
 from abstractions.logger import DummyLogger, WandbLogger
 
 
@@ -101,7 +101,7 @@ def main(cfg: DictConfig):
     example_input = images[0:1]
 
     computation = hydra.utils.call(cfg.model)
-    model = abstraction.Model(computation)
+    model = computations.Model(computation)
 
     trainer = ClassificationTrainer(
         num_classes=cfg.num_classes,

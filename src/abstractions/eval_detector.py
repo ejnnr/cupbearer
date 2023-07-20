@@ -5,14 +5,9 @@ import hydra
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf, open_dict
 
-from abstractions import abstraction, data, train_abstraction, utils
+from abstractions import computations, data, utils
+from abstractions.anomaly_detector import AnomalyDetector
 from abstractions.computations import get_tau_maps, identity_init
-from abstractions.mahalanobis import MahalanobisDetector
-from abstractions.train_abstraction import (
-    AbstractionDetector,
-    kl_loss_fn,
-    single_class_loss_fn,
-)
 
 CONFIG_NAME = Path(__file__).stem
 utils.setup_hydra(CONFIG_NAME)
@@ -41,60 +36,10 @@ def main(cfg: DictConfig):
     base_cfg = OmegaConf.load(path)
 
     full_computation = hydra.utils.call(base_cfg.model)
-    full_model = abstraction.Model(computation=full_computation)
+    full_model = computations.Model(computation=full_computation)
     full_params = utils.load(base_run / "model")["params"]
 
-    # TODO: this should be more robust. Maybe AnomalyDetector should have a .load()
-    # classmethod? (and checkpoints would need to store the type and some hparams)
-    if "size_reduction" in detector_cfg:
-        # We're dealing with an AbstractionDetector
-        # TODO: copied from train_abstraction.py, should refactor
-        if "model" not in detector_cfg:
-            with open_dict(detector_cfg):
-                detector_cfg.model = copy.deepcopy(base_cfg.model)
-            if detector_cfg.model._target_ not in train_abstraction.KNOWN_ARCHITECTURES:
-                raise ValueError(
-                    f"Model architecture {detector_cfg.model._target_} "
-                    "not yet supported for size_reduction."
-                )
-            for field in {"hidden_dims", "channels", "dense_dims"}:
-                if field in detector_cfg.model:
-                    detector_cfg.model[field] = [
-                        dim // detector_cfg.size_reduction
-                        for dim in detector_cfg.model[field]
-                    ]
-
-        if detector_cfg.single_class:
-            detector_cfg.model.output_dim = 2
-        else:
-            detector_cfg.model.output_dim = base_cfg.model.output_dim
-
-        computation = hydra.utils.call(detector_cfg.model)
-        # TODO: Might want to make this configurable somehow, but it's a reasonable
-        # default for now
-        maps = get_tau_maps(detector_cfg.model)
-        model = abstraction.Abstraction(computation=computation, tau_maps=maps)
-
-        detector = AbstractionDetector(
-            model=full_model,
-            params=full_params,
-            abstraction=model,
-            max_batch_size=base_cfg.max_batch_size,
-            output_loss_fn=(
-                single_class_loss_fn if detector_cfg.single_class else kl_loss_fn
-            ),
-        )
-    elif "relative" in detector_cfg:
-        # Mahalanobis detector
-        detector = MahalanobisDetector(
-            model=full_model,
-            params=full_params,
-            max_batch_size=cfg.max_batch_size,
-        )
-    else:
-        raise ValueError("Unknown detector type")
-
-    detector.load(detector_run / "detector")
+    detector = AnomalyDetector.load(detector_run / "detector", full_model, full_params)
 
     # We want to use the test split of the training data as the reference distribution,
     # to make sure we at least don't flag that as anomalous.
@@ -112,7 +57,7 @@ def main(cfg: DictConfig):
 
         filter_maps = None
         if cfg.filter_maps:
-            filter_maps = get_tau_maps(detector_cfg.model, identity_init)
+            filter_maps = get_tau_maps(detector.model.computation, identity_init)
 
         new_dataset = data.get_dataset(
             next(iter(cfg.anomalies.values())),

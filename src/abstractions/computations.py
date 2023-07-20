@@ -1,13 +1,27 @@
 from abc import ABC, abstractmethod
+import copy
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, List, Mapping, Sequence
+import functools
+from typing import Any, List, Mapping, Optional, Sequence
 
 import flax.linen as nn
+from iceberg.arrows import Arrow
 import jax
 import jax.numpy as jnp
-from iceberg import Bounds, Colors, Drawable, FontStyle
-from iceberg.primitives import Arrange, Rectangle, SimpleText
+from iceberg import Bounds, Color, Colors, Corner, Drawable, FontStyle, PathStyle
+from iceberg.primitives import (
+    Arrange,
+    Compose,
+    Directions,
+    Ellipse,
+    Grid,
+    Image,
+    Line,
+    Rectangle,
+    SimpleText,
+)
+import numpy as np
 
 
 class Orientation(Enum):
@@ -19,6 +33,7 @@ FONTS = ["Monaco", "DejaVu Sans Mono"]
 
 
 class Step(ABC):
+    output_dim: int = 0
     name: str = ""
 
     @abstractmethod
@@ -61,6 +76,34 @@ class Step(ABC):
 
     def _info(self):
         return None
+
+
+# A full computation is (for now) just a list of steps
+# Could also be a graph (or of course non-static computations) in the future
+Computation = List[Step]
+
+
+class Model(nn.Module):
+    computation: Computation
+
+    @nn.compact
+    def __call__(self, x, return_activations=False, train=True):
+        activations = []
+        *main_maps, output_map = self.computation
+        for step in main_maps:
+            x = step(x)
+            activations.append(x)
+
+        x = output_map(x)
+
+        if return_activations:
+            return x, activations
+        return x
+
+    def get_drawable(
+        self, return_nodes=False, layer_scores=None, inputs=None
+    ) -> Drawable:
+        return draw_computation(self.computation, return_nodes, layer_scores, inputs)
 
 
 @dataclass
@@ -112,63 +155,6 @@ class Conv(Step):
         return f"d={self.output_dim}"
 
 
-def identity_init(
-    key: jax.random.KeyArray, shape: Sequence[int], dtype=jnp.float_
-) -> jax.Array:
-    assert len(shape) >= 2
-    assert shape[-1] == shape[-2]
-    eye = jnp.eye(shape[-1], dtype=dtype)
-    return jnp.broadcast_to(eye, shape)
-
-
-def get_tau_maps(
-    cfg: Mapping[str, Any], kernel_init=nn.linear.default_kernel_init
-) -> list[Step]:
-    """Get a list of abstraction maps from a model config."""
-    match cfg:
-        case {
-            "_target_": "abstractions.computations.mlp",
-            "output_dim": _,
-            "hidden_dims": hidden_dims,
-        }:
-            return [
-                Linear(output_dim=dim, kernel_init=kernel_init) for dim in hidden_dims
-            ]
-
-        case {
-            "_target_": "abstractions.computations.cnn",
-            "output_dim": _,
-            "channels": channels,
-            "dense_dims": dense_dims,
-        }:
-            return [
-                Conv(output_dim=dim, kernel_init=kernel_init) for dim in channels
-            ] + [
-                Linear(output_dim=dim, kernel_init=kernel_init) for dim in dense_dims
-            ]  # type: ignore
-
-        case _:
-            raise ValueError(f"Unknown abstraction maps: {cfg}")
-
-
-# A full computation is (for now) just a list of steps
-# Could also be a graph (or of course non-static computations) in the future
-Computation = List[Step]
-
-
-def mlp(output_dim: int, hidden_dims: Sequence[int]) -> Computation:
-    """A simple feed-forward MLP."""
-    steps = [
-        # special case for first layer, since we need to flatten the input
-        ReluLinear(output_dim=hidden_dims[0], flatten_input=True),
-        # remaining hidden layers
-        *[ReluLinear(output_dim=hidden_dim) for hidden_dim in hidden_dims[1:]],
-        # output layer
-        Linear(output_dim=output_dim),
-    ]
-    return steps
-
-
 @dataclass
 class ConvBlock(Step):
     """A single convolutional block."""
@@ -207,6 +193,19 @@ class DenseBlock(Step):
         return f"d={self.output_dim}"
 
 
+def mlp(output_dim: int, hidden_dims: Sequence[int]) -> Computation:
+    """A simple feed-forward MLP."""
+    steps = [
+        # special case for first layer, since we need to flatten the input
+        ReluLinear(output_dim=hidden_dims[0], flatten_input=True),
+        # remaining hidden layers
+        *[ReluLinear(output_dim=hidden_dim) for hidden_dim in hidden_dims[1:]],
+        # output layer
+        Linear(output_dim=output_dim),
+    ]
+    return steps
+
+
 def cnn(
     output_dim: int, channels: Sequence[int], dense_dims: Sequence[int]
 ) -> Computation:
@@ -222,3 +221,164 @@ def cnn(
     # output layer
     steps.append(Linear(output_dim=output_dim))
     return steps
+
+
+@dataclass
+class SoftmaxDrop(Step, nn.Module):
+    """Scale each component of the input by a softmax of learned scores."""
+
+    # output_dim=0 means derived from input
+    output_dim: int = 0
+    name: str = "Drop"
+
+    def __call__(self, x: jax.Array) -> jax.Array:
+        # TODO: The 3.0 should be configurable, and also maybe there's a more principled
+        # thing to do, like just using zero? Idea here is to initialize close to keeping
+        # everything, but not so close that gradients are tiny.
+        scores = self.param("scores", constant_init, x.shape[1:], jnp.float_, 3.0)
+        scores = nn.sigmoid(scores)
+        # scores = nn.softmax(scores, axis=tuple(range(1, x.ndim + 1)))
+        return x * scores[None]
+
+
+def constant_init(
+    key: jax.random.KeyArray, shape: Sequence[int], dtype=jnp.float_, value=0.0
+) -> jax.Array:
+    return jnp.full(shape, value, dtype=dtype)
+
+
+def identity_init(
+    key: jax.random.KeyArray, shape: Sequence[int], dtype=jnp.float_
+) -> jax.Array:
+    assert len(shape) >= 2
+    assert shape[-1] == shape[-2]
+    eye = jnp.eye(shape[-1], dtype=dtype)
+    return jnp.broadcast_to(eye, shape)
+
+
+def get_tau_map(step: Step, kernel_init=nn.linear.default_kernel_init) -> Step:
+    match step:
+        case Linear(output_dim=dim, kernel_init=_):
+            return Linear(output_dim=dim, kernel_init=kernel_init)
+        case ReluLinear(output_dim=dim, flatten_input=_):
+            return Linear(output_dim=dim)
+        case Conv(output_dim=dim, kernel_init=_):
+            return Conv(output_dim=dim, kernel_init=kernel_init)
+        case ConvBlock(output_dim=dim):
+            return Conv(output_dim=dim, kernel_init=kernel_init)
+        case DenseBlock(output_dim=dim, is_first=_):
+            return Linear(output_dim=dim, kernel_init=kernel_init)
+        case _:
+            raise ValueError(f"Unknown step type {step}")
+
+
+def get_tau_maps(
+    computation: Computation, kernel_init=nn.linear.default_kernel_init
+) -> list[Step]:
+    """Get a list of abstraction maps from a computation."""
+    # We don't want a tau map for the final step, that just produces the output,
+    # which we compare directly.
+    return list(
+        map(functools.partial(get_tau_map, kernel_init=kernel_init), computation[:-1])
+    )
+
+
+def reduce_size_step(step: Step, factor: int) -> Step:
+    new_step = copy.deepcopy(step)
+    try:
+        new_step.output_dim = new_step.output_dim // factor
+    except AttributeError:
+        raise ValueError(f"Don't know how to reduce size of step {step}")
+
+    return new_step
+
+
+def reduce_size(
+    computation: Computation, factor: int, output_dim: Optional[int] = None
+) -> Computation:
+    res = list(
+        map(functools.partial(reduce_size_step, factor=factor), computation[:-1])
+    )
+    res.append(copy.deepcopy(computation[-1]))
+    if output_dim is not None:
+        try:
+            res[-1].output_dim = output_dim
+        except AttributeError:
+            raise ValueError(f"Don't know how to reduce size of step {res[-1]}")
+
+    return res
+
+
+def make_image_grid(inputs):
+    assert len(inputs) == 9, f"len(inputs) = {len(inputs)} != 9"
+    # inputs is an array of shape (9, *image_dims)
+    # We'll plot these inputs in a 3x3 grid
+    if inputs[0].shape[-1] == 1:
+        # grayscale images, copy channels
+        inputs = np.repeat(inputs, 3, axis=-1)
+
+    # Add alpha channel
+    inputs = np.concatenate([inputs, np.ones_like(inputs[..., :1])], axis=-1)
+
+    assert np.all(inputs >= 0) and np.all(inputs <= 1)
+    inputs = (inputs * 255).astype(np.uint8)
+
+    images = [Image(image=image) for image in inputs]
+    # Restructure into list of lists:
+    images = [images[i : i + 3] for i in range(0, len(images), 3)]
+    GRID_SIZE = 200
+    grid = Grid(images, gap=5)
+    return grid.scale(GRID_SIZE / grid.bounds.width)
+
+
+def draw_computation(
+    computation: Computation, return_nodes=False, layer_scores=None, inputs=None
+) -> Drawable:
+    steps = [step.get_drawable() for step in computation]
+    nodes = [
+        Ellipse(Bounds(size=(50, 50)), border_color=Colors.BLACK) for _ in computation
+    ]
+    if layer_scores is not None:
+        # The first node doesn't incur any loss in the current implementation,
+        # so we don't color it.
+        nodes[0].fill_color = Color(0.3, 0.3, 0.3)
+
+        # TODO: might not make sense for all loss functions
+        min_score = 0
+        max_score = max(layer_scores)
+        normalized_scores = [
+            (score - min_score) / (max_score - min_score) for score in layer_scores
+        ]
+
+        assert len(nodes) - 1 == len(normalized_scores), (
+            f"len(nodes) - 1 = {len(nodes) - 1}"
+            f"!= len(normalized_scores) = {len(normalized_scores)}"
+        )
+        for node, score in zip(nodes[1:], normalized_scores):
+            node.fill_color = Color(1, 0, 0, score)
+
+    # interleave the two lists:
+    drawables = [x for pair in zip(steps, nodes) for x in pair]
+    arranged = Arrange(drawables, gap=100)
+
+    lines = []
+    linestyle = PathStyle(color=Colors.BLACK)
+
+    for a, b in zip(drawables[:-1], drawables[1:]):
+        start = arranged.child_bounds(a).corners[Corner.MIDDLE_RIGHT]
+        end = arranged.child_bounds(b).corners[Corner.MIDDLE_LEFT]
+        if isinstance(a, Ellipse):
+            line = Line(start, end, linestyle)
+        else:
+            line = Arrow(start, end, linestyle)
+        lines.append(line)
+
+    res = Compose((*lines, arranged))
+
+    if inputs is not None:
+        grid = make_image_grid(inputs)
+        res = res.next_to(grid, Directions.LEFT * 20)
+
+    if return_nodes:
+        return res, nodes
+    return res

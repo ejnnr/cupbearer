@@ -7,7 +7,7 @@
 # representation to the output of the computation.
 # All of this is encapsulated in a flax module.
 
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import flax.linen as nn
 import jax
@@ -25,105 +25,17 @@ from iceberg.primitives import (
 )
 
 from abstractions import data
-from abstractions.computations import Computation, Orientation, Step
-
-
-def make_image_grid(inputs):
-    assert len(inputs) == 9, f"len(inputs) = {len(inputs)} != 9"
-    # inputs is an array of shape (9, *image_dims)
-    # We'll plot these inputs in a 3x3 grid
-    if inputs[0].shape[-1] == 1:
-        # grayscale images, copy channels
-        inputs = np.repeat(inputs, 3, axis=-1)
-
-    # Add alpha channel
-    inputs = np.concatenate([inputs, np.ones_like(inputs[..., :1])], axis=-1)
-
-    assert np.all(inputs >= 0) and np.all(inputs <= 1)
-    inputs = (inputs * 255).astype(np.uint8)
-
-    images = [Image(image=image) for image in inputs]
-    # Restructure into list of lists:
-    images = [images[i : i + 3] for i in range(0, len(images), 3)]
-    GRID_SIZE = 200
-    grid = Grid(images, gap=5)
-    return grid.scale(GRID_SIZE / grid.bounds.width)
-
-
-def draw_computation(
-    computation: Computation, return_nodes=False, layer_scores=None, inputs=None
-) -> Drawable:
-    steps = [step.get_drawable() for step in computation]
-    nodes = [
-        Ellipse(Bounds(size=(50, 50)), border_color=Colors.BLACK) for _ in computation
-    ]
-    if layer_scores is not None:
-        # The first node doesn't incur any loss in the current implementation,
-        # so we don't color it.
-        nodes[0].fill_color = Color(0.3, 0.3, 0.3)
-
-        # TODO: might not make sense for all loss functions
-        min_score = 0
-        max_score = max(layer_scores)
-        normalized_scores = [
-            (score - min_score) / (max_score - min_score) for score in layer_scores
-        ]
-
-        assert len(nodes) - 1 == len(normalized_scores), (
-            f"len(nodes) - 1 = {len(nodes) - 1}"
-            f"!= len(normalized_scores) = {len(normalized_scores)}"
-        )
-        for node, score in zip(nodes[1:], normalized_scores):
-            node.fill_color = Color(1, 0, 0, score)
-
-    # interleave the two lists:
-    drawables = [x for pair in zip(steps, nodes) for x in pair]
-    arranged = Arrange(drawables, gap=100)
-
-    lines = []
-    linestyle = PathStyle(color=Colors.BLACK)
-
-    for a, b in zip(drawables[:-1], drawables[1:]):
-        start = arranged.child_bounds(a).corners[Corner.MIDDLE_RIGHT]
-        end = arranged.child_bounds(b).corners[Corner.MIDDLE_LEFT]
-        if isinstance(a, Ellipse):
-            line = Line(start, end, linestyle)
-        else:
-            line = Arrow(start, end, linestyle)
-        lines.append(line)
-
-    res = Compose((*lines, arranged))
-
-    if inputs is not None:
-        grid = make_image_grid(inputs)
-        res = res.next_to(grid, Directions.LEFT * 20)
-
-    if return_nodes:
-        return res, nodes
-    return res
-
-
-class Model(nn.Module):
-    computation: Computation
-
-    @nn.compact
-    def __call__(self, x, return_activations=False, train=True):
-        activations = []
-        *main_maps, output_map = self.computation
-        for step in main_maps:
-            x = step(x)
-            activations.append(x)
-
-        x = output_map(x)
-
-        if return_activations:
-            return x, activations
-        return x
-
-    def get_drawable(
-        self, return_nodes=False, layer_scores=None, inputs=None
-    ) -> Drawable:
-        return draw_computation(self.computation, return_nodes, layer_scores, inputs)
+from abstractions.computations import (
+    Computation,
+    Orientation,
+    SoftmaxDrop,
+    Step,
+    Model,
+    draw_computation,
+    make_image_grid,
+    reduce_size,
+    get_tau_maps,
+)
 
 
 class Wrapper(nn.Module):
@@ -146,7 +58,9 @@ class Abstraction(nn.Module):
 
     @nn.compact
     def __call__(self, activations: List[jax.Array], train: bool = True):
-        assert len(activations) == len(self.tau_maps)
+        assert len(activations) == len(
+            self.tau_maps
+        ), f"Got {len(activations)} activations but {len(self.tau_maps)} tau maps"
         # This is just a hack to put the parameters of all the tau maps
         # under a single "tau_maps" key in the params dict.
         abstractions = Wrapper(
@@ -221,6 +135,18 @@ class Abstraction(nn.Module):
             res = res.next_to(grid, Directions.LEFT * 20)
 
         return res
+
+
+class AxisAlignedAbstraction(Abstraction):
+    def __post_init__(self):
+        self.tau_maps = [SoftmaxDrop() for _ in self.computation]
+
+    @classmethod
+    def from_abstraction(cls, abstraction: Abstraction):
+        return cls(
+            computation=abstraction.computation,
+            tau_maps=[],
+        )
 
 
 class FilteredAbstraction(Abstraction):
@@ -313,3 +239,17 @@ def abstraction_collate(model: nn.Module, params, return_original_batch=False):
         return [logits, activations]
 
     return mycollate
+
+
+def get_default_abstraction(
+    model: Model, size_reduction: int, output_dim: Optional[int] = None
+) -> Abstraction:
+    """Get a sensible default abstraction for a model.
+
+    `size_reduction` is the factor by which hidden dimensions in the abstraction should
+    be smaller. `output_dim` is the output dimension of the abstraction. If None, the
+    model's output dimension is used.
+    """
+    abstract_computation = reduce_size(model.computation, size_reduction, output_dim)
+    tau_maps = get_tau_maps(abstract_computation)
+    return Abstraction(computation=abstract_computation, tau_maps=tau_maps)

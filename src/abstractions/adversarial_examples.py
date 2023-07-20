@@ -15,7 +15,7 @@ from loguru import logger
 from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader, Dataset
 
-from abstractions import abstraction, data, utils
+from abstractions import computations, data, utils
 
 
 class AdversarialExampleDataset(Dataset):
@@ -96,7 +96,7 @@ def attack(cfg: DictConfig):
     base_cfg = OmegaConf.load(base_run / ".hydra" / "config.yaml")
 
     computation = hydra.utils.call(base_cfg.model)
-    model = abstraction.Model(computation=computation)
+    model = computations.Model(computation=computation)
     params = utils.load(base_run / "model")["params"]
 
     data_cfg = copy.deepcopy(base_cfg.train_data)

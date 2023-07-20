@@ -1,4 +1,6 @@
 import functools
+import orbax.checkpoint
+import inspect
 import os
 import pickle
 import re
@@ -114,32 +116,42 @@ def adapt_transform(transform: Callable) -> Callable:
 SUFFIX = ".pytree"
 
 
-# Based on https://github.com/google/jax/issues/2116#issuecomment-580322624
-# TODO: basically just using this for nested dicts of arrays, so a generalized version
-# of jnp.savez should work and be faster than pickle.
 def save(data, path: Union[str, Path], overwrite: bool = False):
     path = Path(path)
-    if path.suffix != SUFFIX:
-        path = path.with_suffix(SUFFIX)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    directory = path.parent
+    directory.mkdir(parents=True, exist_ok=True)
     if path.exists():
         if overwrite:
-            path.unlink()
+            assert path.is_dir(), f"{path} is not a directory, won't overwrite"
+            shutil.rmtree(path)
         else:
             raise RuntimeError(f"File {path} already exists.")
-    with open(path, "wb") as file:
-        pickle.dump(data, file)
+    checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+    # If leaves are strings, these leaves must be saved with aggregate=True.
+    # TODO: I'm guessing we should not use this for arrays, given that it's not the
+    # default?
+    # But if we care about performance, should probably just use the new OCDBT version,
+    # see https://orbax.readthedocs.io/en/latest/optimized_checkpointing.html
+    save_args = jax.tree_map(lambda _: orbax.checkpoint.SaveArgs(aggregate=True), data)
+    checkpointer.save(path, data, save_args=save_args)
 
 
 def load(path: Union[str, Path]):
     path = Path(path)
+    if path.is_dir():
+        checkpointer = orbax.checkpoint.PyTreeCheckpointer()
+        data = checkpointer.restore(path)
+        return data
+
+    # Support for legacy pickle format:
+    pickle_path = path
     if path.suffix != SUFFIX:
-        path = path.with_suffix(SUFFIX)
-    if not path.is_file():
-        raise FileNotFoundError(f"Not a file: {path}")
-    with open(path, "rb") as file:
-        data = pickle.load(file)
-    return data
+        pickle_path = path.with_suffix(SUFFIX)
+    if pickle_path.is_file():
+        with open(pickle_path, "rb") as file:
+            return pickle.load(file)
+
+    raise FileNotFoundError(f"Found neither {path} nor {pickle_path}")
 
 
 def product(xs: Iterable):
@@ -314,3 +326,29 @@ def merge_dicts(a: dict | FrozenDict, b: dict | FrozenDict) -> dict | FrozenDict
     if frozen:
         merged = flax.core.freeze(merged)
     return merged
+
+
+def store_init_args(cls, ignore={"self"}):
+    orig_init = cls.__init__
+    sig = inspect.signature(orig_init)
+
+    @functools.wraps(cls.__init__)
+    def new_init(self, *args, **kwargs):
+        bound = sig.bind(self, *args, **kwargs)
+        bound.apply_defaults()
+        self._init_kwargs = dict(bound.arguments)
+        for name in ignore:
+            self._init_kwargs.pop(name, None)
+        orig_init(self, *args, **kwargs)
+
+    cls.__init__ = new_init
+
+    @property
+    def init_kwargs_property(self):
+        return self._init_kwargs
+
+    cls.init_kwargs = init_kwargs_property
+    return cls
+
+
+storable = functools.partial(store_init_args, ignore={"self", "model", "params"})

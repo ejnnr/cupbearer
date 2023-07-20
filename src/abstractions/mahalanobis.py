@@ -9,7 +9,7 @@ from omegaconf import DictConfig, OmegaConf
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from abstractions import abstraction, data, utils
+from abstractions import computations, data, utils
 from abstractions.anomaly_detector import AnomalyDetector
 
 
@@ -82,6 +82,7 @@ def mahalanobis(
     return jnp.array(distances)
 
 
+@utils.storable
 class MahalanobisDetector(AnomalyDetector):
     def train(
         self,
@@ -178,8 +179,8 @@ def main(cfg: DictConfig):
     )
 
     full_computation = hydra.utils.call(base_cfg.model)
-    full_model = abstraction.Model(computation=full_computation)
-    full_params = utils.load(to_absolute_path(str(base_run / "model.pytree")))["params"]
+    full_model = computations.Model(computation=full_computation)
+    full_params = utils.load(to_absolute_path(str(base_run / "model")))["params"]
 
     detector = MahalanobisDetector(
         model=full_model,
