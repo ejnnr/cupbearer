@@ -1,9 +1,6 @@
 import copy
 import json
 import os
-import subprocess
-import sys
-from functools import partial
 from pathlib import Path
 
 import hydra
@@ -13,68 +10,17 @@ import matplotlib.pyplot as plt
 import optax
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 
-from abstractions import computations, data, utils
-
-
-class AdversarialExampleDataset(Dataset):
-    def __init__(self, base_run, num_examples=None):
-        base_run = Path(base_run)
-        self.base_run = base_run
-        try:
-            self.examples = utils.load(base_run / "adv_examples")
-        except FileNotFoundError:
-            logger.info(
-                "Adversarial examples not found, running attack with default settings"
-            )
-            # Calling the hydra.main function directly within an existing hydra job
-            # is pretty fiddly, so we just run it as a suprocess.
-            subprocess.run(
-                [
-                    "python",
-                    "-m",
-                    "abstractions.adversarial_examples",
-                    # Need to quote base_run because it might contain commas
-                    f"base_run='{base_run}'",
-                ],
-                stdout=sys.stdout,
-                stderr=sys.stderr,
-                check=True,
-            )
-            self.examples = utils.load(base_run / "adv_examples")
-        if num_examples is None:
-            num_examples = len(self.examples)
-        self.num_examples = num_examples
-        if len(self.examples) < num_examples:
-            raise ValueError(
-                f"Only {len(self.examples)} adversarial examples exist, "
-                f"but {num_examples} were requested"
-            )
-
-    def __len__(self):
-        return self.num_examples
-
-    def __getitem__(self, idx):
-        if idx >= self.num_examples:
-            raise IndexError(f"Index {idx} is out of range")
-        return self.examples[idx]
-
-
-@partial(jax.jit, static_argnames=("forward_fn", "eps"))
-def fgsm(forward_fn, inputs, labels, eps=8 / 255):
-    def loss(x):
-        logits = forward_fn(x)
-        one_hot = jax.nn.one_hot(labels, logits.shape[-1])
-        losses = optax.softmax_cross_entropy(logits=logits, labels=one_hot)
-        return jnp.mean(losses)
-
-    loss, grad = jax.value_and_grad(loss)(inputs)
-    return inputs + eps * jnp.sign(grad), loss
+from abstractions import data
+from abstractions.data.adversarial import fgsm
+from abstractions.models import computations
+from abstractions.utils import utils
+import abstractions.utils.hydra
 
 
 CONFIG_NAME = Path(__file__).stem
-utils.setup_hydra(CONFIG_NAME)
+abstractions.utils.hydra.setup_hydra(CONFIG_NAME)
 
 
 @hydra.main(
@@ -103,7 +49,10 @@ def attack(cfg: DictConfig):
     data_cfg.train = False
     dataset = data.get_dataset(data_cfg)
     dataloader = DataLoader(
-        dataset, batch_size=cfg.batch_size, shuffle=False, collate_fn=data.numpy_collate
+        dataset,
+        batch_size=cfg.batch_size,
+        shuffle=False,
+        collate_fn=data.numpy_collate,
     )
 
     adv_examples = []

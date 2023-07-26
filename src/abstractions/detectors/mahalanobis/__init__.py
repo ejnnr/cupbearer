@@ -1,16 +1,12 @@
-from pathlib import Path
-from typing import Optional
-
-import hydra
 import jax
+from typing import Optional
 import jax.numpy as jnp
-from hydra.utils import to_absolute_path
-from omegaconf import DictConfig, OmegaConf
+from abstractions.data import _shared
+
+from abstractions.detectors.anomaly_detector import AnomalyDetector
+from abstractions.utils import utils
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-
-from abstractions import computations, data, utils
-from abstractions.anomaly_detector import AnomalyDetector
 
 
 def update_covariance(curr_mean, curr_C, curr_n, new_data):
@@ -97,7 +93,7 @@ class MahalanobisDetector(AnomalyDetector):
             dataset,
             batch_size=batch_size,
             shuffle=False,
-            collate_fn=data.numpy_collate,
+            collate_fn=_shared.numpy_collate,
         )
         example_inputs = next(iter(data_loader))
         _, example_activations = self._model(example_inputs)
@@ -157,49 +153,3 @@ class MahalanobisDetector(AnomalyDetector):
         self.means = variables["means"]
         self.inv_covariances = variables["inv_covariances"]
         self.inv_diag_covariances = variables["inv_diag_covariances"]
-
-
-CONFIG_NAME = Path(__file__).stem
-utils.setup_hydra(CONFIG_NAME)
-
-
-@hydra.main(
-    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
-)
-def main(cfg: DictConfig):
-    """Execute model training and evaluation loop.
-
-    Args:
-      cfg: Hydra configuration object.
-    """
-    # Load the full model we want to abstract
-    base_run = Path(cfg.base_run)
-    base_cfg = OmegaConf.load(
-        to_absolute_path(str(base_run / ".hydra" / "config.yaml"))
-    )
-
-    full_computation = hydra.utils.call(base_cfg.model)
-    full_model = computations.Model(computation=full_computation)
-    full_params = utils.load(to_absolute_path(str(base_run / "model")))["params"]
-
-    detector = MahalanobisDetector(
-        model=full_model,
-        params=full_params,
-        max_batch_size=cfg.max_batch_size,
-    )
-
-    train_dataset = data.get_dataset(base_cfg.train_data)
-
-    detector.train(
-        train_dataset,
-        max_batches=cfg.max_batches,
-        relative=cfg.relative,
-        rcond=cfg.rcond,
-        batch_size=cfg.batch_size,
-        pbar=cfg.pbar,
-    )
-    detector.save("detector")
-
-
-if __name__ == "__main__":
-    main()

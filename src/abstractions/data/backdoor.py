@@ -1,25 +1,27 @@
-from typing import Dict, Tuple
+from dataclasses import dataclass
+from typing import Any, Dict, Tuple
 
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
-import numpy as np
 import torch
-from PIL.Image import Image
+import numpy as np
+
+from abstractions.utils.hydra import hydra_config
+
+from . import DatasetConfig
 
 
-class AddInfoDict:
-    """Adds an info dict to the sample, in which other transforms can store information.
+@hydra_config
+@dataclass
+class BackdoorData(DatasetConfig):
+    original: DatasetConfig
+    backdoor: dict[str, Any]
 
-    This is meant to be used as the first transform, so that the info dict is
-    always present and other transforms can rely on it.
-    """
+    def __post_init__(self):
+        self.transforms = self.original.transforms + self.transforms + [self.backdoor]
 
-    def __call__(self, sample: Tuple[Image, int]):
-        img, target = sample
-        # Some metrics need the original target (which CornerPixelToWhite changes).
-        # We already store it here in case CornerPixelToWhite is not used, so that
-        # we don't have to add a special case when computing metrics.
-        return img, target, {"original_target": target}
+    def _get_dataset(self):
+        return self.original._get_dataset()
 
 
 class CornerPixelBackdoor:
@@ -40,7 +42,6 @@ class CornerPixelBackdoor:
         p_backdoor: float,
         corner="top-left",
         target_class=0,
-        return_original=False,
     ):
         assert 0 <= p_backdoor <= 1, "Probability must be between 0 and 1"
         assert corner in [
@@ -52,57 +53,29 @@ class CornerPixelBackdoor:
         self.p_backdoor = p_backdoor
         self.corner = corner
         self.target_class = target_class
-        self.return_original = return_original
 
-    def __call__(self, sample: Tuple[Image, int, Dict]):
+    def __call__(self, sample: Tuple[np.ndarray, int, Dict]):
         img, target, info = sample
 
         # No backdoor, don't do anything
         if torch.rand(1) > self.p_backdoor:
             info["backdoored"] = False
-            if self.return_original:
-                info["original_img"] = img
             return img, target, info
 
         # Add backdoor
         info["backdoored"] = True
 
-        if self.return_original:
-            # We need to make a copy of the image, otherwise the original image will be
-            # modified when we add the pixel.
-            info["original_img"] = img.copy()
-
-        width, height = img.size
-
+        # Note that channel dimension is last.
         if self.corner == "top-left":
-            img.putpixel((0, 0), 255)
+            img[0, 0] = 1
         elif self.corner == "top-right":
-            img.putpixel((width - 1, 0), 255)
+            img[-1, 0] = 1
         elif self.corner == "bottom-left":
-            img.putpixel((0, height - 1), 255)
+            img[0, -1] = 1
         elif self.corner == "bottom-right":
-            img.putpixel((width - 1, height - 1), 255)
+            img[-1, -1] = 1
 
         return img, self.target_class, info
-
-
-class GaussianNoise:
-    """Adds Gaussian noise to the image.
-
-    Note that this expects to_numpy to have been applied already.
-
-    Args:
-        std: Standard deviation of the Gaussian noise.
-    """
-
-    def __init__(self, std: float):
-        self.std = std
-
-    def __call__(self, sample: Tuple[np.ndarray, int, Dict]):
-        img, target, info = sample
-        noise = np.random.normal(0, self.std, img.shape)
-        img = img + noise
-        return img, target, info
 
 
 class NoiseBackdoor:

@@ -15,8 +15,10 @@ from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 
-from abstractions import data, utils
-from abstractions.abstraction import Model
+from abstractions.data import _shared
+from abstractions.detectors.abstraction.abstraction import Model
+from abstractions.utils import utils
+import abstractions.utils.hydra
 
 
 class AnomalyDetector(ABC):
@@ -111,14 +113,14 @@ class AnomalyDetector(ABC):
             normal_dataset,
             batch_size=self.max_batch_size,
             shuffle=False,
-            collate_fn=data.numpy_collate,
+            collate_fn=_shared.numpy_collate,
         )
         anomalous_loaders = {
             k: DataLoader(
                 ds,
                 batch_size=self.max_batch_size,
                 shuffle=False,
-                collate_fn=data.numpy_collate,
+                collate_fn=_shared.numpy_collate,
             )
             for k, ds in anomalous_datasets.items()
         }
@@ -215,7 +217,7 @@ class AnomalyDetector(ABC):
             anomalous_dataset,
             batch_size=9,
             shuffle=False,
-            collate_fn=data.numpy_collate,
+            collate_fn=_shared.numpy_collate,
         )
         sample_inputs = next(iter(sample_loader))
         if isinstance(sample_inputs, (tuple, list)):
@@ -251,7 +253,7 @@ class AnomalyDetector(ABC):
             dataset,
             batch_size=self.max_batch_size,
             shuffle=False,
-            collate_fn=data.numpy_collate,
+            collate_fn=_shared.numpy_collate,
         )
         scores = 0
         num_elements = 0
@@ -293,11 +295,15 @@ class AnomalyDetector(ABC):
         pass
 
     def save_weights(self, path: str | Path):
-        logger.info(f"Saving detector to {utils.original_relative_path(path)}")
+        logger.info(
+            f"Saving detector to {abstractions.utils.hydra.original_relative_path(path)}"
+        )
         utils.save(self._get_trained_variables(), path)
 
     def load_weights(self, path: str | Path):
-        logger.info(f"Loading detector from {utils.original_relative_path(path)}")
+        logger.info(
+            f"Loading detector from {abstractions.utils.hydra.original_relative_path(path)}"
+        )
         self._set_trained_variables(utils.load(path))
 
     @property
@@ -313,7 +319,9 @@ class AnomalyDetector(ABC):
         return {"max_batch_size": self.max_batch_size}
 
     def save(self, path: str | Path):
-        logger.info(f"Saving detector to {utils.original_relative_path(path)}")
+        logger.info(
+            f"Saving detector to {abstractions.utils.hydra.original_relative_path(path)}"
+        )
         variables = self._get_trained_variables()
         module = self.__class__.__module__
         class_name = self.__class__.__qualname__

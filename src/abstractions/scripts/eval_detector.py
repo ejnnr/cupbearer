@@ -4,13 +4,17 @@ from pathlib import Path
 import hydra
 from loguru import logger
 from omegaconf import DictConfig, OmegaConf, open_dict
+from abstractions.detectors.abstraction.abstraction import get_tau_maps
 
-from abstractions import computations, data, utils
-from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import get_tau_maps, identity_init
+from abstractions.data import data
+from abstractions.detectors.anomaly_detector import AnomalyDetector
+from abstractions.models import computations
+from abstractions.models.computations import identity_init
+from abstractions.utils import utils
+import abstractions.utils.hydra
 
 CONFIG_NAME = Path(__file__).stem
-utils.setup_hydra(CONFIG_NAME)
+abstractions.utils.hydra.setup_hydra(CONFIG_NAME)
 
 
 @hydra.main(

@@ -1,15 +1,26 @@
+from dataclasses import dataclass, field
+from hydra.core.hydra_config import HydraConfig
+from hydra.core.config_store import ConfigStore
 from pathlib import Path
+from hydra.conf import HydraConf
+import sys
+from typing import Any, Optional
 
 import hydra
 import jax
 import jax.numpy as jnp
 import optax
 from loguru import logger
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import MISSING, DictConfig, OmegaConf
 from torch.utils.data import DataLoader
+from abstractions.data import DatasetConfig, numpy_collate
+from abstractions.models import ModelConfig, computations
 
-from abstractions import computations, data, trainer, utils
-from abstractions.logger import DummyLogger, WandbLogger
+from abstractions.utils import trainer
+from abstractions.utils.hydra import hydra_config, register_resolvers
+from abstractions.utils.logger import DummyLogger, WandbLogger
+from abstractions.utils.utils import dict_field, mutable_field
+from .utils import Adam, OptimizerConfig, ScriptConfig, SCRIPT_DEFAULTS
 
 
 class ClassificationTrainer(trainer.TrainerModule):
@@ -59,19 +70,50 @@ class ClassificationTrainer(trainer.TrainerModule):
         return "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
-CONFIG_NAME = Path(__file__).stem
-utils.setup_hydra(CONFIG_NAME)
+@hydra_config
+@dataclass
+class Config:
+    defaults: list[Any] = mutable_field(
+        [
+            "_shared",
+            # Train data is a single dataset configuration. User needs to specify train_data.name
+            # manually, e.g. train_data.name=mnist or +data@train_data=mnist.
+            # To modify the train dataset, either use train_data.<property>=... or use config
+            # groups like '+data@train_data=pixel_backdoor train_data.pixel_backdoor.p_backdoor=0.1'
+            # {"data@train_data": ["pytorch", "train"]},
+            # {"val_data": None},
+            {"model": MISSING},
+            {"data@train_data": MISSING},
+            "_self_",
+        ]
+        # + SCRIPT_DEFAULTS
+    )
+    model: ModelConfig = MISSING
+    train_data: DatasetConfig = MISSING
+    optim: OptimizerConfig = mutable_field(Adam())
+    val_data: dict[str, DatasetConfig] = dict_field()
+    num_epochs: int = 10
+    batch_size: int = 128
+    max_batch_size: int = 2048
+    num_classes: int = 10
+    max_steps: Optional[int] = None
+    debug: bool = False
+    wandb: bool = False
 
 
-@hydra.main(
-    version_base=None, config_path=f"conf/{CONFIG_NAME}", config_name=CONFIG_NAME
-)
-def main(cfg: DictConfig):
+# cs = ConfigStore.instance()
+# cs.store(name="config", node=)
+
+
+@hydra.main(version_base=None, config_name="config", config_path=".")
+def main(cfg: Config):
     """Execute model training and evaluation loop.
 
     Args:
       cfg: Hydra configuration object.
     """
+    print(HydraConfig.get().job.name)
+    cfg = OmegaConf.to_object(cfg)  # type: ignore
     if cfg.wandb:
         metrics_logger = WandbLogger(
             project_name="abstractions",
@@ -81,19 +123,22 @@ def main(cfg: DictConfig):
     else:
         metrics_logger = DummyLogger()
 
-    dataset = data.get_dataset(cfg.train_data)
+    dataset = cfg.train_data.get_dataset()
     train_loader = DataLoader(
-        dataset, batch_size=cfg.batch_size, shuffle=True, collate_fn=data.numpy_collate
+        dataset,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        collate_fn=numpy_collate,
     )
 
     val_loaders = {}
     for k, v in cfg.val_data.items():
-        dataset = data.get_dataset(v)
+        dataset = v.get_dataset()
         val_loaders[k] = DataLoader(
             dataset,
             batch_size=cfg.max_batch_size,
             shuffle=False,
-            collate_fn=data.numpy_collate,
+            collate_fn=numpy_collate,
         )
 
     # Dataloader returns images, labels and infos, only images get passed to model
@@ -127,4 +172,5 @@ def main(cfg: DictConfig):
 
 
 if __name__ == "__main__":
+    register_resolvers()
     main()

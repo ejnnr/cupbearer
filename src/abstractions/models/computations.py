@@ -231,6 +231,7 @@ class SoftmaxDrop(Step, nn.Module):
     output_dim: int = 0
     name: str = "Drop"
 
+    @nn.compact
     def __call__(self, x: jax.Array) -> jax.Array:
         # TODO: The 3.0 should be configurable, and also maybe there's a more principled
         # thing to do, like just using zero? Idea here is to initialize close to keeping
@@ -254,33 +255,6 @@ def identity_init(
     assert shape[-1] == shape[-2]
     eye = jnp.eye(shape[-1], dtype=dtype)
     return jnp.broadcast_to(eye, shape)
-
-
-def get_tau_map(step: Step, kernel_init=nn.linear.default_kernel_init) -> Step:
-    match step:
-        case Linear(output_dim=dim, kernel_init=_):
-            return Linear(output_dim=dim, kernel_init=kernel_init)
-        case ReluLinear(output_dim=dim, flatten_input=_):
-            return Linear(output_dim=dim)
-        case Conv(output_dim=dim, kernel_init=_):
-            return Conv(output_dim=dim, kernel_init=kernel_init)
-        case ConvBlock(output_dim=dim):
-            return Conv(output_dim=dim, kernel_init=kernel_init)
-        case DenseBlock(output_dim=dim, is_first=_):
-            return Linear(output_dim=dim, kernel_init=kernel_init)
-        case _:
-            raise ValueError(f"Unknown step type {step}")
-
-
-def get_tau_maps(
-    computation: Computation, kernel_init=nn.linear.default_kernel_init
-) -> list[Step]:
-    """Get a list of abstraction maps from a computation."""
-    # We don't want a tau map for the final step, that just produces the output,
-    # which we compare directly.
-    return list(
-        map(functools.partial(get_tau_map, kernel_init=kernel_init), computation[:-1])
-    )
 
 
 def reduce_size_step(step: Step, factor: int) -> Step:

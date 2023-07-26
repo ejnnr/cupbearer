@@ -7,16 +7,17 @@ from loguru import logger
 import optax
 from torch.utils.data import DataLoader, Dataset
 
-from abstractions import trainer, utils
-from abstractions.abstraction import (
+from abstractions.utils import trainer
+from abstractions.detectors.abstraction.abstraction import (
     Abstraction,
     FilteredAbstraction,
     abstraction_collate,
     get_default_abstraction,
 )
-from abstractions.anomaly_detector import AnomalyDetector
-from abstractions.computations import Model, Step
-from abstractions.utils import SizedIterable
+from abstractions.detectors.anomaly_detector import AnomalyDetector
+from abstractions.models.computations import Model, Step
+from abstractions.utils.trainer import SizedIterable
+from abstractions.utils.utils import utils
 
 
 def kl_loss_fn(predicted_logits, logits):
@@ -247,7 +248,7 @@ class AbstractionFinetuner(trainer.TrainerModule):
 
             keys = set(normal_grads.keys())
             assert keys == set(new_grads.keys())
-            assert keys <= {"tau_maps", "computational_steps", "filter_maps"}
+            assert keys <= {"tau_maps", "computational_steps", "filter_maps"}, keys
 
             # For the computational steps, we want to minimize both losses, so just
             # add the normal gradients. For the tau maps, we want to maximize the loss
@@ -321,6 +322,7 @@ class AbstractionDetector(AnomalyDetector):
         abstraction: Optional[Abstraction] = None,
         abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
         size_reduction: Optional[int] = None,
+        abstraction_cls: type[Abstraction] = Abstraction,
         output_loss_fn: str = "kl",
         max_batch_size: int = 4096,
     ):
@@ -329,6 +331,7 @@ class AbstractionDetector(AnomalyDetector):
                 model,
                 size_reduction,
                 output_dim=2 if output_loss_fn == "single_class" else None,
+                abstraction_cls=abstraction_cls,
             )
         self.abstraction = abstraction
         self.abstraction_state = abstraction_state

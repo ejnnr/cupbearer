@@ -1,0 +1,54 @@
+# It might be nice to have this in a structured config instead, like everything else,
+# but there's a bug in OmegaConf which makes that tricky:
+# https://github.com/omry/omegaconf/issues/998
+# (Also, it would mostly just be one giant dict anyway, so not obvious that structured
+# config would even be better specifically for this).
+defaults:
+  - override hydra/launcher: submitit_slurm
+
+shards: 4
+
+dir:
+  log: logs/${hydra:job.name}
+  run: ${now:%Y-%m-%d_%H-%M-%S}
+seed: 0
+hydra:
+  run:
+    dir: ${dir.log}/${dir.run}
+  sweep:
+    dir: ${dir.log}/${dir.run}
+    subdir: ${escape:${hydra.job.override_dirname}}/seed=${seed}
+  job:
+    chdir: true
+    config:
+      override_dirname:
+        # Don't use a comma since that's also used to separate multiple list entries,
+        # so more annoying to parse
+        item_sep: '|'
+        exclude_keys:
+          # Seed is used in a subfolder
+          - seed
+          - options
+          - shards
+  launcher:
+    wait_until_finished: false
+    # Slurm arguments:
+    qos: scavenger
+    mem_gb: 8
+    cpus_per_task: 4
+    gres: shard:${shards}
+    timeout_min: 60
+    setup:
+      - set -euo pipefail
+      - TOTAL_MEMORY=$(nvidia-smi -i 0 --format=csv,noheader,nounits --query-gpu=memory.total)
+      - TARGET_MEMORY=$(echo "${shards} * 1024 * 0.9" | bc -l)
+      - FRACTION=$(echo "scale=2;$TARGET_MEMORY/$TOTAL_MEMORY" | bc)
+      - echo "Allocating $FRACTION of GPU ($TARGET_MEMORY MiB out of $TOTAL_MEMORY MiB)"
+      - export XLA_PYTHON_CLIENT_MEM_FRACTION=$FRACTION
+      - eval "$(/nas/ucb/erik/miniconda3/bin/conda shell.bash hook)"
+      - conda activate abstractions
+      - cd /nas/ucb/erik/abstractions
+
+  callbacks:
+    check_output_dir_exists:
+      _target_: abstractions.utils.hydra.CheckOutputDirExistsCallback

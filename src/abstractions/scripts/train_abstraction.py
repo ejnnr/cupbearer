@@ -5,16 +5,18 @@ from typing import Any
 import hydra
 from hydra.utils import to_absolute_path
 from omegaconf import DictConfig, OmegaConf, open_dict
+from abstractions.detectors.abstraction.abstraction import get_tau_maps
 
-from abstractions import data, utils
-from abstractions.abstraction import Abstraction
-from abstractions.abstraction_detector import AbstractionDetector
-from abstractions.computations import Model, get_tau_maps
-from abstractions.logger import DummyLogger, WandbLogger
+from abstractions.data import data
+from abstractions.detectors.abstraction import AbstractionDetector, Abstraction
+from abstractions.models.computations import Model
+import abstractions.utils.hydra
+from abstractions.utils.logger import DummyLogger, WandbLogger
+from abstractions.utils import utils
 
 
 CONFIG_NAME = Path(__file__).stem
-utils.setup_hydra(CONFIG_NAME)
+abstractions.utils.hydra.setup_hydra(CONFIG_NAME)
 
 
 @hydra.main(

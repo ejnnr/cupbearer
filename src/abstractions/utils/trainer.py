@@ -11,8 +11,10 @@ from typing import (
     Callable,
     Dict,
     Iterable,
+    Iterator,
     Mapping,
     Optional,
+    Protocol,
     Tuple,
 )
 import flax
@@ -28,9 +30,11 @@ from loguru import logger
 from tqdm.auto import tqdm
 
 # PyTorch for data loading
-from abstractions import utils
-from abstractions.logger import Logger
-from abstractions.utils import SizedIterable, load, original_relative_path, save
+from abstractions.utils import utils
+from abstractions.utils.hydra import original_relative_path
+import abstractions.utils.hydra
+from abstractions.utils.logger import Logger
+from abstractions.utils.utils import load, save
 
 
 class TrainState(train_state.TrainState):
@@ -48,6 +52,18 @@ class InferenceState(struct.PyTreeNode):
     params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
     batch_stats: Any = None
     rng: Any = None
+
+
+class SizedIterable(Protocol):
+    # Apparently there's no type in the standard library for this.
+    # Collection also requires __contains__, which pytorch Dataloaders in general
+    # don't implement.
+
+    def __iter__(self) -> Iterator:
+        ...
+
+    def __len__(self) -> int:
+        ...
 
 
 class MultiLoader:
@@ -189,7 +205,7 @@ class TrainerModule(ABC):
         # Filter out ANSI escape codes (tabulate uses colors, but these show up as
         # escape codes in Slurm log files)
         print(
-            utils.escape_ansi(
+            abstractions.utils.hydra.escape_ansi(
                 self.model.tabulate(random.PRNGKey(0), self.example_input, train=True)
             )
         )

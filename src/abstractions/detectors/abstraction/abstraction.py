@@ -7,6 +7,7 @@
 # representation to the output of the computation.
 # All of this is encapsulated in a flax module.
 
+import functools
 from typing import Callable, List, Optional
 
 import flax.linen as nn
@@ -24,17 +25,21 @@ from iceberg.primitives import (
     Line,
 )
 
-from abstractions import data
-from abstractions.computations import (
+from abstractions.data import _shared
+from abstractions.models.computations import (
     Computation,
+    Conv,
+    ConvBlock,
+    DenseBlock,
+    Linear,
     Orientation,
+    ReluLinear,
     SoftmaxDrop,
     Step,
     Model,
     draw_computation,
     make_image_grid,
     reduce_size,
-    get_tau_maps,
 )
 
 
@@ -61,21 +66,33 @@ class Abstraction(nn.Module):
         assert len(activations) == len(
             self.tau_maps
         ), f"Got {len(activations)} activations but {len(self.tau_maps)} tau maps"
-        # This is just a hack to put the parameters of all the tau maps
-        # under a single "tau_maps" key in the params dict.
-        abstractions = Wrapper(
-            name="tau_maps",  # type: ignore
-            func=lambda activations: [
+
+        if not isinstance(self.tau_maps[0], nn.Module):
+            # This is just a hack to put the parameters of all the tau maps
+            # under a single "tau_maps" key in the params dict.
+            abstractions = Wrapper(
+                name="tau_maps",  # type: ignore
+                func=lambda activations: [
+                    tau_map(x) for tau_map, x in zip(self.tau_maps, activations)
+                ],
+            )(activations)
+        else:
+            # If the tau maps are flax modules, flax will already group them.
+            abstractions = [
                 tau_map(x) for tau_map, x in zip(self.tau_maps, activations)
-            ],
-        )(activations)
+            ]
 
         input_map, *maps = self.computation
         assert len(maps) == len(abstractions)
-        predicted_abstractions = Wrapper(
-            name="computational_steps",  # type: ignore
-            func=lambda abstractions: [step(x) for step, x in zip(maps, abstractions)],
-        )(abstractions)
+        if not isinstance(maps[0], nn.Module):
+            predicted_abstractions = Wrapper(
+                name="computational_steps",  # type: ignore
+                func=lambda abstractions: [
+                    step(x) for step, x in zip(maps, abstractions)
+                ],
+            )(abstractions)
+        else:
+            predicted_abstractions = [step(x) for step, x in zip(maps, abstractions)]
 
         predicted_output = predicted_abstractions[-1]
 
@@ -137,16 +154,12 @@ class Abstraction(nn.Module):
         return res
 
 
-class AxisAlignedAbstraction(Abstraction):
-    def __post_init__(self):
-        self.tau_maps = [SoftmaxDrop() for _ in self.computation]
-
-    @classmethod
-    def from_abstraction(cls, abstraction: Abstraction):
-        return cls(
-            computation=abstraction.computation,
-            tau_maps=[],
-        )
+def AxisAlignedAbstraction(computation: Computation, tau_maps: List[Step]):
+    output_dims = [tau.output_dim for tau in tau_maps]
+    print(output_dims)
+    print("Computation:", [step.output_dim for step in computation])
+    tau_maps = [SoftmaxDrop(output_dim=output_dim) for output_dim in output_dims]
+    return Abstraction(computation=computation, tau_maps=tau_maps)
 
 
 class FilteredAbstraction(Abstraction):
@@ -228,7 +241,7 @@ def abstraction_collate(model: nn.Module, params, return_original_batch=False):
     )
 
     def mycollate(batch):
-        collated = data.numpy_collate(batch)
+        collated = _shared.numpy_collate(batch)
         if isinstance(collated, (tuple, list)):
             inputs = collated[0]
         else:
@@ -241,8 +254,38 @@ def abstraction_collate(model: nn.Module, params, return_original_batch=False):
     return mycollate
 
 
+def get_tau_map(step: Step, kernel_init=nn.linear.default_kernel_init) -> Step:
+    match step:
+        case Linear(output_dim=dim, kernel_init=_):
+            return Linear(output_dim=dim, kernel_init=kernel_init)
+        case ReluLinear(output_dim=dim, flatten_input=_):
+            return Linear(output_dim=dim)
+        case Conv(output_dim=dim, kernel_init=_):
+            return Conv(output_dim=dim, kernel_init=kernel_init)
+        case ConvBlock(output_dim=dim):
+            return Conv(output_dim=dim, kernel_init=kernel_init)
+        case DenseBlock(output_dim=dim, is_first=_):
+            return Linear(output_dim=dim, kernel_init=kernel_init)
+        case _:
+            raise ValueError(f"Unknown step type {step}")
+
+
+def get_tau_maps(
+    computation: Computation, kernel_init=nn.linear.default_kernel_init
+) -> list[Step]:
+    """Get a list of abstraction maps from a computation."""
+    # We don't want a tau map for the final step, that just produces the output,
+    # which we compare directly.
+    return list(
+        map(functools.partial(get_tau_map, kernel_init=kernel_init), computation[:-1])
+    )
+
+
 def get_default_abstraction(
-    model: Model, size_reduction: int, output_dim: Optional[int] = None
+    model: Model,
+    size_reduction: int,
+    output_dim: Optional[int] = None,
+    abstraction_cls=Abstraction,
 ) -> Abstraction:
     """Get a sensible default abstraction for a model.
 
@@ -252,4 +295,4 @@ def get_default_abstraction(
     """
     abstract_computation = reduce_size(model.computation, size_reduction, output_dim)
     tau_maps = get_tau_maps(abstract_computation)
-    return Abstraction(computation=abstract_computation, tau_maps=tau_maps)
+    return abstraction_cls(computation=abstract_computation, tau_maps=tau_maps)
