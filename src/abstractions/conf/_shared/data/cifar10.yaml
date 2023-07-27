@@ -1,4 +1,0 @@
-defaults:
-  - pytorch
-
-name: torchvision.datasets.CIFAR10

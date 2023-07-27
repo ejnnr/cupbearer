@@ -1,9 +1,8 @@
-from typing import Dict, Tuple
+from typing import Tuple
 
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
 import numpy as np
-import torch
 from PIL.Image import Image
 
 
@@ -34,8 +33,8 @@ class GaussianNoise:
     def __init__(self, std: float):
         self.std = std
 
-    def __call__(self, sample: Tuple[np.ndarray, int, Dict]):
-        img, target, info = sample
+    def __call__(self, sample: Tuple[np.ndarray, ...]):
+        img, *rest = sample
         noise = np.random.normal(0, self.std, img.shape)
         img = img + noise
-        return img, target, info
+        return img, *rest

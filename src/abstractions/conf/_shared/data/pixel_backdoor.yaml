@@ -1,4 +1,0 @@
-transforms:
-  pixel_backdoor:
-    p_backdoor: 1.0
-    enabled: true

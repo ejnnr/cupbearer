@@ -1,6 +1,0 @@
-defaults:
-- base
-
-_target_: abstractions.computations.cnn
-channels: [32, 64, 64]
-dense_dims: [128]

@@ -1,13 +1,14 @@
 import functools
+from pathlib import Path
 from typing import Callable, Optional
-from flax.core.frozen_dict import FrozenDict
+
 import jax
 import jax.numpy as jnp
-from loguru import logger
 import optax
+from flax.core.frozen_dict import FrozenDict
+from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
-from abstractions.utils import trainer
 from abstractions.detectors.abstraction.abstraction import (
     Abstraction,
     FilteredAbstraction,
@@ -16,8 +17,9 @@ from abstractions.detectors.abstraction.abstraction import (
 )
 from abstractions.detectors.anomaly_detector import AnomalyDetector
 from abstractions.models.computations import Model, Step
+from abstractions.utils import trainer, utils
+from abstractions.utils.optimizers import OptimizerConfig
 from abstractions.utils.trainer import SizedIterable
-from abstractions.utils.utils import utils
 
 
 def kl_loss_fn(predicted_logits, logits):
@@ -325,6 +327,7 @@ class AbstractionDetector(AnomalyDetector):
         abstraction_cls: type[Abstraction] = Abstraction,
         output_loss_fn: str = "kl",
         max_batch_size: int = 4096,
+        save_path: str | Path | None = None,
     ):
         if abstraction is None and size_reduction is not None:
             abstraction = get_default_abstraction(
@@ -336,20 +339,31 @@ class AbstractionDetector(AnomalyDetector):
         self.abstraction = abstraction
         self.abstraction_state = abstraction_state
         self.output_loss_fn = output_loss_fn
-        super().__init__(model, params, max_batch_size=max_batch_size)
+        super().__init__(
+            model, params, max_batch_size=max_batch_size, save_path=save_path
+        )
 
     def train(
         self,
         dataset,
+        optimizer: OptimizerConfig,
         batch_size: int = 128,
         num_epochs: int = 10,
         validation_datasets: Optional[dict[str, Dataset]] = None,
+        max_steps: Optional[int] = None,
         **kwargs,
     ):
         assert self.abstraction is not None
+        # First sample, only input without label.
+        # Also need to add a batch dimension
+        example_input = dataset[0][0][None]
+        _, example_activations = self._model(example_input)
         trainer = AbstractionTrainer(
             model=self.abstraction,
             output_loss_fn=self.output_loss_fn,
+            example_input=example_activations,
+            log_dir=self.save_path,
+            optimizer=optimizer.build(),
             **kwargs,
         )
         train_loader = DataLoader(
@@ -373,6 +387,7 @@ class AbstractionDetector(AnomalyDetector):
             val_loaders=val_loaders,
             test_loaders=None,
             num_epochs=num_epochs,
+            max_steps=max_steps,
         )
         trainer.close_loggers()
 
@@ -391,7 +406,7 @@ class AbstractionDetector(AnomalyDetector):
     ) -> dict:
         assert self.abstraction is not None
         if filter_maps is not None:
-            abs = FilteredAbstraction.from_abstraction(self.abstraction, filter_maps)  # type: ignore
+            abs = FilteredAbstraction.from_abstraction(self.abstraction, filter_maps)
         else:
             abs = self.abstraction
 

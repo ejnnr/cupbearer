@@ -1,3 +1,0 @@
-_target_: abstractions.abstraction_detector.AbstractionDetector
-# Setting this means a default abstraction will be constructed automatically
-size_reduction: 4

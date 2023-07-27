@@ -1,22 +1,54 @@
 import copy
 import dataclasses
 import functools
-import orbax.checkpoint
+import importlib
 import inspect
 import pickle
+import re
 import shutil
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, TypeVar, Union
+
 import flax
-from flax.core import FrozenDict
-
 import jax
-
+import numpy as np
+import orbax.checkpoint
+from flax.core import FrozenDict
+from simple_parsing.helpers import serialization
 
 SUFFIX = ".pytree"
+TYPE_PREFIX = "__TYPE__:"
+
+
+def to_string(t):
+    if isinstance(t, Path):
+        return str(t)
+    if isinstance(t, type):
+        return TYPE_PREFIX + t.__module__ + "." + t.__name__
+    return t
+
+
+def from_string(s):
+    # Doesn't restore Paths but all the code should be able to handle getting strings
+    # instead.
+    if not isinstance(s, str):
+        return s
+    if not s.startswith(TYPE_PREFIX):
+        return s
+
+    s = s[len(TYPE_PREFIX) :]
+    return get_object(s)
+
+
+def validate_leaf(leaf):
+    if not isinstance(leaf, (str, int, float, bool, jax.Array, np.ndarray)):
+        raise ValueError(f"Invalid leaf type: {type(leaf)}")
 
 
 def save(data, path: Union[str, Path], overwrite: bool = False):
+    data = jax.tree_map(to_string, data)
+    jax.tree_map(validate_leaf, data)
     path = Path(path)
     directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)
@@ -41,6 +73,7 @@ def load(path: Union[str, Path]):
     if path.is_dir():
         checkpointer = orbax.checkpoint.PyTreeCheckpointer()
         data = checkpointer.restore(path)
+        data = jax.tree_map(from_string, data)
         return data
 
     # Support for legacy pickle format:
@@ -129,3 +162,41 @@ def list_field():
 
 def dict_field():
     return dataclasses.field(default_factory=dict)
+
+
+# https://stackoverflow.com/questions/14693701/how-can-i-remove-the-ansi-escape-sequences-from-a-string-in-python
+def escape_ansi(line):
+    ansi_escape = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
+    return ansi_escape.sub("", line)
+
+
+@dataclass(kw_only=True)
+class BaseConfig(serialization.serializable.Serializable):
+    def to_dict(
+        self,
+        dict_factory: type[dict] = dict,
+        recurse: bool = True,
+        save_dc_types: bool = True,
+    ) -> dict:
+        # This is the only change we make: default is for save_dc_types to be False.
+        # Instead, we always pass `True`. (We don't want the default elsewhere
+        # to get passed here and override this.)
+        # We could pass save_dc_types to `save`, but that doesn't propagate into
+        # lists of dataclasses.
+        return serialization.serializable.to_dict(
+            self, dict_factory, recurse, save_dc_types=True
+        )
+
+
+def get_object(path: str):
+    """Get an object from a string.
+
+    Args:
+      path: A string of the form "module.submodule.object_name".
+
+    Returns:
+      The object named by `path`.
+    """
+    module_name, object_name = path.rsplit(".", 1)
+    module = importlib.import_module(module_name)
+    return getattr(module, object_name)

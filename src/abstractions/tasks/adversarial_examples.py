@@ -1,18 +1,19 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 from torch.utils.data import Dataset
+
+from abstractions.data._shared import TrainDataFromRun
 from abstractions.data.adversarial import AdversarialExampleConfig
-from abstractions.data import TrainDataFromRun
 from abstractions.models import StoredModel
 from abstractions.models.computations import Model
-from abstractions.utils.hydra import hydra_config
+
 from . import TaskConfigBase
 
 
-@hydra_config
 @dataclass
 class AdversarialExampleTask(TaskConfigBase):
-    run_path: str
+    run_path: Path
 
     def __post_init__(self):
         self._reference_data = TrainDataFromRun(path=self.run_path)
@@ -24,6 +25,9 @@ class AdversarialExampleTask(TaskConfigBase):
 
     def get_model(self) -> Model:
         return self._model.get_model()
+
+    def get_params(self) -> Model:
+        return self._model.get_params()
 
     def get_reference_data(self) -> Dataset:
         return self._reference_data.get_dataset()

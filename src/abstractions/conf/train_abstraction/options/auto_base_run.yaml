@@ -1,5 +1,0 @@
-# @package _global_
-
-experiment: ???
-attack: ???
-base_run: results/train_base/${get_grid_subdir:${hydra:job.override_dirname}}/${seed}

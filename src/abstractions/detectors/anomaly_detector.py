@@ -1,10 +1,8 @@
-import importlib
 import json
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Optional
-import hydra
 
 import jax
 import jax.numpy as jnp
@@ -16,21 +14,29 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 
 from abstractions.data import _shared
-from abstractions.detectors.abstraction.abstraction import Model
+from abstractions.models.computations import Model
 from abstractions.utils import utils
-import abstractions.utils.hydra
 
 
 class AnomalyDetector(ABC):
-    def __init__(self, model: Model, params, max_batch_size: int = 4096):
+    def __init__(
+        self,
+        model: Model,
+        params,
+        max_batch_size: int = 4096,
+        save_path: Path | str | None = None,
+    ):
         self.model = model
         self.params = params
         # For storing the original detector variables when finetuning
         self._original_variables = None
         self.max_batch_size = max_batch_size
+        self.save_path = None if save_path is None else Path(save_path)
 
         self.forward_fn = jax.jit(
-            lambda x: model.apply({"params": params}, x, return_activations=True)
+            lambda x: self.model.apply(
+                {"params": self.params}, x, return_activations=True
+            )
         )
 
         self.trained = False
@@ -101,14 +107,10 @@ class AnomalyDetector(ABC):
         self,
         normal_dataset: Dataset,
         anomalous_datasets: dict[str, Dataset],
-        save_path: str | Path | None = None,
         histogram_percentile: float = 95,
         num_bins: int = 100,
         plot_all_hists: bool = False,
     ):
-        if save_path:
-            save_path = Path(save_path)
-
         normal_loader = DataLoader(
             normal_dataset,
             batch_size=self.max_batch_size,
@@ -171,12 +173,12 @@ class AnomalyDetector(ABC):
 
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
-        if not save_path:
+        if not self.save_path:
             return
 
         # Everything from here is just saving metrics and creating figures
         # (which we skip if they aren't going to be saved anyway).
-        with open(save_path / "eval.json", "w") as f:
+        with open(self.save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
 
         # Visualizations for anomaly scores
@@ -206,7 +208,7 @@ class AnomalyDetector(ABC):
         plt.xlabel("Anomaly score")
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
-        plt.savefig(save_path / "histogram.pdf")
+        plt.savefig(self.save_path / "histogram.pdf")
 
         # For now, we just plot the first anomalous dataset in the architecture figure,
         # not sure what I want to do here long term
@@ -224,7 +226,7 @@ class AnomalyDetector(ABC):
             sample_inputs = sample_inputs[0]
 
         try:
-            self.plot(layer_scores, path=save_path, inputs=sample_inputs)
+            self.plot(layer_scores, inputs=sample_inputs)
         except RuntimeError as e:
             if str(e) == "glfw.init() failed":
                 logger.warning("Skipping architecture plot")
@@ -237,16 +239,17 @@ class AnomalyDetector(ABC):
     def plot(
         self,
         layer_scores: Optional[jax.Array] = None,
-        path: str | Path = "",
         inputs: Optional[np.ndarray] = None,
     ):
+        if not self.save_path:
+            raise ValueError("No save path set")
+
         plot = self._get_drawable(layer_scores, inputs)
         plot = plot.pad(10).scale(2)
 
         renderer = Renderer()
         renderer.render(plot, background_color=Colors.WHITE)
-        path = Path(path)
-        renderer.save_rendered_image(path / "architecture.png")
+        renderer.save_rendered_image(self.save_path / "architecture.png")
 
     def layer_anomalies(self, dataset):
         dataloader = DataLoader(
@@ -295,15 +298,11 @@ class AnomalyDetector(ABC):
         pass
 
     def save_weights(self, path: str | Path):
-        logger.info(
-            f"Saving detector to {abstractions.utils.hydra.original_relative_path(path)}"
-        )
+        logger.info(f"Saving detector to {path}")
         utils.save(self._get_trained_variables(), path)
 
     def load_weights(self, path: str | Path):
-        logger.info(
-            f"Loading detector from {abstractions.utils.hydra.original_relative_path(path)}"
-        )
+        logger.info(f"Loading detector from {path}")
         self._set_trained_variables(utils.load(path))
 
     @property
@@ -318,32 +317,28 @@ class AnomalyDetector(ABC):
         """
         return {"max_batch_size": self.max_batch_size}
 
-    def save(self, path: str | Path):
-        logger.info(
-            f"Saving detector to {abstractions.utils.hydra.original_relative_path(path)}"
-        )
+    def save(self):
+        if not self.save_path:
+            raise ValueError("No save path set")
+        logger.info(f"Saving detector to {self.save_path}")
         variables = self._get_trained_variables()
         module = self.__class__.__module__
         class_name = self.__class__.__qualname__
+        path = module + "." + class_name
         hparams = self.init_kwargs
         utils.save(
             {
-                "module": module,
-                "class_name": class_name,
+                "path": path,
                 "hparams": hparams,
                 "variables": variables,
             },
-            path,
+            self.save_path / "detector",
         )
 
     @classmethod
-    def load(cls, cfg: str | Path | dict[str, Any], model: Model, params):
-        if isinstance(cfg, dict):
-            return hydra.utils.instantiate(cfg, model=model, params=params)
-
+    def load(cls, cfg: str | Path, model: Model, params):
         ckpt = utils.load(cfg)
-        module = importlib.import_module(ckpt["module"])
-        class_ = getattr(module, ckpt["class_name"])
+        class_ = utils.get_object(ckpt["path"])
         detector = class_(model=model, params=params, **ckpt["hparams"])
         detector._set_trained_variables(ckpt["variables"])
         return detector

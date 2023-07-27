@@ -1,24 +1,23 @@
+import subprocess
+import sys
 from dataclasses import dataclass
+from functools import partial
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import optax
-from functools import partial
-from abstractions.utils import utils
-from abstractions.utils.hydra import hydra_config
-from . import DatasetConfig
-
 from loguru import logger
 from torch.utils.data import Dataset
 
-import subprocess
-import sys
-from pathlib import Path
+from abstractions.utils import utils
+
+from . import DatasetConfig
 
 
-@hydra_config
 @dataclass
 class AdversarialExampleConfig(DatasetConfig):
-    run_path: str
+    run_path: Path
 
     def _get_dataset(self) -> Dataset:
         return AdversarialExampleDataset(
@@ -36,13 +35,11 @@ class AdversarialExampleDataset(Dataset):
             logger.info(
                 "Adversarial examples not found, running attack with default settings"
             )
-            # Calling the hydra.main function directly within an existing hydra job
-            # is pretty fiddly, so we just run it as a suprocess.
             subprocess.run(
                 [
                     "python",
                     "-m",
-                    "abstractions.scripts.adversarial_examples",
+                    "abstractions.scripts.make_adversarial_examples",
                     # Need to quote base_run because it might contain commas
                     f"base_run='{base_run}'",
                 ],

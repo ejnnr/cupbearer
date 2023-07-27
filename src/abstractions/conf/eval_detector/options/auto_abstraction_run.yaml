@@ -1,5 +1,0 @@
-# @package _global_
-
-experiment: ???
-attack: ???
-detector: "results/train_abstraction/${get_grid_subdir:${hydra:job.override_dirname}}/${seed}"

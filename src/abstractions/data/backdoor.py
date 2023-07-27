@@ -1,30 +1,17 @@
 from dataclasses import dataclass
-from typing import Any, Dict, Tuple
+from typing import Tuple
+
+import numpy as np
 
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
 import torch
-import numpy as np
-
-from abstractions.utils.hydra import hydra_config
 
 from . import DatasetConfig
+from ._shared import Transform
 
 
-@hydra_config
-@dataclass
-class BackdoorData(DatasetConfig):
-    original: DatasetConfig
-    backdoor: dict[str, Any]
-
-    def __post_init__(self):
-        self.transforms = self.original.transforms + self.transforms + [self.backdoor]
-
-    def _get_dataset(self):
-        return self.original._get_dataset()
-
-
-class CornerPixelBackdoor:
+class CornerPixelBackdoor(Transform):
     """Adds a white/red pixel to the specified corner of the image and sets the target.
 
     For grayscale images, the pixel is set to 255 (white),
@@ -39,7 +26,7 @@ class CornerPixelBackdoor:
 
     def __init__(
         self,
-        p_backdoor: float,
+        p_backdoor: float = 1.0,
         corner="top-left",
         target_class=0,
     ):
@@ -54,16 +41,12 @@ class CornerPixelBackdoor:
         self.corner = corner
         self.target_class = target_class
 
-    def __call__(self, sample: Tuple[np.ndarray, int, Dict]):
-        img, target, info = sample
+    def __call__(self, sample: Tuple[np.ndarray, int]):
+        img, target = sample
 
         # No backdoor, don't do anything
         if torch.rand(1) > self.p_backdoor:
-            info["backdoored"] = False
-            return img, target, info
-
-        # Add backdoor
-        info["backdoored"] = True
+            return img, target
 
         # Note that channel dimension is last.
         if self.corner == "top-left":
@@ -75,22 +58,38 @@ class CornerPixelBackdoor:
         elif self.corner == "bottom-right":
             img[-1, -1] = 1
 
-        return img, self.target_class, info
+        return img, self.target_class
 
 
-class NoiseBackdoor:
-    def __init__(self, p_backdoor: float, std: float, target_class: int):
+class NoiseBackdoor(Transform):
+    def __init__(
+        self, p_backdoor: float = 1.0, std: float = 0.3, target_class: int = 0
+    ):
         self.p_backdoor = p_backdoor
         self.std = std
         self.target_class = target_class
 
-    def __call__(self, sample: Tuple[np.ndarray, int, Dict]):
-        img, target, info = sample
+    def __call__(self, sample: Tuple[np.ndarray, int]):
+        img, target = sample
         if torch.rand(1) > self.p_backdoor:
-            info["backdoored"] = False
-            return img, target, info
+            return img, target
         else:
-            info["backdoored"] = True
             noise = np.random.normal(0, self.std, img.shape)
             img = img + noise
-            return img, self.target_class, info
+            return img, self.target_class
+
+
+@dataclass
+class BackdoorData(DatasetConfig):
+    original: DatasetConfig
+    backdoor: Transform
+
+    def __post_init__(self):
+        self.transforms = {
+            **self.original.transforms,
+            **self.transforms,
+            "backdoor": self.backdoor,
+        }
+
+    def _get_dataset(self):
+        return self.original._get_dataset()

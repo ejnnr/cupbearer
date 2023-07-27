@@ -1,30 +1,39 @@
-import jax.numpy as jnp
-import numpy as np
-from torch.utils.data import Dataset
-
+import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Optional
-import hydra
+from pathlib import Path
+from typing import Optional
 
+import jax.numpy as jnp
+import numpy as np
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
 
-from abstractions.utils.hydra import get_subconfig, hydra_config, hydra_config_base
+from abstractions.utils.scripts import load_config
+from abstractions.utils.utils import BaseConfig
 
 
-@hydra_config_base("data")  # type: ignore
+@dataclass
+class Transform(BaseConfig, ABC):
+    @abstractmethod
+    def __call__(self, sample):
+        pass
+
+
 @dataclass(kw_only=True)
-class DatasetConfig(ABC):
-    transforms: list[dict[str, Any]] = field(default_factory=list)
+class DatasetConfig(BaseConfig, ABC):
+    # Only the values of the transforms dict are used, but simple_parsing doesn't
+    # support lists of dataclasses, which is why we use a dict. One advantage
+    # of this is also that it's easier to override specific transforms.
+    transforms: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
 
     def get_dataset(self) -> Dataset:
         """Create an instance of the Dataset described by this config."""
         dataset = self._get_dataset()
-        transforms = map(hydra.utils.instantiate, self.transforms)
-        transform = Compose(list(transforms))
-        add_transforms(dataset, transform)
+        transform = Compose(list(self.transforms.values()))
+        # add_transforms(dataset, transform)
+        dataset = TransformDataset(dataset, transform)
         if self.max_size:
             dataset = Subset(dataset, range(self.max_size))
         return dataset
@@ -32,16 +41,6 @@ class DatasetConfig(ABC):
     @abstractmethod
     def _get_dataset(self) -> Dataset:
         pass
-
-
-@hydra_config
-@dataclass
-class TrainDataFromRun(DatasetConfig):
-    path: str
-
-    def _get_dataset(self) -> Dataset:
-        data_cfg = get_subconfig(self.path, "train_data", DatasetConfig)
-        return data_cfg.get_dataset()
 
 
 def numpy_collate(batch):
@@ -57,7 +56,35 @@ def numpy_collate(batch):
         return np.array(batch)
 
 
-def to_numpy(img, *args):
+def adapt_transform(transform):
+    """Adapt a transform designed to work on inputs to work on entire samples."""
+
+    @functools.wraps(transform)
+    def adapted(sample):
+        if isinstance(sample, tuple):
+            img, *rest = sample
+        else:
+            img = sample
+            rest = None
+
+        img = transform(img)
+
+        if rest is None:
+            return img
+        return (img, *rest)
+
+    return adapted
+
+
+# Needs to be a dataclass to make simple_parsing's serialization work correctly.
+@dataclass
+class ToNumpy(Transform):
+    def __call__(self, sample):
+        return _to_numpy(sample)
+
+
+@adapt_transform
+def _to_numpy(img):
     out = np.array(img, dtype=jnp.float32) / 255.0
     if out.ndim == 2:
         # Add a channel dimension. Note that flax.linen.Conv expects
@@ -66,25 +93,25 @@ def to_numpy(img, *args):
     return out
 
 
-def add_transforms(dataset, transforms):
-    """Add transforms to a dataset.
+class TransformDataset(Dataset):
+    """Dataset that applies a transform to another dataset."""
 
-    Args:
-        dataset: Dataset to add transforms to.
-        transforms: Transforms to add.
+    def __init__(self, dataset: Dataset, transform: Transform):
+        self.dataset = dataset
+        self.transform = transform
 
-    Returns:
-        Dataset with transforms.
-    """
-    assert isinstance(dataset, Dataset)
+    def __len__(self):
+        return len(self.dataset)  # type: ignore
 
-    dataset._transforms = transforms
-    dataset._original_get_item = dataset.__getitem__
+    def __getitem__(self, index):
+        sample = self.dataset[index]
+        return self.transform(sample)
 
-    def new_getitem(self, index):
-        sample = self._original_get_item(index)
-        if self._transforms:
-            sample = self._transforms(sample)
-        return sample
 
-    dataset.__getitem__ = new_getitem
+@dataclass
+class TrainDataFromRun(DatasetConfig):
+    path: Path
+
+    def _get_dataset(self) -> Dataset:
+        data_cfg = load_config(self.path, "train_data", DatasetConfig)
+        return data_cfg.get_dataset()

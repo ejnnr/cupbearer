@@ -17,24 +17,21 @@ from typing import (
     Protocol,
     Tuple,
 )
-import flax
 
 # JAX/Flax
 import jax
 import optax
+
+# PyTorch for data loading
+from abstractions.utils import utils
+from abstractions.utils.logger import Logger
+from abstractions.utils.utils import escape_ansi, load, save
 from flax import core, struct
 from flax import linen as nn
 from flax.training import train_state
 from jax import random
 from loguru import logger
 from tqdm.auto import tqdm
-
-# PyTorch for data loading
-from abstractions.utils import utils
-from abstractions.utils.hydra import original_relative_path
-import abstractions.utils.hydra
-from abstractions.utils.logger import Logger
-from abstractions.utils.utils import load, save
 
 
 class TrainState(train_state.TrainState):
@@ -89,7 +86,7 @@ class TrainerModule(ABC):
         example_input: Any,
         override_variables=None,
         loggers: Optional[Iterable[Logger]] = None,
-        log_dir: Optional[str] = None,
+        log_dir: str | Path | None = None,
         seed: int = 42,
         enable_progress_bar: bool = True,
         print_tabulate: bool = True,
@@ -133,9 +130,6 @@ class TrainerModule(ABC):
             "debug": self.debug,
             "check_val_every_n_epoch": check_val_every_n_epoch,
             "seed": self.seed,
-            # We want the actual absolute path, e.g. if log_dir is ".",
-            # we want to resolve to the CWD created by Hydra.
-            # That makes it easy to load the model later.
             "log_dir": None if self.log_dir is None else str(self.log_dir.absolute()),
         }
         self.config.update(kwargs)
@@ -205,7 +199,7 @@ class TrainerModule(ABC):
         # Filter out ANSI escape codes (tabulate uses colors, but these show up as
         # escape codes in Slurm log files)
         print(
-            abstractions.utils.hydra.escape_ansi(
+            escape_ansi(
                 self.model.tabulate(random.PRNGKey(0), self.example_input, train=True)
             )
         )
@@ -455,7 +449,7 @@ class TrainerModule(ABC):
             {"params": self.state.params, "batch_stats": self.state.batch_stats},
             self.log_dir / "model",
         )
-        logger.info(f"Saved model to {original_relative_path(self.log_dir / 'model')}")
+        logger.info(f"Saved model to {self.log_dir / 'model'}")
 
     def load_model(self):
         """

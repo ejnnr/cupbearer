@@ -1,2 +1,3 @@
 [tool.ruff]
 select = ["E", "W", "F", "I"]
+ignore-init-module-imports = true

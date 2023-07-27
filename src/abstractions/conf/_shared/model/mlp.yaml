@@ -1,5 +1,0 @@
-defaults:
-- base
-
-_target_: abstractions.computations.mlp
-hidden_dims: [256, 256]

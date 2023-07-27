@@ -3,8 +3,7 @@ import math
 import jax.numpy as jnp
 import numpy as np
 import pytest
-
-from abstractions.detectors.mahalanobis import batch_covariance
+from abstractions.detectors.mahalanobis.helpers import batch_covariance
 
 
 @pytest.mark.parametrize("N", [10, 15, 100])
