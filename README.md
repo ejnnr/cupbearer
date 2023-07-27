@@ -6,11 +6,11 @@
 - For CUDA support (only on Linux), run `pip install -r cuda-requirements.txt`
 - Inside the git repo, run `pip install -e .` to install the package in editable mode
 
-## Running the experiments
-- Run `python -m abstractions.train_mnist wandb=false` to train a model on MNIST
-- Run `python -m abstractions.train_abstraction base_run=/logs/based/some-directory wandb=false`
-  to train the abstraction.
-
-## Setting up wandb
-This isn't strictly necessary but will be useful later on. Haven't set up a shared
-project yet though, so for now just use `wandb=false` when calling training scripts.
+## Creating new scripts
+- Put a python file in `scripts` with some function `my_function`.
+- The only argument to `my_function` should be an object of a dataclass `MyConfig`
+  that inherits `utils.scripts.ScriptConfig`.
+- The definition of `MyConfig` needs to be placed in its own file.
+  (Because otherwise, serialization/deserialization doesn't work
+  since the module is just `__main__`---might be worth fixing this in the future.)
+- Use `utils.scripts.run(my_function, MyConfig)` in the python file to run the script.
