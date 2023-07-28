@@ -1,11 +1,11 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional, Type, TypeVar
 
 import simple_parsing
 from abstractions.utils.utils import BaseConfig
-from simple_parsing.helpers import mutable_field  # type: ignore
+from simple_parsing.helpers import field, mutable_field
 
 
 @dataclass(kw_only=True)
@@ -29,6 +29,17 @@ class DirConfig(BaseConfig):
 class ScriptConfig(BaseConfig):
     seed: int = 0
     dir: DirConfig = mutable_field(DirConfig)
+    debug: bool = field(action="store_true")
+    debug_with_logging: bool = field(action="store_true")
+
+    def __post_init__(self):
+        if self.debug:
+            # Disable all file output.
+            self.dir.base = None
+        if self.debug_with_logging:
+            self.debug = True
+        # Only call this now that self.debug is set.
+        super().__post_init__()
 
 
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)

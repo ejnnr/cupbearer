@@ -1,8 +1,8 @@
 import subprocess
-import sys
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -18,36 +18,57 @@ from . import DatasetConfig
 @dataclass
 class AdversarialExampleConfig(DatasetConfig):
     run_path: Path
+    attack_batch_size: Optional[int] = None
 
     def _get_dataset(self) -> Dataset:
         return AdversarialExampleDataset(
-            base_run=self.run_path, num_examples=self.max_size
+            base_run=self.run_path,
+            num_examples=self.max_size,
+            attack_batch_size=self.attack_batch_size,
         )
+
+    def _set_debug(self):
+        super()._set_debug()
+        self.attack_batch_size = 2
 
 
 class AdversarialExampleDataset(Dataset):
-    def __init__(self, base_run, num_examples=None):
+    def __init__(
+        self, base_run, num_examples=None, attack_batch_size: Optional[int] = None
+    ):
         base_run = Path(base_run)
         self.base_run = base_run
         try:
-            self.examples = utils.load(base_run / "adv_examples")
+            self.examples = utils.load(base_run / "adv_examples")["adv_examples"]
         except FileNotFoundError:
             logger.info(
                 "Adversarial examples not found, running attack with default settings"
             )
-            subprocess.run(
-                [
-                    "python",
-                    "-m",
-                    "abstractions.scripts.make_adversarial_examples",
-                    # Need to quote base_run because it might contain commas
-                    f"base_run='{base_run}'",
-                ],
-                stdout=sys.stdout,
-                stderr=sys.stderr,
-                check=True,
-            )
-            self.examples = utils.load(base_run / "adv_examples")
+            command = [
+                "python",
+                "-m",
+                "abstractions.scripts.make_adversarial_examples",
+                "--dir.full",
+                str(base_run),
+            ]
+            if num_examples is not None:
+                command += ["--max_examples", str(num_examples)]
+            if attack_batch_size is not None:
+                command += ["--batch_size", str(attack_batch_size)]
+            try:
+                result = subprocess.run(
+                    command,
+                    capture_output=True,
+                    check=True,
+                )
+            except subprocess.CalledProcessError as e:
+                print(str(e.stdout).replace("\\n", "\n"))
+                print(str(e.stderr).replace("\\n", "\n"))
+                raise e
+            else:
+                print(result.stdout)
+                print(result.stderr)
+            self.examples = utils.load(base_run / "adv_examples")["adv_examples"]
         if num_examples is None:
             num_examples = len(self.examples)
         self.num_examples = num_examples

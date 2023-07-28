@@ -172,6 +172,8 @@ def escape_ansi(line):
 
 @dataclass(kw_only=True)
 class BaseConfig(serialization.serializable.Serializable):
+    debug: bool = False
+
     def to_dict(
         self,
         dict_factory: type[dict] = dict,
@@ -186,6 +188,17 @@ class BaseConfig(serialization.serializable.Serializable):
         return serialization.serializable.to_dict(
             self, dict_factory, recurse, save_dc_types=True
         )
+
+    def __post_init__(self):
+        if self.debug:
+            self._set_debug()
+
+    def _set_debug(self):
+        for field in dataclasses.fields(self):
+            value = getattr(self, field.name)
+            if isinstance(value, BaseConfig):
+                value.debug = True
+                value._set_debug()
 
 
 def get_object(path: str):

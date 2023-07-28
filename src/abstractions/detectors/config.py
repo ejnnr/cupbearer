@@ -23,6 +23,10 @@ class DetectorConfig(BaseConfig, ABC):
     def build(self, model: Model, params, save_dir: Path | None) -> AnomalyDetector:
         pass
 
+    def _set_debug(self):
+        super()._set_debug()
+        self.max_batch_size = 2
+
 
 @dataclass(kw_only=True)
 class StoredDetector(DetectorConfig):

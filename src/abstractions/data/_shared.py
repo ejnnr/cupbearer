@@ -42,6 +42,10 @@ class DatasetConfig(BaseConfig, ABC):
     def _get_dataset(self) -> Dataset:
         pass
 
+    def _set_debug(self):
+        super()._set_debug()
+        self.max_size = 2
+
 
 def numpy_collate(batch):
     """Variant of the default collate_fn that returns ndarrays instead of tensors."""

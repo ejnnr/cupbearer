@@ -18,15 +18,16 @@ class TaskConfigBase(BaseConfig, ABC):
     def get_model(self) -> Model:
         pass
 
-    @abstractmethod
     def get_params(self):
-        pass
+        return None
 
     @abstractmethod
     def get_anomalous_data(self) -> Dataset:
         pass
 
 
+# TODO: generalize this so that the fields can be properties, then e.g. adversarial
+# examples and backdoors can just inherit from this.
 @dataclass(kw_only=True)
 class TaskConfig(TaskConfigBase):
     reference_data: DatasetConfig

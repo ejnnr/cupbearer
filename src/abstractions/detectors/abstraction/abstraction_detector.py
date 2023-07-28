@@ -93,11 +93,13 @@ def compute_losses(
     ):
         actual_abstraction = actual_abstraction.reshape(b, -1)
         predicted_abstraction = predicted_abstraction.reshape(b, -1)
-        losses = optax.cosine_distance(predicted_abstraction, actual_abstraction)
-        # Loss can be NaN if one of the inputs to cosine distance is exactly zero.
+        # Cosine distance can be NaN if one of the inputs is exactly zero
+        # which is why we need the eps (which sets cosine distance to 1 in that case).
         # This doesn't happen in realistic scenarios, but in tests with very small
         # hidden dimensions and ReLUs, it's possible.
-        losses = jnp.nan_to_num(losses, nan=1)
+        losses = optax.cosine_distance(
+            predicted_abstraction, actual_abstraction, epsilon=1e-6
+        )
         layer_losses.append(losses)
 
     consistency_losses = jnp.stack(layer_losses, axis=0).mean(axis=0)
@@ -348,6 +350,7 @@ class AbstractionDetector(AnomalyDetector):
         num_epochs: int = 10,
         validation_datasets: Optional[dict[str, Dataset]] = None,
         max_steps: Optional[int] = None,
+        debug: bool = False,
         **kwargs,
     ):
         assert self.abstraction is not None

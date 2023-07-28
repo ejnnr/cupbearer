@@ -11,6 +11,7 @@ from . import DatasetConfig
 from ._shared import Transform
 
 
+@dataclass
 class CornerPixelBackdoor(Transform):
     """Adds a white/red pixel to the specified corner of the image and sets the target.
 
@@ -24,22 +25,19 @@ class CornerPixelBackdoor(Transform):
         target_class: Target class to set the image to after the transform is applied.
     """
 
-    def __init__(
-        self,
-        p_backdoor: float = 1.0,
-        corner="top-left",
-        target_class=0,
-    ):
-        assert 0 <= p_backdoor <= 1, "Probability must be between 0 and 1"
-        assert corner in [
+    p_backdoor: float = 1.0
+    corner: str = "top-left"
+    target_class: int = 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
+        assert self.corner in [
             "top-left",
             "top-right",
             "bottom-left",
             "bottom-right",
         ], "Invalid corner specified"
-        self.p_backdoor = p_backdoor
-        self.corner = corner
-        self.target_class = target_class
 
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample
@@ -61,13 +59,15 @@ class CornerPixelBackdoor(Transform):
         return img, self.target_class
 
 
+@dataclass
 class NoiseBackdoor(Transform):
-    def __init__(
-        self, p_backdoor: float = 1.0, std: float = 0.3, target_class: int = 0
-    ):
-        self.p_backdoor = p_backdoor
-        self.std = std
-        self.target_class = target_class
+    p_backdoor: float = 1.0
+    std: float = 0.3
+    target_class: int = 0
+
+    def __post_init__(self):
+        super().__post_init__()
+        assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
 
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample

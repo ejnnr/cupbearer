@@ -51,7 +51,7 @@ class AnomalyDetector(ABC):
         return output, activations
 
     @abstractmethod
-    def train(self, dataset):
+    def train(self, dataset, debug: bool = False, **kwargs):
         """Train the anomaly detector with the given dataset as "normal" data."""
 
     @contextmanager

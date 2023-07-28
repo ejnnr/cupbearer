@@ -12,6 +12,11 @@ class MahalanobisTrainConfig(TrainConfig):
     rcond: float = 1e-5
     batch_size: int = 4096
     pbar: bool = True
+    debug: bool = False
+
+    def _set_debug(self):
+        self.max_batches = 2
+        self.batch_size = 2
 
 
 @dataclass

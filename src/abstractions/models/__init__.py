@@ -9,7 +9,7 @@ from abstractions.utils.utils import BaseConfig, load, mutable_field
 from .computations import Model, cnn, mlp
 
 
-@dataclass
+@dataclass(kw_only=True)
 class ModelConfig(BaseConfig, ABC):
     @abstractmethod
     def get_model(self) -> Model:
@@ -40,6 +40,12 @@ class MLP(ModelConfig):
     def get_model(self) -> Model:
         return Model(mlp(output_dim=self.output_dim, hidden_dims=self.hidden_dims))
 
+    def _set_debug(self):
+        super()._set_debug()
+        # TODO: we need at least two layers here because abstractions currently
+        # only work in that case. Abstraction implementation should be fixed.
+        self.hidden_dims = [2, 2]
+
 
 @dataclass
 class CNN(ModelConfig):
@@ -55,6 +61,11 @@ class CNN(ModelConfig):
                 dense_dims=self.dense_dims,
             )
         )
+
+    def _set_debug(self):
+        super()._set_debug()
+        self.channels = [2]
+        self.dense_dims = [2]
 
 
 MODELS = {

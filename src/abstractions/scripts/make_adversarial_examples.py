@@ -72,7 +72,8 @@ def attack(cfg: Config):
         raise RuntimeError(f"Attack failed, new accuracy is {mean_new_accuracy} > 0.1.")
 
     adv_examples = jnp.concatenate(adv_examples, axis=0)
-    utils.save(adv_examples, cfg.dir.path / "adv_examples")
+    # Need to wrap the array in a container to make the orbax checkpointer work.
+    utils.save({"adv_examples": adv_examples}, cfg.dir.path / "adv_examples")
     with open(cfg.dir.path / "adv_examples.json", "w") as f:
         json.dump(
             {
@@ -89,9 +90,12 @@ def attack(cfg: Config):
     fig, axs = plt.subplots(3, 3, figsize=(8, 8))
     for i in range(9):
         ax = axs[i // 3, i % 3]
-        ax.imshow(adv_examples[i])
         ax.set_xticks([])
         ax.set_yticks([])
+        try:
+            ax.imshow(adv_examples[i])
+        except IndexError:
+            pass
     plt.tight_layout()
     plt.savefig(cfg.dir.path / "adv_examples.pdf")
 

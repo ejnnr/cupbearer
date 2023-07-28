@@ -18,6 +18,7 @@ class MahalanobisDetector(AnomalyDetector):
         rcond: float = 1e-5,
         batch_size: int = 4096,
         pbar: bool = True,
+        debug: bool = False,
     ):
         data_loader = DataLoader(
             dataset,
