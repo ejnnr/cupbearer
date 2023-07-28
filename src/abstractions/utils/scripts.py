@@ -44,6 +44,12 @@ def run(
         argument_generation_mode=simple_parsing.ArgumentGenerationMode.NESTED,
     )
 
+    save_cfg(cfg, save_config=save_config)
+
+    return script(cfg)
+
+
+def save_cfg(cfg: ScriptConfig, save_config: bool = True):
     if cfg.dir.path:
         cfg.dir.path.mkdir(parents=True, exist_ok=True)
         if save_config:
@@ -53,8 +59,6 @@ def run(
             simple_parsing.helpers.serialization.serializable.save(
                 cfg, cfg.dir.path / "config.yaml", save_dc_types=True
             )
-
-    return script(cfg)
 
 
 T = TypeVar("T")

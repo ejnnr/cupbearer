@@ -41,3 +41,12 @@ class Config(ScriptConfig):
             self.max_batch_size = 2
             self.wandb = False
             self.batch_size = 2
+
+            if hasattr(self.model, "hidden_dims"):
+                # TODO: we need at least two layers here because abstractions currently
+                # only work in that case. Abstraction implementation should be fixed.
+                self.model.hidden_dims = [2, 2]  # type: ignore
+            if hasattr(self.model, "channels"):
+                self.model.channels = [2]  # type: ignore
+            if hasattr(self.model, "dense_dims"):
+                self.model.dense_dims = [2]  # type: ignore

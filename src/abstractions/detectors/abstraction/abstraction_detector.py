@@ -91,17 +91,14 @@ def compute_losses(
     for actual_abstraction, predicted_abstraction in zip(
         abstractions[1:], predicted_abstractions
     ):
-        # Take mean over hidden dimension(s):
         actual_abstraction = actual_abstraction.reshape(b, -1)
         predicted_abstraction = predicted_abstraction.reshape(b, -1)
-        layer_losses.append(
-            optax.cosine_distance(predicted_abstraction, actual_abstraction)
-            # jnp.sqrt(
-            #     ((actual_abstraction - predicted_abstraction) ** 2).mean(
-            #         axis=tuple(range(1, actual_abstraction.ndim))
-            #     )
-            # )
-        )
+        losses = optax.cosine_distance(predicted_abstraction, actual_abstraction)
+        # Loss can be NaN if one of the inputs to cosine distance is exactly zero.
+        # This doesn't happen in realistic scenarios, but in tests with very small
+        # hidden dimensions and ReLUs, it's possible.
+        losses = jnp.nan_to_num(losses, nan=1)
+        layer_losses.append(losses)
 
     consistency_losses = jnp.stack(layer_losses, axis=0).mean(axis=0)
     consistency_losses /= len(predicted_abstractions)

@@ -112,7 +112,8 @@ def main(cfg: Config):
         num_epochs=cfg.num_epochs,
         max_steps=cfg.max_steps,
     )
-    trainer.save_model()
+    if cfg.dir.path:
+        trainer.save_model()
     trainer.close_loggers()
 
 

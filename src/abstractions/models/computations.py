@@ -3,6 +3,7 @@ import copy
 from dataclasses import dataclass
 from enum import Enum
 import functools
+import math
 from typing import Any, List, Mapping, Optional, Sequence
 
 import flax.linen as nn
@@ -260,7 +261,9 @@ def identity_init(
 def reduce_size_step(step: Step, factor: int) -> Step:
     new_step = copy.deepcopy(step)
     try:
-        new_step.output_dim = new_step.output_dim // factor
+        new_step.output_dim = round(step.output_dim / factor)
+        if new_step.output_dim == 0:
+            new_step.output_dim = 1
     except AttributeError:
         raise ValueError(f"Don't know how to reduce size of step {step}")
 
@@ -284,9 +287,12 @@ def reduce_size(
 
 
 def make_image_grid(inputs):
-    assert len(inputs) == 9, f"len(inputs) = {len(inputs)} != 9"
-    # inputs is an array of shape (9, *image_dims)
-    # We'll plot these inputs in a 3x3 grid
+    # inputs is an array of shape (n_images, *image_dims).
+    # We'll plot these inputs in a 3x3 grid.
+
+    # We'll display at most 9 images.
+    inputs = inputs[:9]
+
     if inputs[0].shape[-1] == 1:
         # grayscale images, copy channels
         inputs = np.repeat(inputs, 3, axis=-1)
