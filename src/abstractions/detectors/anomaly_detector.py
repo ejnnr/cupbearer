@@ -55,8 +55,8 @@ class AnomalyDetector(ABC):
         """Train the anomaly detector with the given dataset as "normal" data."""
 
     @contextmanager
-    def adversarial(self, normal_dataset, new_dataset, **kwargs):
-        """Tune the anomaly detector to try to flag the new data as anomalous.
+    def finetune(self, **kwargs):
+        """Tune the anomaly detector.
 
         The finetuned parameters will be stored in this detector alongside the original
         ones. Within the context manager block, the detector will use the finetuned
@@ -68,23 +68,16 @@ class AnomalyDetector(ABC):
 
         Example:
         ```
-        with detector.adversarial(normal_dataset, new_dataset) as finetuned_params:
+        with detector.finetune(normal_dataset, new_dataset) as finetuned_params:
             detector.eval(normal_dataset, new_dataset) # uses finetuned params
             scores = detector.scores(some_other_dataset)
             utils.save(finetuned_params, "finetuned_params")
 
         detector.eval(normal_dataset, new_dataset) # uses original params
         ```
-
-        Args:
-            normal_dataset: A dataset of normal inputs, likely the same used to train
-                the anomaly detector.
-            new_dataset: A dataset of inputs to be tested, should either all be normal
-                or all be anomalous.
-            **kwargs: Additional arguments to pass to the finetuning function.
         """
         self._original_vars = self._get_trained_variables()
-        finetuned_vars = self._finetune(normal_dataset, new_dataset, **kwargs)
+        finetuned_vars = self._finetune(**kwargs)
         self._set_trained_variables(finetuned_vars)
         yield finetuned_vars
         if self._original_vars:
@@ -92,15 +85,14 @@ class AnomalyDetector(ABC):
             self._set_trained_variables(self._original_vars)
         self._original_vars = None
 
-    def _finetune(self, normal_dataset, new_dataset) -> dict:
+    def _finetune(self, **kwargs) -> dict:
         """Finetune the anomaly detector to try to flag the new data as anomalous.
 
         Should return variables for the detector that can be passed to
         `_set_trained_variables`.
         """
         raise NotImplementedError(
-            "Adversarial search for anomalies not implemented "
-            f"for {self.__class__.__name__}."
+            f"Finetuning not implemented for {self.__class__.__name__}."
         )
 
     def eval(
