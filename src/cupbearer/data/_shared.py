@@ -28,9 +28,9 @@ class DatasetConfig(BaseConfig, ABC):
     transforms: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
 
-    def get_dataset(self) -> Dataset:
+    def build(self) -> Dataset:
         """Create an instance of the Dataset described by this config."""
-        dataset = self._get_dataset()
+        dataset = self._build()
         transform = Compose(list(self.transforms.values()))
         # add_transforms(dataset, transform)
         dataset = TransformDataset(dataset, transform)
@@ -39,7 +39,7 @@ class DatasetConfig(BaseConfig, ABC):
         return dataset
 
     @abstractmethod
-    def _get_dataset(self) -> Dataset:
+    def _build(self) -> Dataset:
         pass
 
     def _set_debug(self):
@@ -116,6 +116,6 @@ class TransformDataset(Dataset):
 class TrainDataFromRun(DatasetConfig):
     path: Path
 
-    def _get_dataset(self) -> Dataset:
+    def _build(self) -> Dataset:
         data_cfg = load_config(self.path, "train_data", DatasetConfig)
-        return data_cfg.get_dataset()
+        return data_cfg.build()

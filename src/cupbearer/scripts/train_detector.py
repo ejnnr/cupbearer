@@ -4,9 +4,9 @@ from .conf.train_detector_conf import Config
 
 
 def main(cfg: Config):
-    reference_data = cfg.task.get_reference_data()
-    model = cfg.task.get_model()
-    params = cfg.task.get_params()
+    reference_data = cfg.task.build_reference_data()
+    model = cfg.task.build_model()
+    params = cfg.task.build_params()
     detector = cfg.detector.build(model=model, params=params, save_dir=cfg.dir.path)
 
     # We want to convert the train dataclass to a dict, but *not* recursively.

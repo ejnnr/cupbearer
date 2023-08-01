@@ -4,13 +4,13 @@ from torch.utils.data import Subset
 
 
 def main(cfg: Config):
-    reference_data = cfg.task.get_reference_data()
-    anomalous_data = cfg.task.get_anomalous_data()
+    reference_data = cfg.task.build_reference_data()
+    anomalous_data = cfg.task.build_anomalous_data()
     if cfg.max_size:
         reference_data = Subset(reference_data, range(cfg.max_size))
         anomalous_data = Subset(anomalous_data, range(cfg.max_size))
-    model = cfg.task.get_model()
-    params = cfg.task.get_params()
+    model = cfg.task.build_model()
+    params = cfg.task.build_params()
     detector = cfg.detector.build(model=model, params=params, save_dir=cfg.dir.path)
 
     detector.eval(

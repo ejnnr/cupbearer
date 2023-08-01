@@ -12,10 +12,10 @@ from .computations import Model, cnn, mlp
 @dataclass(kw_only=True)
 class ModelConfig(BaseConfig, ABC):
     @abstractmethod
-    def get_model(self) -> Model:
+    def build_model(self) -> Model:
         pass
 
-    def get_params(self):
+    def build_params(self):
         return None
 
 
@@ -23,12 +23,12 @@ class ModelConfig(BaseConfig, ABC):
 class StoredModel(ModelConfig):
     path: Path
 
-    def get_model(self) -> Model:
+    def build_model(self) -> Model:
         model_cfg = load_config(self.path, "model", ModelConfig)
 
-        return model_cfg.get_model()
+        return model_cfg.build_model()
 
-    def get_params(self):
+    def build_params(self):
         return load(self.path / "model")["params"]
 
 
@@ -37,7 +37,7 @@ class MLP(ModelConfig):
     output_dim: int = 10
     hidden_dims: list[int] = mutable_field([256, 256])
 
-    def get_model(self) -> Model:
+    def build_model(self) -> Model:
         return Model(mlp(output_dim=self.output_dim, hidden_dims=self.hidden_dims))
 
     def _set_debug(self):
@@ -53,7 +53,7 @@ class CNN(ModelConfig):
     channels: list[int] = mutable_field([32, 64])
     dense_dims: list[int] = mutable_field([256, 256])
 
-    def get_model(self) -> Model:
+    def build_model(self) -> Model:
         return Model(
             cnn(
                 output_dim=self.output_dim,

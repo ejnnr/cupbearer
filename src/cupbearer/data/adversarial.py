@@ -20,7 +20,7 @@ class AdversarialExampleConfig(DatasetConfig):
     run_path: Path
     attack_batch_size: Optional[int] = None
 
-    def _get_dataset(self) -> Dataset:
+    def _build(self) -> Dataset:
         return AdversarialExampleDataset(
             base_run=self.run_path,
             num_examples=self.max_size,

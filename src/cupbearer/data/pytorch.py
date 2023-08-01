@@ -14,7 +14,7 @@ class PytorchConfig(DatasetConfig):
     train: bool = True
     transforms: dict[str, Transform] = mutable_field({"to_numpy": ToNumpy()})
 
-    def _get_dataset(self) -> Dataset:
+    def _build(self) -> Dataset:
         dataset_cls = get_object(self.name)
         # TODO: Do all torchvision datasets have these parameters?
         dataset = dataset_cls(  # type: ignore

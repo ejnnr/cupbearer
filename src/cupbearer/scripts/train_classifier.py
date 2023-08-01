@@ -70,7 +70,7 @@ def main(cfg: Config):
     else:
         metrics_logger = DummyLogger()
 
-    dataset = cfg.train_data.get_dataset()
+    dataset = cfg.train_data.build()
     train_loader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
@@ -80,7 +80,7 @@ def main(cfg: Config):
 
     val_loaders = {}
     for k, v in cfg.val_data.items():
-        dataset = v.get_dataset()
+        dataset = v.build()
         val_loaders[k] = DataLoader(
             dataset,
             batch_size=cfg.max_batch_size,
@@ -92,7 +92,7 @@ def main(cfg: Config):
     images, _ = next(iter(train_loader))
     example_input = images[0:1]
 
-    model = cfg.model.get_model()
+    model = cfg.model.build_model()
 
     trainer = ClassificationTrainer(
         num_classes=cfg.num_classes,

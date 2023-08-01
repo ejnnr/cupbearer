@@ -65,14 +65,14 @@ class BackdoorDetection(TaskConfigBase):
             self._model = StoredModel(path=self.run_path)
         return self._model
 
-    def get_anomalous_data(self) -> Dataset:
-        return self.anomalous_data.get_dataset()
+    def build_anomalous_data(self) -> Dataset:
+        return self.anomalous_data.build()
 
-    def get_model(self) -> Model:
-        return self.model.get_model()
+    def build_model(self) -> Model:
+        return self.model.build_model()
 
-    def get_params(self) -> Model:
-        return self.model.get_params()
+    def build_params(self) -> Model:
+        return self.model.build_params()
 
-    def get_reference_data(self) -> Dataset:
-        return self.reference_data.get_dataset()
+    def build_reference_data(self) -> Dataset:
+        return self.reference_data.build()

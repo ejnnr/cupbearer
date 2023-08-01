@@ -24,11 +24,11 @@ def attack(cfg: Config):
         return
 
     model_cfg = StoredModel(path=cfg.dir.path)
-    model = model_cfg.get_model()
-    params = model_cfg.get_params()
+    model = model_cfg.build_model()
+    params = model_cfg.build_params()
 
     data_cfg = TrainDataFromRun(path=cfg.dir.path)
-    dataset = data_cfg.get_dataset()
+    dataset = data_cfg.build()
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,

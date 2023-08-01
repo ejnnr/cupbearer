@@ -91,5 +91,5 @@ class BackdoorData(DatasetConfig):
             "backdoor": self.backdoor,
         }
 
-    def _get_dataset(self):
-        return self.original._get_dataset()
+    def _build(self):
+        return self.original._build()
