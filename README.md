@@ -6,11 +6,16 @@
 - For CUDA support (only on Linux), run `pip install -r cuda-requirements.txt`
 - Inside the git repo, run `pip install -e .` to install the package in editable mode
 
-## Creating new scripts
-- Put a python file in `scripts` with some function `my_function`.
-- The only argument to `my_function` should be an object of a dataclass `MyConfig`
-  that inherits `utils.scripts.ScriptConfig`.
-- The definition of `MyConfig` needs to be placed in its own file.
-  (Because otherwise, serialization/deserialization doesn't work
-  since the module is just `__main__`---might be worth fixing this in the future.)
-- Use `utils.scripts.run(my_function, MyConfig)` in the python file to run the script.
+## Developer guide
+This library is designed to be easy to extend. The two main concepts are *tasks* and
+*detectors*.
+- A (mechanistic anomaly detection) *task* consists of a *reference dataset*,
+  an *anomalous dataset*, and a *model*.
+- A *detector* can be trained on the reference dataset and the model. It then needs
+  to distinguish whether some sample is from (the test split of) the reference dataset
+  or from the anomalous dataset.
+
+This library provides interfaces for tasks and detectors, as well as scripts for
+training and evaluating detectors. This means that any new task or detector you
+implement will be easy to test against all other detectors/tasks.
+
