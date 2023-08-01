@@ -286,8 +286,20 @@ class AbstractionDetector(AnomalyDetector):
         self.abstraction_state = trainer.state
 
     def layerwise_scores(self, batch):
-        assert self.abstraction is not None
         batch = self._model(batch)
+        self._ensure_abstraction_state(batch)
+
+        return compute_losses(
+            params=self.abstraction_state.params,  # type: ignore
+            state=self.abstraction_state,
+            batch=batch,
+            output_loss_fn=OUTPUT_LOSS_FNS[self.output_loss_fn],
+            return_batch=True,
+            layerwise=True,
+        )
+
+    def _ensure_abstraction_state(self, batch):
+        assert self.abstraction is not None
         if self.abstraction_state is None:
             logger.info("Randomly initializing abstraction.")
             # TODO: should derive this from some other key to avoid
@@ -302,14 +314,6 @@ class AbstractionDetector(AnomalyDetector):
                 batch_stats=variables.get("batch_stats", None),
                 rng=model_rng,
             )
-        return compute_losses(
-            params=self.abstraction_state.params,
-            state=self.abstraction_state,
-            batch=batch,
-            output_loss_fn=OUTPUT_LOSS_FNS[self.output_loss_fn],
-            return_batch=True,
-            layerwise=True,
-        )
 
     def _get_drawable(self, layer_scores, inputs):
         assert self.abstraction is not None
