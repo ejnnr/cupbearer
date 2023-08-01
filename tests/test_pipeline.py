@@ -1,10 +1,10 @@
-from abstractions.scripts import eval_detector, train_classifier, train_detector
-from abstractions.scripts.conf import (
+from cupbearer.scripts import eval_detector, train_classifier, train_detector
+from cupbearer.scripts.conf import (
     eval_detector_conf,
     train_classifier_conf,
     train_detector_conf,
 )
-from abstractions.utils.scripts import save_cfg
+from cupbearer.utils.scripts import save_cfg
 from loguru import logger
 from simple_parsing import ArgumentGenerationMode, parse
 
