@@ -1,22 +1,21 @@
 from typing import Optional
+
+import jax
+import jax.numpy as jnp
+import optax
+from flax.core.frozen_dict import FrozenDict
+from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
-import optax
 from cupbearer.detectors.abstraction.abstraction import (
     FilteredAbstraction,
     abstraction_collate,
 )
-
 from cupbearer.models.computations import Step
-from .abstraction_detector import OUTPUT_LOSS_FNS, AbstractionDetector, compute_losses
 from cupbearer.utils import trainer, utils
 from cupbearer.utils.trainer import SizedIterable
 
-
-import jax
-import jax.numpy as jnp
-from flax.core.frozen_dict import FrozenDict
-from loguru import logger
+from .abstraction_detector import OUTPUT_LOSS_FNS, AbstractionDetector, compute_losses
 
 
 class AbstractionFinetuner(trainer.TrainerModule):

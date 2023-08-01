@@ -1,16 +1,16 @@
-from abc import ABC, abstractmethod
 import copy
+import functools
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-import functools
-import math
-from typing import Any, List, Mapping, Optional, Sequence
+from typing import Any, List, Optional, Sequence
 
 import flax.linen as nn
-from iceberg.arrows import Arrow
 import jax
 import jax.numpy as jnp
+import numpy as np
 from iceberg import Bounds, Color, Colors, Corner, Drawable, FontStyle, PathStyle
+from iceberg.arrows import Arrow
 from iceberg.primitives import (
     Arrange,
     Compose,
@@ -22,7 +22,6 @@ from iceberg.primitives import (
     Rectangle,
     SimpleText,
 )
-import numpy as np
 
 
 class Orientation(Enum):
@@ -56,7 +55,7 @@ class Step(ABC):
                 )
                 break
             except ValueError as e:
-                if not "Invalid font family" in str(e):
+                if "Invalid font family" not in str(e):
                     raise
         if text is None:
             raise ValueError(f"Couldn't find a valid font, tried {FONTS}")

@@ -12,16 +12,12 @@ from typing import Callable, List, Optional
 
 import flax.linen as nn
 import jax
-import numpy as np
-from iceberg import Bounds, Color, Colors, Corner, Drawable, PathStyle
+from iceberg import Colors, Corner, Drawable, PathStyle
 from iceberg.arrows import Arrow
 from iceberg.primitives import (
     Arrange,
     Compose,
     Directions,
-    Ellipse,
-    Grid,
-    Image,
     Line,
 )
 
@@ -32,11 +28,11 @@ from cupbearer.models.computations import (
     ConvBlock,
     DenseBlock,
     Linear,
+    Model,
     Orientation,
     ReluLinear,
     SoftmaxDrop,
     Step,
-    Model,
     draw_computation,
     make_image_grid,
     reduce_size,

@@ -18,4 +18,3 @@ This library is designed to be easy to extend. The two main concepts are *tasks*
 This library provides interfaces for tasks and detectors, as well as scripts for
 training and evaluating detectors. This means that any new task or detector you
 implement will be easy to test against all other detectors/tasks.
-

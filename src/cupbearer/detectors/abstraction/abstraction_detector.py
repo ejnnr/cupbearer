@@ -10,12 +10,11 @@ from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.detectors.abstraction.abstraction import (
     Abstraction,
-    FilteredAbstraction,
     abstraction_collate,
     get_default_abstraction,
 )
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
-from cupbearer.models.computations import Model, Step
+from cupbearer.models.computations import Model
 from cupbearer.utils import trainer, utils
 from cupbearer.utils.optimizers import OptimizerConfig
 
