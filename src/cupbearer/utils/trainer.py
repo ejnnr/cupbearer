@@ -34,6 +34,14 @@ from loguru import logger
 from tqdm.auto import tqdm
 
 
+class InferenceState(struct.PyTreeNode):
+    # Lightweight alternative to TrainState that doesn't include the optimizer or step
+    apply_fn: Callable = struct.field(pytree_node=False)
+    params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
+    batch_stats: Any = None
+    rng: Any = None
+
+
 class TrainState(train_state.TrainState):
     # A simple extension of TrainState to also include batch statistics
     # If a model has no batch statistics, it is None
@@ -42,13 +50,17 @@ class TrainState(train_state.TrainState):
     # For example, rng to keep for init, dropout, etc.
     rng: Any = None
 
-
-class InferenceState(struct.PyTreeNode):
-    # Lightweight alternative to TrainState that doesn't include the optimizer
-    apply_fn: Callable = struct.field(pytree_node=False)
-    params: core.FrozenDict[str, Any] = struct.field(pytree_node=True)
-    batch_stats: Any = None
-    rng: Any = None
+    @classmethod
+    def from_inference_state(
+        cls, inference_state: InferenceState, tx: optax.GradientTransformation
+    ):
+        return cls.create(
+            apply_fn=inference_state.apply_fn,
+            params=inference_state.params,
+            batch_stats=inference_state.batch_stats,
+            rng=inference_state.rng,
+            tx=tx,
+        )
 
 
 class SizedIterable(Protocol):
