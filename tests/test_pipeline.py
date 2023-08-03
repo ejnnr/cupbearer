@@ -9,23 +9,24 @@ from loguru import logger
 from simple_parsing import ArgumentGenerationMode, parse
 
 
-def test_pipeline(tmpdir, capsys):
+def test_pipeline(tmp_path, capsys):
+    tmp_path.mkdir(exist_ok=True)
     ############################
     # Classifier training
     ############################
     logger.info("Running classifier training")
     cfg = parse(
         train_classifier_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmpdir / 'base'} "
+        args=f"--debug_with_logging --dir.full {tmp_path / 'base'} "
         "--train_data mnist --model mlp",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     save_cfg(cfg)
     train_classifier.main(cfg)
 
-    assert (tmpdir / "base" / "config.yaml").isfile()
-    assert (tmpdir / "base" / "model").isdir()
-    assert (tmpdir / "base" / "metrics.json").isfile()
+    assert (tmp_path / "base" / "config.yaml").is_file()
+    assert (tmp_path / "base" / "model").is_dir()
+    assert (tmp_path / "base" / "metrics.json").is_file()
 
     #########################################
     # Abstraction training (backdoor)
@@ -33,16 +34,39 @@ def test_pipeline(tmpdir, capsys):
     logger.info("Running abstraction training")
     cfg = parse(
         train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmpdir / 'abstraction'} "
-        f"--task backdoor --task.backdoor corner --task.run_path {tmpdir / 'base'} "
+        args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
+        f"--task backdoor --task.backdoor corner --task.run_path {tmp_path / 'base'} "
         "--detector abstraction",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     save_cfg(cfg)
     train_detector.main(cfg)
-    assert (tmpdir / "abstraction" / "config.yaml").isfile()
-    assert (tmpdir / "abstraction" / "detector").isdir()
-    assert (tmpdir / "abstraction" / "metrics.json").isfile()
+    assert (tmp_path / "abstraction" / "config.yaml").is_file()
+    assert (tmp_path / "abstraction" / "detector").is_dir()
+    assert (tmp_path / "abstraction" / "metrics.json").is_file()
+
+    #########################################
+    # Adversarial abstraction eval (backdoor)
+    #########################################
+    logger.info("Running adversarial abstraction eval")
+    cfg = parse(
+        eval_detector_conf.Config,
+        args=(
+            f"--debug_with_logging --dir.full {tmp_path / 'adversarial_abstraction'} "
+            f"--task backdoor --task.backdoor corner "
+            f"--task.run_path {tmp_path / 'base'} "
+            "--detector adversarial_abstraction "
+            f"--detector.load_path {tmp_path / 'abstraction'}"
+        ),
+        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    )
+    save_cfg(cfg)
+    eval_detector.main(cfg)
+    captured = capsys.readouterr()
+    assert "Randomly initializing abstraction" not in captured.err
+
+    for file in {"histogram.pdf", "architecture.png", "eval.json"}:
+        assert (tmp_path / "adversarial_abstraction" / file).is_file()
 
     #########################################
     # Abstraction eval (backdoor)
@@ -50,17 +74,18 @@ def test_pipeline(tmpdir, capsys):
     logger.info("Running abstraction eval")
     cfg = parse(
         eval_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmpdir / 'abstraction'} "
-        f"--task backdoor --task.backdoor corner --task.run_path {tmpdir / 'base'} "
+        args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
+        f"--task backdoor --task.backdoor corner --task.run_path {tmp_path / 'base'} "
         "--detector from_run",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
+    save_cfg(cfg)
     eval_detector.main(cfg)
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
-    assert (tmpdir / "abstraction" / "histogram.pdf").isfile()
-    assert (tmpdir / "abstraction" / "architecture.png").isfile()
-    assert (tmpdir / "abstraction" / "eval.json").isfile()
+    assert (tmp_path / "abstraction" / "histogram.pdf").is_file()
+    assert (tmp_path / "abstraction" / "architecture.png").is_file()
+    assert (tmp_path / "abstraction" / "eval.json").is_file()
 
     ###############################################
     # Mahalanobis training (adversarial examples)
@@ -68,15 +93,15 @@ def test_pipeline(tmpdir, capsys):
     logger.info("Running mahalanobis training")
     cfg = parse(
         train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmpdir / 'mahalanobis'} "
-        f"--task adversarial_examples --task.run_path {tmpdir / 'base'} "
+        args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
+        f"--task adversarial_examples --task.run_path {tmp_path / 'base'} "
         "--detector mahalanobis",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     save_cfg(cfg)
     train_detector.main(cfg)
-    assert (tmpdir / "mahalanobis" / "config.yaml").isfile()
-    assert (tmpdir / "mahalanobis" / "detector").isdir()
+    assert (tmp_path / "mahalanobis" / "config.yaml").is_file()
+    assert (tmp_path / "mahalanobis" / "detector").is_dir()
 
     #########################################
     # Mahalanobis eval (adversarial examples)
@@ -84,12 +109,12 @@ def test_pipeline(tmpdir, capsys):
     logger.info("Running mahalanobis eval")
     cfg = parse(
         eval_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmpdir / 'mahalanobis'} "
-        f"--task adversarial_examples --task.run_path {tmpdir / 'base'} "
+        args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
+        f"--task adversarial_examples --task.run_path {tmp_path / 'base'} "
         "--detector from_run",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     eval_detector.main(cfg)
-    assert (tmpdir / "mahalanobis" / "histogram.pdf").isfile()
-    assert (tmpdir / "mahalanobis" / "architecture.png").isfile()
-    assert (tmpdir / "mahalanobis" / "eval.json").isfile()
+    assert (tmp_path / "mahalanobis" / "histogram.pdf").is_file()
+    assert (tmp_path / "mahalanobis" / "architecture.png").is_file()
+    assert (tmp_path / "mahalanobis" / "eval.json").is_file()

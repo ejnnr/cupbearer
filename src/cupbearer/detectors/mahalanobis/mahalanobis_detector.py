@@ -73,7 +73,7 @@ class MahalanobisDetector(AnomalyDetector):
             inv_diag_covariances=self.inv_diag_covariances,
         )
 
-    def _get_trained_variables(self):
+    def _get_trained_variables(self, saving: bool = False):
         return {
             "means": self.means,
             "inv_covariances": self.inv_covariances,

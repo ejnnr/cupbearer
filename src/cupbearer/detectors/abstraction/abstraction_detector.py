@@ -229,6 +229,8 @@ class AbstractionDetector(AnomalyDetector):
             )
         self.abstraction = abstraction
         self.abstraction_state = abstraction_state
+        self.size_reduction = size_reduction
+        self.abstraction_cls = abstraction_cls
         self.output_loss_fn = output_loss_fn
         super().__init__(
             model, params, max_batch_size=max_batch_size, save_path=save_path
@@ -321,23 +323,40 @@ class AbstractionDetector(AnomalyDetector):
             full_model=self.model, layer_scores=layer_scores, inputs=inputs
         )
 
-    def _get_trained_variables(self):
-        return self._state_to_dict(self.abstraction_state)
+    def _get_trained_variables(self, saving: bool = False):
+        state = self.abstraction_state
+        if state is None:
+            return {}
+        result = {
+            "params": state.params,
+            "batch_stats": state.batch_stats,
+        }
+
+        # We currently never save the optimizer to disk, mainly because the serizalition
+        # implementation in utils.save() wouldn't work for tx.
+        if isinstance(state, trainer.TrainState) and not saving:
+            result["step"] = state.step
+            result["tx"] = state.tx
+            result["opt_state"] = state.opt_state
+
+        return result
 
     def _set_trained_variables(self, variables):
         assert self.abstraction is not None
         assert variables
         # TODO: in general we might have to create a PRNG here as well
-        self.abstraction_state = trainer.InferenceState(
-            self.abstraction.apply,
-            params=variables["params"],
-            batch_stats=variables["batch_stats"],
-        )
-
-    def _state_to_dict(self, state: trainer.TrainState | trainer.InferenceState | None):
-        if state is None:
-            return {}
-        return {
-            "params": state.params,
-            "batch_stats": state.batch_stats,
-        }
+        if "opt_state" in variables:
+            self.abstraction_state = trainer.TrainState(
+                apply_fn=self.abstraction.apply,
+                step=variables["step"],
+                params=variables["params"],
+                batch_stats=variables["batch_stats"],
+                tx=variables["tx"],
+                opt_state=variables["opt_state"],
+            )
+        else:
+            self.abstraction_state = trainer.InferenceState(
+                apply_fn=self.abstraction.apply,
+                params=variables["params"],
+                batch_stats=variables["batch_stats"],
+            )

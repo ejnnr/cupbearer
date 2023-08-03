@@ -8,6 +8,7 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import sklearn.metrics
+from flax.core.frozen_dict import FrozenDict
 from iceberg import Colors, Renderer
 from loguru import logger
 from matplotlib import pyplot as plt
@@ -283,7 +284,7 @@ class AnomalyDetector(ABC):
         """
         return self.layerwise_scores(batch).mean(axis=0)
 
-    def _get_trained_variables(self):
+    def _get_trained_variables(self, saving: bool = False):
         return {}
 
     def _set_trained_variables(self, variables):
@@ -313,7 +314,7 @@ class AnomalyDetector(ABC):
         if not self.save_path:
             raise ValueError("No save path set")
         logger.info(f"Saving detector to {self.save_path}")
-        variables = self._get_trained_variables()
+        variables = self._get_trained_variables(saving=True)
         module = self.__class__.__module__
         class_name = self.__class__.__qualname__
         path = module + "." + class_name
@@ -328,9 +329,9 @@ class AnomalyDetector(ABC):
         )
 
     @classmethod
-    def load(cls, cfg: str | Path, model: Model, params):
-        ckpt = utils.load(cfg)
+    def load(cls, path: str | Path, model: Model, params):
+        ckpt = utils.load(path)
         class_ = utils.get_object(ckpt["path"])
         detector = class_(model=model, params=params, **ckpt["hparams"])
-        detector._set_trained_variables(ckpt["variables"])
+        detector._set_trained_variables(FrozenDict(ckpt["variables"]))
         return detector

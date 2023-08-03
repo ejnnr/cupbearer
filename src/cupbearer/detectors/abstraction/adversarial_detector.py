@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import jax
 import jax.numpy as jnp
 import optax
@@ -6,6 +8,7 @@ from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.detectors.abstraction.abstraction import abstraction_collate
+from cupbearer.models.computations import Model
 from cupbearer.utils import utils
 from cupbearer.utils.trainer import SizedIterable, TrainState
 
@@ -26,7 +29,6 @@ def cycle(iterable):
 class AdversarialAbstractionDetector(AbstractionDetector):
     def __init__(
         self,
-        reference_dataset: Dataset,
         num_at_once: int = 1,
         num_ref_samples: int = 128,
         num_steps: int = 1,
@@ -41,12 +43,26 @@ class AdversarialAbstractionDetector(AbstractionDetector):
         super().__init__(**kwargs)
         assert self.abstraction is not None
 
-        self.reference_dataset = reference_dataset
         self.num_at_once = num_at_once
         self.num_ref_samples = num_ref_samples
         self.num_steps = num_steps
         self.normal_weight = normal_weight
         self.clip = clip
+
+    @classmethod
+    def from_detector(cls, path: Path, model: Model, params, **kwargs):
+        detector = cls.load(path, model, params)
+        assert isinstance(detector, AbstractionDetector)
+        return cls(
+            model=model,
+            params=params,
+            abstraction=detector.abstraction,
+            abstraction_state=detector.abstraction_state,
+            size_reduction=detector.size_reduction,
+            abstraction_cls=detector.abstraction_cls,
+            output_loss_fn=detector.output_loss_fn,
+            **kwargs,
+        )
 
     def train(self, *args, **kwargs):
         raise NotImplementedError("Use the base AbstractionDetector for pretraining.")
@@ -67,7 +83,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
     def _setup_finetuning(self, reference_dataset: Dataset):
         # TODO: maybe this should be combined with the normal_loader in the base class?
         self.reference_loader = DataLoader(
-            dataset=self.reference_dataset,
+            dataset=reference_dataset,
             batch_size=self.num_ref_samples,
             collate_fn=abstraction_collate(self.model, self.params),
             drop_last=True,
@@ -77,7 +93,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
 
         # In case we don't have an abstraction state, we randomly initialize it.
         # (This happens if the user just doesn't load a pretrained detector.)
-        example_input = self.reference_dataset[0][0][None]
+        example_input = reference_dataset[0][0][None]
         example_input = self._model(example_input)
         self._ensure_abstraction_state(example_input)
 
@@ -90,6 +106,8 @@ class AdversarialAbstractionDetector(AbstractionDetector):
             self.abstraction_state = TrainState.from_inference_state(
                 self.abstraction_state, tx=tx
             )
+
+        assert isinstance(self.abstraction_state, TrainState)
 
         if self.clip:
             self._setup_loss_clipping(self.reference_loader)
@@ -114,13 +132,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
         self,
         new_batch,
     ) -> dict:
-        assert isinstance(self.abstraction_state, TrainState)
-
-        # self.finetuner.train_model(
-        #     {"normal": self.reference_loader, "new": new_loader},
-        #     val_loaders={},
-        #     num_epochs=self.num_epochs,
-        # )
+        assert isinstance(self.abstraction_state, TrainState), self.abstraction_state
 
         def loss_fn(params, batch, normal):
             loss, (_, _, norm) = compute_losses(
@@ -177,7 +189,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
             }
             print("\n".join(f"{k}: {v:.4f}" for k, v in metrics.items()))
 
-        return self._state_to_dict(self.abstraction_state)
+        return self._get_trained_variables()
 
     def layerwise_scores(self, batch):
         batch = self._model(batch)
