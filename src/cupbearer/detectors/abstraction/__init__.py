@@ -71,11 +71,12 @@ class AbstractionDetectorConfig(DetectorConfig):
     abstraction: AbstractionConfig = config_group(AbstractionConfig, AbstractionConfig)
     train: AbstractionTrainConfig = field(default_factory=AbstractionTrainConfig)
 
-    def build(self, model, params, save_dir) -> AbstractionDetector:
+    def build(self, model, params, rng, save_dir) -> AbstractionDetector:
         abstraction = self.abstraction.build(model)
         return AbstractionDetector(
             model=model,
             params=params,
+            rng=rng,
             abstraction=abstraction,
             output_loss_fn=self.abstraction.output_loss_fn,
             max_batch_size=self.max_batch_size,
@@ -95,14 +96,15 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
     # inherit from AbstractionConfig.
     train: None = None
 
-    def build(self, model, params, save_dir) -> AdversarialAbstractionDetector:
+    def build(self, model, params, rng, save_dir) -> AdversarialAbstractionDetector:
         if self.load_path is not None:
             helper_cfg = StoredDetector(path=self.load_path)
-            detector = helper_cfg.build(model, params, save_dir)
+            detector = helper_cfg.build(model, params, rng, save_dir)
             assert isinstance(detector, AbstractionDetector)
             return AdversarialAbstractionDetector(
                 model=model,
                 params=params,
+                rng=rng,
                 abstraction=detector.abstraction,
                 abstraction_state=detector.abstraction_state,
                 output_loss_fn=detector.output_loss_fn,
@@ -118,6 +120,7 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
         return AdversarialAbstractionDetector(
             model=model,
             params=params,
+            rng=rng,
             abstraction=abstraction,
             output_loss_fn=self.abstraction.output_loss_fn,
             save_path=save_dir,

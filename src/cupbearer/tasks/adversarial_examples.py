@@ -17,6 +17,7 @@ class AdversarialExampleTask(TaskConfigBase):
     run_path: Path
     max_size: Optional[int] = None
     attack_batch_size: Optional[int] = None
+    success_threshold: float = 0.1
 
     def __post_init__(self):
         super().__post_init__()
@@ -28,6 +29,10 @@ class AdversarialExampleTask(TaskConfigBase):
         super()._set_debug()
         self.max_size = 2
         self.attack_batch_size = 2
+        # TODO: This and other configs are duplicated several times between this task,
+        # the AdversarialExampleConfig, the AdversarialExampleDataset, and the
+        # make_adversarial_examples script. In need of refactoring.
+        self.success_threshold = 1.0
 
     @property
     def reference_data(self):
@@ -44,6 +49,7 @@ class AdversarialExampleTask(TaskConfigBase):
                 run_path=self.run_path,
                 max_size=self.max_size,
                 attack_batch_size=self.attack_batch_size,
+                success_threshold=self.success_threshold,
             )
         return self._anomalous_data
 

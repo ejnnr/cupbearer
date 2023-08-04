@@ -196,6 +196,7 @@ class AbstractionDetector(AnomalyDetector):
         self,
         model: Model,
         params,
+        rng,
         abstraction: Abstraction,
         abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
         output_loss_fn: str = "kl",
@@ -206,7 +207,7 @@ class AbstractionDetector(AnomalyDetector):
         self.abstraction_state = abstraction_state
         self.output_loss_fn = output_loss_fn
         super().__init__(
-            model, params, max_batch_size=max_batch_size, save_path=save_path
+            model, params, rng, max_batch_size=max_batch_size, save_path=save_path
         )
 
     def train(
@@ -224,12 +225,14 @@ class AbstractionDetector(AnomalyDetector):
         # Also need to add a batch dimension
         example_input = dataset[0][0][None]
         _, example_activations = self._model(example_input)
+        self.rng, trainer_rng = jax.random.split(self.rng)
         trainer = AbstractionTrainer(
             model=self.abstraction,
             output_loss_fn=self.output_loss_fn,
             example_input=example_activations,
             log_dir=self.save_path,
             optimizer=optimizer.build(),
+            rng=trainer_rng,
             **kwargs,
         )
         train_loader = DataLoader(
@@ -275,10 +278,7 @@ class AbstractionDetector(AnomalyDetector):
     def _ensure_abstraction_state(self, batch):
         if self.abstraction_state is None:
             logger.info("Randomly initializing abstraction.")
-            # TODO: should derive this from some other key to avoid
-            # hard-coding seed.
-            model_rng = jax.random.PRNGKey(0)
-            model_rng, init_rng = jax.random.split(model_rng)
+            self.rng, model_rng, init_rng = jax.random.split(self.rng, 3)
             output, activations = batch
             variables = self.abstraction.init(init_rng, activations)
             self.abstraction_state = trainer.InferenceState(

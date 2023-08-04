@@ -23,10 +23,11 @@ class MahalanobisTrainConfig(TrainConfig):
 class MahalanobisConfig(DetectorConfig):
     train: MahalanobisTrainConfig = field(default_factory=MahalanobisTrainConfig)
 
-    def build(self, model, params, save_dir) -> MahalanobisDetector:
+    def build(self, model, params, rng, save_dir) -> MahalanobisDetector:
         return MahalanobisDetector(
             model=model,
             params=params,
+            rng=rng,
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )

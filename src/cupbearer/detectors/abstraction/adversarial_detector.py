@@ -1,5 +1,3 @@
-from pathlib import Path
-
 import jax
 import jax.numpy as jnp
 import optax
@@ -8,7 +6,6 @@ from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.detectors.abstraction.abstraction import abstraction_collate
-from cupbearer.models.computations import Model
 from cupbearer.utils import utils
 from cupbearer.utils.trainer import SizedIterable, TrainState
 
@@ -48,19 +45,6 @@ class AdversarialAbstractionDetector(AbstractionDetector):
         self.num_steps = num_steps
         self.normal_weight = normal_weight
         self.clip = clip
-
-    @classmethod
-    def from_detector(cls, path: Path, model: Model, params, **kwargs):
-        detector = cls.load(path, model, params)
-        assert isinstance(detector, AbstractionDetector)
-        return cls(
-            model=model,
-            params=params,
-            abstraction=detector.abstraction,
-            abstraction_state=detector.abstraction_state,
-            output_loss_fn=detector.output_loss_fn,
-            **kwargs,
-        )
 
     def train(self, *args, **kwargs):
         raise NotImplementedError("Use the base AbstractionDetector for pretraining.")

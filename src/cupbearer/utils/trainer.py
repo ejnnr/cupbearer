@@ -99,7 +99,7 @@ class TrainerModule(ABC):
         override_variables=None,
         loggers: Optional[Iterable[Logger]] = None,
         log_dir: str | Path | None = None,
-        seed: int = 42,
+        rng: Any = None,
         enable_progress_bar: bool = True,
         print_tabulate: bool = True,
         debug: bool = False,
@@ -126,11 +126,13 @@ class TrainerModule(ABC):
 
         if loggers is None:
             loggers = []
+        if rng is None:
+            rng = random.PRNGKey(0)
 
         self.optimizer = optimizer
         self.enable_progress_bar = enable_progress_bar
         self.debug = debug
-        self.seed = seed
+        self.rng = rng
         self.check_val_every_n_epoch = check_val_every_n_epoch
         self.example_input = example_input
         self.loggers = loggers
@@ -141,7 +143,6 @@ class TrainerModule(ABC):
             "enable_progress_bar": self.enable_progress_bar,
             "debug": self.debug,
             "check_val_every_n_epoch": check_val_every_n_epoch,
-            "seed": self.seed,
             "log_dir": None if self.log_dir is None else str(self.log_dir.absolute()),
         }
         self.config.update(kwargs)
@@ -161,8 +162,7 @@ class TrainerModule(ABC):
           optimizer: The instantiated optax optimizer.
         """
         # Prepare PRNG and input
-        model_rng = random.PRNGKey(self.seed)
-        model_rng, init_rng = random.split(model_rng)
+        model_rng, init_rng = random.split(self.rng)
         # Run model initialization
         variables = self.run_model_init(init_rng)
         if override_variables:

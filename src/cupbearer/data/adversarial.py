@@ -19,22 +19,29 @@ from . import DatasetConfig
 class AdversarialExampleConfig(DatasetConfig):
     run_path: Path
     attack_batch_size: Optional[int] = None
+    success_threshold: float = 0.1
 
     def _build(self) -> Dataset:
         return AdversarialExampleDataset(
             base_run=self.run_path,
             num_examples=self.max_size,
             attack_batch_size=self.attack_batch_size,
+            success_threshold=self.success_threshold,
         )
 
     def _set_debug(self):
         super()._set_debug()
         self.attack_batch_size = 2
+        self.success_threshold = 1.0
 
 
 class AdversarialExampleDataset(Dataset):
     def __init__(
-        self, base_run, num_examples=None, attack_batch_size: Optional[int] = None
+        self,
+        base_run,
+        num_examples=None,
+        attack_batch_size: Optional[int] = None,
+        success_threshold: float = 0.1,
     ):
         base_run = Path(base_run)
         self.base_run = base_run
@@ -50,6 +57,8 @@ class AdversarialExampleDataset(Dataset):
                 "cupbearer.scripts.make_adversarial_examples",
                 "--dir.full",
                 str(base_run),
+                "--success_threshold",
+                str(success_threshold),
             ]
             if num_examples is not None:
                 command += ["--max_examples", str(num_examples)]

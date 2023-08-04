@@ -21,7 +21,9 @@ class DetectorConfig(BaseConfig, ABC):
     max_batch_size: int = 4096
 
     @abstractmethod
-    def build(self, model: Model, params, save_dir: Path | None) -> AnomalyDetector:
+    def build(
+        self, model: Model, params, rng, save_dir: Path | None
+    ) -> AnomalyDetector:
         pass
 
     def _set_debug(self):
@@ -36,7 +38,7 @@ class StoredDetector(DetectorConfig):
     # stored in the config file, which breaks loading detectors.
     path: Path
 
-    def build(self, model, params, save_dir) -> AnomalyDetector:
+    def build(self, model, params, rng, save_dir) -> AnomalyDetector:
         detector_cfg = load_config(self.path, "detector", DetectorConfig)
         if isinstance(detector_cfg, StoredDetector) and detector_cfg.path == self.path:
             raise RuntimeError(
@@ -44,7 +46,7 @@ class StoredDetector(DetectorConfig):
                 "is a stored detector pointing to itself. This probably means "
                 "a configuration file is broken."
             )
-        detector = detector_cfg.build(model, params, save_dir)
+        detector = detector_cfg.build(model, params, rng, save_dir)
         try:
             detector.load_weights(self.path / "detector")
         except FileNotFoundError:

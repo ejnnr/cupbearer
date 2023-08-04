@@ -325,9 +325,12 @@ def draw_computation(
         # TODO: might not make sense for all loss functions
         min_score = 0
         max_score = max(layer_scores)
-        normalized_scores = [
-            (score - min_score) / (max_score - min_score) for score in layer_scores
-        ]
+        if max_score == min_score:
+            normalized_scores = layer_scores
+        else:
+            normalized_scores = [
+                (score - min_score) / (max_score - min_score) for score in layer_scores
+            ]
 
         assert len(nodes) - 1 == len(normalized_scores), (
             f"len(nodes) - 1 = {len(nodes) - 1}"

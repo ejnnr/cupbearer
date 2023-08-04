@@ -68,8 +68,11 @@ def attack(cfg: Config):
         if cfg.max_examples and num_examples >= cfg.max_examples:
             break
 
-    if mean_new_accuracy > 0.1:
-        raise RuntimeError(f"Attack failed, new accuracy is {mean_new_accuracy} > 0.1.")
+    if mean_new_accuracy > cfg.success_threshold:
+        raise RuntimeError(
+            "Attack failed, new accuracy is "
+            f"{mean_new_accuracy} > {cfg.success_threshold}."
+        )
 
     adv_examples = jnp.concatenate(adv_examples, axis=0)
     # Need to wrap the array in a container to make the orbax checkpointer work.

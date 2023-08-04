@@ -103,6 +103,7 @@ def main(cfg: Config):
         check_val_every_n_epoch=1,
         loggers=[metrics_logger],
         enable_progress_bar=False,
+        rng=jax.random.PRNGKey(cfg.seed),
     )
 
     trainer.train_model(

@@ -23,11 +23,13 @@ class AnomalyDetector(ABC):
         self,
         model: Model,
         params,
+        rng,
         max_batch_size: int = 4096,
         save_path: Path | str | None = None,
     ):
         self.model = model
         self.params = params
+        self.rng = rng
         # For storing the original detector variables when finetuning
         self._original_variables = None
         self.max_batch_size = max_batch_size
