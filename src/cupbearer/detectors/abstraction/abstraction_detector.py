@@ -314,7 +314,7 @@ class AbstractionDetector(AnomalyDetector):
         return result
 
     def _set_trained_variables(self, variables):
-        # TODO: in general we might have to create a PRNG here as well
+        self.rng, model_rng = jax.random.split(self.rng)
         if "opt_state" in variables:
             self.abstraction_state = trainer.TrainState(
                 apply_fn=self.abstraction.apply,
@@ -323,10 +323,12 @@ class AbstractionDetector(AnomalyDetector):
                 batch_stats=variables["batch_stats"],
                 tx=variables["tx"],
                 opt_state=variables["opt_state"],
+                rng=model_rng,
             )
         else:
             self.abstraction_state = trainer.InferenceState(
                 apply_fn=self.abstraction.apply,
                 params=FrozenDict(variables["params"]),
                 batch_stats=variables["batch_stats"],
+                rng=model_rng,
             )

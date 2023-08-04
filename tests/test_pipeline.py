@@ -18,7 +18,8 @@ def test_pipeline(tmp_path, capsys):
     cfg = parse(
         train_classifier_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'base'} "
-        "--train_data mnist --model mlp",
+        "--train_data backdoor --train_data.original mnist "
+        "--train_data.backdoor corner --model mlp",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     save_cfg(cfg)

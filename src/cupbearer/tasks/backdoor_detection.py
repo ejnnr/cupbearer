@@ -9,12 +9,12 @@ from torch.utils.data import Dataset
 from cupbearer.data import (
     CornerPixelBackdoor,
     NoiseBackdoor,
-    TrainDataFromRun,
     Transform,
 )
-from cupbearer.data.backdoor import BackdoorData
+from cupbearer.data.backdoor_data import BackdoorData
 from cupbearer.models import StoredModel
 from cupbearer.models.computations import Model
+from cupbearer.utils.scripts import load_config
 
 from . import TaskConfigBase
 
@@ -44,12 +44,12 @@ class BackdoorDetection(TaskConfigBase):
 
     @property
     def reference_data(self):
-        # TODO: actually, we need to remove backdoors here
         # TODO: would be nice to use test data instead during eval
         if not self._reference_data:
-            self._reference_data = TrainDataFromRun(
-                path=self.run_path, max_size=self.max_size
-            )
+            data_cfg = load_config(self.run_path, "train_data", BackdoorData)
+            # Remove the backdoor
+            self._reference_data = data_cfg.original
+            self._reference_data.max_size = self.max_size
         return self._reference_data
 
     @property

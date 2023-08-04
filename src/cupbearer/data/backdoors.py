@@ -7,7 +7,6 @@ import numpy as np
 # with torchvision transforms.
 import torch
 
-from . import DatasetConfig
 from ._shared import Transform
 
 
@@ -77,19 +76,3 @@ class NoiseBackdoor(Transform):
             noise = np.random.normal(0, self.std, img.shape)
             img = img + noise
             return img, self.target_class
-
-
-@dataclass
-class BackdoorData(DatasetConfig):
-    original: DatasetConfig
-    backdoor: Transform
-
-    def __post_init__(self):
-        self.transforms = {
-            **self.original.transforms,
-            **self.transforms,
-            "backdoor": self.backdoor,
-        }
-
-    def _build(self):
-        return self.original._build()
