@@ -13,7 +13,7 @@ def main(cfg: Config):
     train_kwargs = vars(cfg.detector.train)
     detector.train(reference_data, **train_kwargs)
     if cfg.dir.path is not None:
-        detector.save()
+        detector.save_weights(cfg.dir.path / "detector")
 
 
 if __name__ == "__main__":

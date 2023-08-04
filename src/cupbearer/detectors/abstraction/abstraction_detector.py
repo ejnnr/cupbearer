@@ -5,13 +5,13 @@ from typing import Callable, Optional
 import jax
 import jax.numpy as jnp
 import optax
+from flax.core.frozen_dict import FrozenDict
 from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.detectors.abstraction.abstraction import (
     Abstraction,
     abstraction_collate,
-    get_default_abstraction,
 )
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.computations import Model
@@ -214,23 +214,12 @@ class AbstractionDetector(AnomalyDetector):
         params,
         abstraction: Optional[Abstraction] = None,
         abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
-        size_reduction: Optional[int] = None,
-        abstraction_cls: type[Abstraction] = Abstraction,
         output_loss_fn: str = "kl",
         max_batch_size: int = 4096,
         save_path: str | Path | None = None,
     ):
-        if abstraction is None and size_reduction is not None:
-            abstraction = get_default_abstraction(
-                model,
-                size_reduction,
-                output_dim=2 if output_loss_fn == "single_class" else None,
-                abstraction_cls=abstraction_cls,
-            )
         self.abstraction = abstraction
         self.abstraction_state = abstraction_state
-        self.size_reduction = size_reduction
-        self.abstraction_cls = abstraction_cls
         self.output_loss_fn = output_loss_fn
         super().__init__(
             model, params, max_batch_size=max_batch_size, save_path=save_path
@@ -334,6 +323,7 @@ class AbstractionDetector(AnomalyDetector):
 
         # We currently never save the optimizer to disk, mainly because the serizalition
         # implementation in utils.save() wouldn't work for tx.
+        # TODO: now that there's pickle support, may want to revisit that.
         if isinstance(state, trainer.TrainState) and not saving:
             result["step"] = state.step
             result["tx"] = state.tx
@@ -349,7 +339,7 @@ class AbstractionDetector(AnomalyDetector):
             self.abstraction_state = trainer.TrainState(
                 apply_fn=self.abstraction.apply,
                 step=variables["step"],
-                params=variables["params"],
+                params=FrozenDict(variables["params"]),
                 batch_stats=variables["batch_stats"],
                 tx=variables["tx"],
                 opt_state=variables["opt_state"],
@@ -357,6 +347,6 @@ class AbstractionDetector(AnomalyDetector):
         else:
             self.abstraction_state = trainer.InferenceState(
                 apply_fn=self.abstraction.apply,
-                params=variables["params"],
+                params=FrozenDict(variables["params"]),
                 batch_stats=variables["batch_stats"],
             )

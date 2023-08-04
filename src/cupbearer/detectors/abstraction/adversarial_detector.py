@@ -58,8 +58,6 @@ class AdversarialAbstractionDetector(AbstractionDetector):
             params=params,
             abstraction=detector.abstraction,
             abstraction_state=detector.abstraction_state,
-            size_reduction=detector.size_reduction,
-            abstraction_cls=detector.abstraction_cls,
             output_loss_fn=detector.output_loss_fn,
             **kwargs,
         )

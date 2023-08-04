@@ -8,7 +8,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import sklearn.metrics
-from flax.core.frozen_dict import FrozenDict
 from iceberg import Colors, Renderer
 from loguru import logger
 from matplotlib import pyplot as plt
@@ -292,7 +291,7 @@ class AnomalyDetector(ABC):
 
     def save_weights(self, path: str | Path):
         logger.info(f"Saving detector to {path}")
-        utils.save(self._get_trained_variables(), path)
+        utils.save(self._get_trained_variables(saving=True), path)
 
     def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {path}")
@@ -309,29 +308,3 @@ class AnomalyDetector(ABC):
         child class.
         """
         return {"max_batch_size": self.max_batch_size}
-
-    def save(self):
-        if not self.save_path:
-            raise ValueError("No save path set")
-        logger.info(f"Saving detector to {self.save_path}")
-        variables = self._get_trained_variables(saving=True)
-        module = self.__class__.__module__
-        class_name = self.__class__.__qualname__
-        path = module + "." + class_name
-        hparams = self.init_kwargs
-        utils.save(
-            {
-                "path": path,
-                "hparams": hparams,
-                "variables": variables,
-            },
-            self.save_path / "detector",
-        )
-
-    @classmethod
-    def load(cls, path: str | Path, model: Model, params):
-        ckpt = utils.load(path)
-        class_ = utils.get_object(ckpt["path"])
-        detector = class_(model=model, params=params, **ckpt["hparams"])
-        detector._set_trained_variables(FrozenDict(ckpt["variables"]))
-        return detector

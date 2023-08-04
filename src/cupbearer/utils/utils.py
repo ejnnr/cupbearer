@@ -1,3 +1,4 @@
+import codecs
 import copy
 import dataclasses
 import functools
@@ -19,14 +20,7 @@ from simple_parsing.helpers import serialization
 
 SUFFIX = ".pytree"
 TYPE_PREFIX = "__TYPE__:"
-
-
-def to_string(t):
-    if isinstance(t, Path):
-        return str(t)
-    if isinstance(t, type):
-        return TYPE_PREFIX + t.__module__ + "." + t.__name__
-    return t
+PICKLE_PREFIX = "__PICKLE__:"
 
 
 def from_string(s):
@@ -34,21 +28,41 @@ def from_string(s):
     # instead.
     if not isinstance(s, str):
         return s
-    if not s.startswith(TYPE_PREFIX):
-        return s
+    if s.startswith(TYPE_PREFIX):
+        s = s[len(TYPE_PREFIX) :]
+        return get_object(s)
+    if s.startswith(PICKLE_PREFIX):
+        s = s[len(PICKLE_PREFIX) :]
+        pickled = codecs.decode(s.encode(), "base64")
+        return pickle.loads(pickled)
 
-    s = s[len(TYPE_PREFIX) :]
-    return get_object(s)
+    return s
 
 
-def validate_leaf(leaf):
-    if not isinstance(leaf, (str, int, float, bool, jax.Array, np.ndarray)):
-        raise ValueError(f"Invalid leaf type: {type(leaf)}")
+def validate_and_convert_leaf(leaf):
+    if isinstance(leaf, (str, int, float, bool, jax.Array, np.ndarray)):
+        return leaf
+    if isinstance(leaf, Path):
+        return str(leaf)
+    if isinstance(leaf, type):
+        return TYPE_PREFIX + leaf.__module__ + "." + leaf.__name__
+
+    try:
+        pickled = pickle.dumps(leaf)
+    except Exception as e:
+        raise ValueError(f"Could not pickle object {leaf}") from e
+    # Make sure we're not accidentally encoding huge objects inefficiently into strings:
+    if len(pickled) > 1e6:
+        raise ValueError(
+            f"Object of type {type(leaf)} has {round(len(pickled) / 1e6, 1)} MB "
+            "when pickled. This is probably a mistake."
+        )
+    pickle_str = codecs.encode(pickled, "base64").decode()
+    return PICKLE_PREFIX + pickle_str
 
 
 def save(data, path: Union[str, Path], overwrite: bool = False):
-    data = jax.tree_map(to_string, data)
-    jax.tree_map(validate_leaf, data)
+    data = jax.tree_map(validate_and_convert_leaf, data)
     path = Path(path)
     directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)

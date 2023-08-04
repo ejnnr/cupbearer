@@ -6,6 +6,7 @@ from simple_parsing.helpers import mutable_field
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.computations import Model
+from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig
 
 
@@ -30,7 +31,23 @@ class DetectorConfig(BaseConfig, ABC):
 
 @dataclass(kw_only=True)
 class StoredDetector(DetectorConfig):
+    # TODO: It might be nice to just use save_dir for this when calling build(),
+    # since it's usually going to be the same as path. But then this doesn't get
+    # stored in the config file, which breaks loading detectors.
+    path: Path
+
     def build(self, model, params, save_dir) -> AnomalyDetector:
-        if save_dir is None:
-            raise ValueError("Must specify directory when using StoredDetector")
-        return AnomalyDetector.load(save_dir / "detector", model, params)
+        detector_cfg = load_config(self.path, "detector", DetectorConfig)
+        if isinstance(detector_cfg, StoredDetector) and detector_cfg.path == self.path:
+            raise RuntimeError(
+                f"It looks like the detector you're trying to load from {self.path} "
+                "is a stored detector pointing to itself. This probably means "
+                "a configuration file is broken."
+            )
+        detector = detector_cfg.build(model, params, save_dir)
+        try:
+            detector.load_weights(self.path / "detector")
+        except FileNotFoundError:
+            pass
+
+        return detector

@@ -65,7 +65,7 @@ def test_pipeline(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
 
-    for file in {"histogram.pdf", "architecture.png", "eval.json"}:
+    for file in {"histogram.pdf", "architecture.png", "eval.json", "config.yaml"}:
         assert (tmp_path / "adversarial_abstraction" / file).is_file()
 
     #########################################
@@ -76,10 +76,12 @@ def test_pipeline(tmp_path, capsys):
         eval_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
         f"--task backdoor --task.backdoor corner --task.run_path {tmp_path / 'base'} "
-        "--detector from_run",
+        f"--detector from_run --detector.path {tmp_path / 'abstraction'}",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    save_cfg(cfg)
+    # It's important we don't overwrite the config file here since it's needed to load
+    # the detector correctly!
+    save_cfg(cfg, save_config=False)
     eval_detector.main(cfg)
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
@@ -111,7 +113,7 @@ def test_pipeline(tmp_path, capsys):
         eval_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
         f"--task adversarial_examples --task.run_path {tmp_path / 'base'} "
-        "--detector from_run",
+        f"--detector from_run --detector.path {tmp_path / 'mahalanobis'}",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     eval_detector.main(cfg)

@@ -16,7 +16,9 @@ class PytorchConfig(DatasetConfig):
 
     def _build(self) -> Dataset:
         dataset_cls = get_object(self.name)
-        # TODO: Do all torchvision datasets have these parameters?
+        # TODO: Many torchvision datasets don't have these arguments, let alone other
+        # pytorch datasets. Maybe we should have a more general kwargs settings,
+        # or maybe trying to have one general class for this doesn't make sense anyway.
         dataset = dataset_cls(  # type: ignore
             root="data", train=self.train, download=True
         )

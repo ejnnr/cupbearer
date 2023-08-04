@@ -6,11 +6,13 @@ from cupbearer.data import DatasetConfig
 from cupbearer.detectors.abstraction.adversarial_detector import (
     AdversarialAbstractionDetector,
 )
-from cupbearer.utils.config_groups import config_group
+from cupbearer.models.computations import Model
+from cupbearer.utils.config_groups import config_group, register_config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
+from cupbearer.utils.utils import BaseConfig, get_object
 
-from ..config import DetectorConfig, TrainConfig
-from .abstraction import Abstraction
+from ..config import DetectorConfig, StoredDetector, TrainConfig
+from .abstraction import Abstraction, get_default_abstraction
 from .abstraction_detector import AbstractionDetector
 
 
@@ -33,30 +35,56 @@ class AbstractionTrainConfig(TrainConfig):
 
 
 @dataclass
-class AbstractionConfig(DetectorConfig):
-    abstraction: Optional[Abstraction] = None
-    size_reduction: Optional[int] = 4
-    # TODO: configuring abstraction_cls currently doesn't work, looks like
-    # simple_parsing just sets this to `type` instead of `Abstraction`.
-    # abstraction_cls: type[Abstraction] = Abstraction
+class AbstractionConfig(BaseConfig):
+    cls: str = "cupbearer.detectors.abstraction.abstraction.Abstraction"
+    size_reduction: int = 4
     output_loss_fn: str = "kl"
+    # TODO: there should be a way of customizing the abstraction's architecture.
+    # The best way to achieve this might be to have a 'ComputationConfig' class instead
+    # of just 'ModelConfig', and then use a config group for that as a field here
+    # or in another abstraction config class.
+
+    def build(self, model: Model) -> Abstraction:
+        abstraction_cls = get_object(self.cls)
+        return get_default_abstraction(
+            model,
+            self.size_reduction,
+            output_dim=2 if self.output_loss_fn == "single_class" else None,
+            abstraction_cls=abstraction_cls,
+        )
+
+
+@dataclass
+class AxisAlignedAbstractionConfig(AbstractionConfig):
+    cls: str = "cupbearer.detectors.abstraction.abstraction.AxisAlignedAbstraction"
+
+
+ABSTRACTIONS = {
+    "simple": AbstractionConfig,
+    "axis_aligned": AxisAlignedAbstractionConfig,
+}
+register_config_group(AbstractionConfig, ABSTRACTIONS)
+
+
+@dataclass
+class AbstractionDetectorConfig(DetectorConfig):
+    abstraction: AbstractionConfig = config_group(AbstractionConfig, AbstractionConfig)
     train: AbstractionTrainConfig = field(default_factory=AbstractionTrainConfig)
 
     def build(self, model, params, save_dir) -> AbstractionDetector:
+        abstraction = self.abstraction.build(model)
         return AbstractionDetector(
             model=model,
             params=params,
-            abstraction=self.abstraction,
-            size_reduction=self.size_reduction,
-            # abstraction_cls=self.abstraction_cls,
-            output_loss_fn=self.output_loss_fn,
+            abstraction=abstraction,
+            output_loss_fn=self.abstraction.output_loss_fn,
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )
 
 
 @dataclass
-class AdversarialAbstractionConfig(AbstractionConfig):
+class AdversarialAbstractionConfig(AbstractionDetectorConfig):
     load_path: Optional[Path] = None
     num_at_once: int = 1
     num_ref_samples: int = 128
@@ -69,10 +97,15 @@ class AdversarialAbstractionConfig(AbstractionConfig):
 
     def build(self, model, params, save_dir) -> AdversarialAbstractionDetector:
         if self.load_path is not None:
-            return AdversarialAbstractionDetector.from_detector(
-                path=self.load_path / "detector",
+            helper_cfg = StoredDetector(path=self.load_path)
+            detector = helper_cfg.build(model, params, save_dir)
+            assert isinstance(detector, AbstractionDetector)
+            return AdversarialAbstractionDetector(
                 model=model,
                 params=params,
+                abstraction=detector.abstraction,
+                abstraction_state=detector.abstraction_state,
+                output_loss_fn=detector.output_loss_fn,
                 num_at_once=self.num_at_once,
                 num_ref_samples=self.num_ref_samples,
                 num_steps=self.num_steps,
@@ -81,13 +114,12 @@ class AdversarialAbstractionConfig(AbstractionConfig):
                 save_path=save_dir,
             )
 
+        abstraction = self.abstraction.build(model)
         return AdversarialAbstractionDetector(
             model=model,
             params=params,
-            abstraction=self.abstraction,
-            size_reduction=self.size_reduction,
-            # abstraction_cls=self.abstraction_cls,
-            output_loss_fn=self.output_loss_fn,
+            abstraction=abstraction,
+            output_loss_fn=self.abstraction.output_loss_fn,
             save_path=save_dir,
             num_at_once=self.num_at_once,
             num_ref_samples=self.num_ref_samples,
