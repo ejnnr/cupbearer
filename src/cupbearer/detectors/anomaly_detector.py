@@ -2,7 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional
 
 import jax
 import jax.numpy as jnp
@@ -296,15 +296,3 @@ class AnomalyDetector(ABC):
     def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {path}")
         self._set_trained_variables(utils.load(path))
-
-    @property
-    def init_kwargs(self) -> dict[str, Any]:
-        """Keyword arguments for creating a copy of this detector instance.
-
-        Shouldn't include `model` or `params`.
-
-        Child classes will usually need to override this to make saving work correctly.
-        The easiest way to do that is to use the `utils.storable` decorator on the
-        child class.
-        """
-        return {"max_batch_size": self.max_batch_size}

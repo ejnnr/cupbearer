@@ -3,7 +3,6 @@ import copy
 import dataclasses
 import functools
 import importlib
-import inspect
 import pickle
 import re
 import shutil
@@ -137,31 +136,6 @@ def merge_dicts(a: dict | FrozenDict, b: dict | FrozenDict) -> dict | FrozenDict
         merged = flax.core.freeze(merged)
     return merged
 
-
-def store_init_args(cls, ignore={"self"}):
-    orig_init = cls.__init__
-    sig = inspect.signature(orig_init)
-
-    @functools.wraps(cls.__init__)
-    def new_init(self, *args, **kwargs):
-        bound = sig.bind(self, *args, **kwargs)
-        bound.apply_defaults()
-        self._init_kwargs = dict(bound.arguments)
-        for name in ignore:
-            self._init_kwargs.pop(name, None)
-        orig_init(self, *args, **kwargs)
-
-    cls.__init__ = new_init
-
-    @property
-    def init_kwargs_property(self):
-        return self._init_kwargs
-
-    cls.init_kwargs = init_kwargs_property
-    return cls
-
-
-storable = functools.partial(store_init_args, ignore={"self", "model", "params"})
 
 T = TypeVar("T")
 

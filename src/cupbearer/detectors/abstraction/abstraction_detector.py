@@ -15,7 +15,7 @@ from cupbearer.detectors.abstraction.abstraction import (
 )
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.computations import Model
-from cupbearer.utils import trainer, utils
+from cupbearer.utils import trainer
 from cupbearer.utils.optimizers import OptimizerConfig
 
 
@@ -189,30 +189,14 @@ class AbstractionTrainer(trainer.TrainerModule):
         return "\n" + "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
 
 
-# abstraction_state will be stored already, no need to capture it as a kwarg.
-# When loading, the class will be initialized with abstraction_state=None,
-# but then it will immediately be overriden.
-@functools.partial(
-    utils.store_init_args, ignore={"self", "model", "params", "abstraction_state"}
-)
 class AbstractionDetector(AnomalyDetector):
-    """Anomaly detector based on an abstraction.
-    States this detector can be in:
-      - abstraction_state is None, abstraction is None: detector is not usable,
-        needs to be trained first.
-      - abstraction_state is None, but abstraction is set: if detector is used,
-        abstraction_state will be randomly initialized. In particular, the detector
-        can be "finetuned" in this state, based on a random initialization.
-      - both are set: detector will use the abstraction_state.
-    Either abstraction or size_reduction should be set if the first state
-    is to be avoided.
-    """
+    """Anomaly detector based on an abstraction."""
 
     def __init__(
         self,
         model: Model,
         params,
-        abstraction: Optional[Abstraction] = None,
+        abstraction: Abstraction,
         abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
         output_loss_fn: str = "kl",
         max_batch_size: int = 4096,
@@ -236,7 +220,6 @@ class AbstractionDetector(AnomalyDetector):
         debug: bool = False,
         **kwargs,
     ):
-        assert self.abstraction is not None
         # First sample, only input without label.
         # Also need to add a batch dimension
         example_input = dataset[0][0][None]
@@ -290,7 +273,6 @@ class AbstractionDetector(AnomalyDetector):
         )
 
     def _ensure_abstraction_state(self, batch):
-        assert self.abstraction is not None
         if self.abstraction_state is None:
             logger.info("Randomly initializing abstraction.")
             # TODO: should derive this from some other key to avoid
@@ -332,8 +314,6 @@ class AbstractionDetector(AnomalyDetector):
         return result
 
     def _set_trained_variables(self, variables):
-        assert self.abstraction is not None
-        assert variables
         # TODO: in general we might have to create a PRNG here as well
         if "opt_state" in variables:
             self.abstraction_state = trainer.TrainState(

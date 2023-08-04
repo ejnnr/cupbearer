@@ -5,10 +5,8 @@ from tqdm import tqdm
 from cupbearer.data import numpy_collate
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.detectors.mahalanobis.helpers import mahalanobis, update_covariance
-from cupbearer.utils import utils
 
 
-@utils.storable
 class MahalanobisDetector(AnomalyDetector):
     def train(
         self,
