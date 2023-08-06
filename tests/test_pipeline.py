@@ -57,7 +57,8 @@ def test_pipeline(tmp_path, capsys):
             f"--task backdoor --task.backdoor corner "
             f"--task.run_path {tmp_path / 'base'} "
             "--detector adversarial_abstraction "
-            f"--detector.load_path {tmp_path / 'abstraction'}"
+            f"--detector.load_path {tmp_path / 'abstraction'} "
+            "--save_config true"
         ),
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
@@ -77,7 +78,8 @@ def test_pipeline(tmp_path, capsys):
         eval_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
         f"--task backdoor --task.backdoor corner --task.run_path {tmp_path / 'base'} "
-        f"--detector from_run --detector.path {tmp_path / 'abstraction'}",
+        f"--detector from_run --detector.path {tmp_path / 'abstraction'} "
+        "--save_config true",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     # It's important we don't overwrite the config file here since it's needed to load
@@ -114,7 +116,8 @@ def test_pipeline(tmp_path, capsys):
         eval_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
         f"--task adversarial_examples --task.run_path {tmp_path / 'base'} "
-        f"--detector from_run --detector.path {tmp_path / 'mahalanobis'}",
+        f"--detector from_run --detector.path {tmp_path / 'mahalanobis'} "
+        "--save_config true",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     eval_detector.main(cfg)

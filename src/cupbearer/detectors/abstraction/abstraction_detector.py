@@ -1,4 +1,3 @@
-import functools
 from pathlib import Path
 from typing import Callable, Optional
 
@@ -57,6 +56,12 @@ OUTPUT_LOSS_FNS: dict[str, Callable] = {
 }
 
 
+def norm(x):
+    """Compute the L2 norm along all but the first axis."""
+    # Can't use jnp.linalg.norm because it only supporst up to two axes.
+    return jnp.sqrt((x**2).sum(axis=tuple(range(1, x.ndim))))
+
+
 def compute_losses(
     params, state, batch, output_loss_fn: Callable, return_batch=False, layerwise=False
 ):
@@ -64,10 +69,7 @@ def compute_losses(
     abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
         {"params": params}, activations
     )
-    norms = jax.tree_map(
-        functools.partial(jnp.linalg.norm, axis=tuple(range(1, abstractions[0].ndim))),
-        abstractions,
-    )
+    norms = jax.tree_map(norm, abstractions)
     norms = jax.tree_map(lambda x: x.mean(), norms)
     avg_norm = sum(norms) / len(norms)
     assert isinstance(abstractions, list)

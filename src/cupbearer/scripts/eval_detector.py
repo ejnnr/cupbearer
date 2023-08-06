@@ -26,4 +26,4 @@ def main(cfg: Config):
 
 
 if __name__ == "__main__":
-    run(main, Config, save_config=False)
+    run(main, Config)

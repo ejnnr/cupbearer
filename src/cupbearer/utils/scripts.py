@@ -29,6 +29,7 @@ class DirConfig(BaseConfig):
 class ScriptConfig(BaseConfig):
     seed: int = 0
     dir: DirConfig = mutable_field(DirConfig)
+    save_config: bool = True
     debug: bool = field(action="store_true")
     debug_with_logging: bool = field(action="store_true")
 
@@ -48,14 +49,13 @@ ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
 def run(
     script: Callable[[ConfigType], Any],
     cfg_type: type[ConfigType],
-    save_config: bool = True,
 ):
     cfg = simple_parsing.parse(
         cfg_type,
         argument_generation_mode=simple_parsing.ArgumentGenerationMode.NESTED,
     )
 
-    save_cfg(cfg, save_config=save_config)
+    save_cfg(cfg, save_config=cfg.save_config)
 
     return script(cfg)
 

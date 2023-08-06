@@ -10,6 +10,7 @@ class Config(ScriptConfig):
     eps: float = 8 / 255
     max_examples: Optional[int] = None
     success_threshold: float = 0.1
+    save_config: bool = False
 
     def _set_debug(self):
         super()._set_debug()

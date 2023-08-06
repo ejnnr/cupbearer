@@ -16,6 +16,7 @@ from . import TaskConfigBase
 class AdversarialExampleTask(TaskConfigBase):
     run_path: Path
     max_size: Optional[int] = None
+    max_anomalous_size: Optional[int] = None
     attack_batch_size: Optional[int] = None
     success_threshold: float = 0.1
 
@@ -47,7 +48,7 @@ class AdversarialExampleTask(TaskConfigBase):
         if not self._anomalous_data:
             self._anomalous_data = AdversarialExampleConfig(
                 run_path=self.run_path,
-                max_size=self.max_size,
+                max_size=self.max_anomalous_size or self.max_size,
                 attack_batch_size=self.attack_batch_size,
                 success_threshold=self.success_threshold,
             )

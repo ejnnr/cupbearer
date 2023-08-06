@@ -104,4 +104,4 @@ def attack(cfg: Config):
 
 
 if __name__ == "__main__":
-    run(attack, Config, save_config=False)
+    run(attack, Config)
