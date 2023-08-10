@@ -27,7 +27,7 @@ def cycle(iterable):
 class AdversarialAbstractionDetector(AbstractionDetector):
     def __init__(
         self,
-        num_ref_samples: int = 128,
+        num_train_samples: int = 128,
         num_steps: int = 1,
         normal_weight: float = 0.5,
         clip: bool = True,
@@ -36,7 +36,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
         super().__init__(**kwargs)
         assert self.abstraction is not None
 
-        self.num_ref_samples = num_ref_samples
+        self.num_train_samples = num_train_samples
         self.num_steps = num_steps
         self.normal_weight = normal_weight
         self.clip = clip
@@ -61,7 +61,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
         # TODO: maybe this should be combined with the normal_loader in the base class?
         self.train_loader = DataLoader(
             dataset=train_dataset,
-            batch_size=self.num_ref_samples,
+            batch_size=self.num_train_samples,
             collate_fn=abstraction_collate(self.model, self.params),
             drop_last=True,
         )
@@ -124,6 +124,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
                 loss = jnp.clip(loss, a_min=self.initial_loss)
             return loss, norm
 
+        print("Finetuning on new batch")
         for _ in range(self.num_steps):
             train_batch = next(self.train_batches)
 
@@ -161,8 +162,8 @@ class AdversarialAbstractionDetector(AbstractionDetector):
             metrics = {
                 "train_loss": train_loss,
                 "new_loss": new_loss,
-                "train_norm": train_norm,
-                "new_norm": new_norm,
+                # "train_norm": train_norm,
+                # "new_norm": new_norm,
             }
             print("\n".join(f"{k}: {v:.4f}" for k, v in metrics.items()))
 

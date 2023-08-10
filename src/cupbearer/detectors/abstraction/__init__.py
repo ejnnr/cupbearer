@@ -87,8 +87,7 @@ class AbstractionDetectorConfig(DetectorConfig):
 @dataclass
 class AdversarialAbstractionConfig(AbstractionDetectorConfig):
     load_path: Optional[Path] = None
-    num_at_once: int = 1
-    num_ref_samples: int = 128
+    num_train_samples: int = 128
     num_steps: int = 1
     normal_weight: float = 0.5
     clip: bool = True
@@ -108,8 +107,7 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
                 abstraction=detector.abstraction,
                 abstraction_state=detector.abstraction_state,
                 output_loss_fn=detector.output_loss_fn,
-                num_at_once=self.num_at_once,
-                num_ref_samples=self.num_ref_samples,
+                num_train_samples=self.num_train_samples,
                 num_steps=self.num_steps,
                 normal_weight=self.normal_weight,
                 clip=self.clip,
@@ -124,8 +122,7 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
             abstraction=abstraction,
             output_loss_fn=self.abstraction.output_loss_fn,
             save_path=save_dir,
-            num_at_once=self.num_at_once,
-            num_ref_samples=self.num_ref_samples,
+            num_train_samples=self.num_train_samples,
             num_steps=self.num_steps,
             normal_weight=self.normal_weight,
             clip=self.clip,
@@ -133,6 +130,5 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
 
     def _set_debug(self):
         super()._set_debug()
-        self.num_at_once = 1
-        self.num_ref_samples = 1
+        self.num_train_samples = 1
         self.num_steps = 1

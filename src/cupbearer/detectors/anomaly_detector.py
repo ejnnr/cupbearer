@@ -12,6 +12,7 @@ from iceberg import Colors, Renderer
 from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
+from tqdm.auto import tqdm
 
 from cupbearer.data import TestDataMix, numpy_collate
 from cupbearer.models.computations import Model
@@ -105,6 +106,7 @@ class AnomalyDetector(ABC):
         test_dataset: TestDataMix,
         histogram_percentile: float = 95,
         num_bins: int = 100,
+        pbar: bool = False,
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
@@ -122,15 +124,25 @@ class AnomalyDetector(ABC):
 
         metrics = {}
         assert 0 < histogram_percentile <= 100
-        histogram_percentile += 0.5 * (100 - histogram_percentile)
 
         scores = []
+        layer_scores = 0
+        num_elements = 0
         # Normal=0, Anomalous=1
         labels = []
+        if pbar:
+            test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
         for batch in test_loader:
             inputs, new_labels = batch
-            scores.append(self.scores(inputs))
+            new_scores = self.layerwise_scores(inputs)
+            scores.append(new_scores.mean(axis=0))
+            # Sum over batch axis
+            layer_scores = layer_scores + new_scores.sum(axis=1)
+            num_elements += new_scores.shape[1]
             labels.append(new_labels)
+        assert isinstance(layer_scores, jax.Array)
+        # We're also taking the mean over the dataset:
+        layer_scores = layer_scores / num_elements
         scores = jnp.concatenate(scores)
         labels = jnp.concatenate(labels)
 
@@ -148,7 +160,9 @@ class AnomalyDetector(ABC):
         metrics["AP"] = ap
 
         upper_lim = jnp.percentile(scores, histogram_percentile).item()
-        lower_lim = jnp.percentile(scores, 100 - histogram_percentile).item()
+        # Usually there aren't extremely low outliers, so we just use the minimum,
+        # otherwise this tends to weirdly cut of the histogram.
+        lower_lim = scores.min().item()
 
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
@@ -174,9 +188,6 @@ class AnomalyDetector(ABC):
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
         plt.savefig(self.save_path / "histogram.pdf")
-
-        # TODO: it's kind of silly to do a second set of forward passes here.
-        layer_scores = self.layer_anomalies(test_dataset.anomalous_data)
 
         sample_loader = DataLoader(
             test_dataset,

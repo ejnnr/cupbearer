@@ -18,6 +18,7 @@ def main(cfg: Config):
     detector.eval(
         train_dataset=train_data,
         test_dataset=test_data,
+        pbar=cfg.pbar,
     )
 
 

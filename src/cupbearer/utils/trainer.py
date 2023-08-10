@@ -18,11 +18,8 @@ from typing import (
     Tuple,
 )
 
-# JAX/Flax
 import jax
 import optax
-
-# PyTorch for data loading
 from cupbearer.utils import utils
 from cupbearer.utils.logger import Logger
 from cupbearer.utils.utils import escape_ansi, load, save
