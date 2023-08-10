@@ -128,8 +128,8 @@ class TestDataMix(Dataset):
         anomalous: Dataset,
         normal_weight: float = 0.5,
     ):
-        self.normal = normal
-        self.anomalous = anomalous
+        self.normal_data = normal
+        self.anomalous_data = anomalous
         self.normal_weight = normal_weight
         self._length = min(
             int(len(normal) / normal_weight), int(len(anomalous) / (1 - normal_weight))
@@ -142,15 +142,9 @@ class TestDataMix(Dataset):
 
     def __getitem__(self, index):
         if index < self.normal_len:
-            return self._remove_label(self.normal[index]), 0
+            return self.normal_data[index], 0
         else:
-            return self._remove_label(self.anomalous[index - self.normal_len]), 1
-
-    def _remove_label(self, sample):
-        if isinstance(sample, tuple):
-            sample = sample[0]
-
-        return sample
+            return self.anomalous_data[index - self.normal_len], 1
 
 
 @dataclass
@@ -159,7 +153,7 @@ class TestDataConfig(DatasetConfig):
     anomalous: DatasetConfig
     normal_weight: float = 0.5
 
-    def build(self) -> Dataset:
+    def build(self) -> TestDataMix:
         # We need to override this method because max_size needs to be applied in a
         # different way: TestDataMix just has normal data first and then anomalous data,
         # if we just used a Subset with indices 1...n, we'd get an incorrect ratio.
@@ -173,6 +167,8 @@ class TestDataConfig(DatasetConfig):
             assert anomalous_size <= len(anomalous)
             anomalous = Subset(anomalous, range(anomalous_size))
         dataset = TestDataMix(normal, anomalous, self.normal_weight)
-        transform = Compose(list(self.transforms.values()))
-        dataset = TransformDataset(dataset, transform)
+        # We don't want to return a TransformDataset here. Transforms should be applied
+        # directly to the normal and anomalous data.
+        if self.transforms:
+            raise ValueError("Transforms are not supported for TestDataConfig.")
         return dataset

@@ -46,7 +46,9 @@ class AdversarialExampleDataset(Dataset):
         base_run = Path(base_run)
         self.base_run = base_run
         try:
-            self.examples = utils.load(base_run / "adv_examples")["adv_examples"]
+            data = utils.load(base_run / "adv_examples")
+            self.examples = data["adv_examples"]
+            self.labels = data["labels"]
         except FileNotFoundError:
             logger.info(
                 "Adversarial examples not found, running attack with default settings"
@@ -77,7 +79,11 @@ class AdversarialExampleDataset(Dataset):
             else:
                 print(result.stdout)
                 print(result.stderr)
-            self.examples = utils.load(base_run / "adv_examples")["adv_examples"]
+
+            data = utils.load(base_run / "adv_examples")
+            self.examples = data["adv_examples"]
+            self.labels = data["labels"]
+
         if num_examples is None:
             num_examples = len(self.examples)
         self.num_examples = num_examples
@@ -93,7 +99,13 @@ class AdversarialExampleDataset(Dataset):
     def __getitem__(self, idx):
         if idx >= self.num_examples:
             raise IndexError(f"Index {idx} is out of range")
-        return self.examples[idx]
+        # Labels are the original ones. We need to return them mainly for implementation
+        # reasons: for eval, normal and anomalous data will be batched together, so
+        # since the normal data includes labels, the anomalous one needs to as well.
+        # TODO: Probably detectors should just never have access to labels during evals
+        # (none of the current ones make use of them anyway). If a detector needs them,
+        # it should use the model-generated labels, not ground truth ones.
+        return self.examples[idx], self.labels[idx]
 
 
 @partial(jax.jit, static_argnames=("forward_fn", "eps"))

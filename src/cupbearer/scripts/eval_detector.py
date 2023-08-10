@@ -4,8 +4,8 @@ from cupbearer.utils.scripts import run
 
 
 def main(cfg: Config):
-    reference_data = cfg.task.build_train_data()
-    anomalous_data = cfg.task.build_test_data()
+    train_data = cfg.task.build_train_data()
+    test_data = cfg.task.build_test_data()
     model = cfg.task.build_model()
     params = cfg.task.build_params()
     detector = cfg.detector.build(
@@ -16,8 +16,8 @@ def main(cfg: Config):
     )
 
     detector.eval(
-        normal_dataset=reference_data,
-        anomalous_datasets={"anomalous": anomalous_data},
+        train_dataset=train_data,
+        test_dataset=test_data,
     )
 
 

@@ -13,7 +13,7 @@ from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 
-from cupbearer.data import _shared
+from cupbearer.data import TestDataMix, numpy_collate
 from cupbearer.models.computations import Model
 from cupbearer.utils import utils
 
@@ -99,71 +99,56 @@ class AnomalyDetector(ABC):
 
     def eval(
         self,
-        normal_dataset: Dataset,
-        anomalous_datasets: dict[str, Dataset],
+        # Don't need train_dataset here, but e.g. adversarial abstractions need it,
+        # and in general there's no reason to deny detectors access to it during eval.
+        train_dataset: Dataset,
+        test_dataset: TestDataMix,
         histogram_percentile: float = 95,
         num_bins: int = 100,
-        plot_all_hists: bool = False,
     ):
-        normal_loader = DataLoader(
-            normal_dataset,
+        # Check this explicitly because otherwise things can break in weird ways
+        # when we assume that anomaly labels are included.
+        assert isinstance(test_dataset, TestDataMix), type(test_dataset)
+
+        test_loader = DataLoader(
+            test_dataset,
             batch_size=self.max_batch_size,
-            shuffle=False,
-            collate_fn=_shared.numpy_collate,
+            # For some methods, such as adversarial abstractions, it might matter how
+            # normal/anomalous data is distributed into batches. In that case, we want
+            # to mix them by default.
+            shuffle=True,
+            collate_fn=numpy_collate,
         )
-        anomalous_loaders = {
-            k: DataLoader(
-                ds,
-                batch_size=self.max_batch_size,
-                shuffle=False,
-                collate_fn=_shared.numpy_collate,
-            )
-            for k, ds in anomalous_datasets.items()
-        }
 
-        normal_scores = []
-        for batch in normal_loader:
-            normal_scores.append(self.scores(batch))
-        normal_scores = jnp.concatenate(normal_scores)
-
-        anomalous_scores = {}
-        metrics = {"AUC_ROC": {}, "AP": {}}
+        metrics = {}
         assert 0 < histogram_percentile <= 100
         histogram_percentile += 0.5 * (100 - histogram_percentile)
-        lower_lim = jnp.percentile(normal_scores, 100 - histogram_percentile).item()
-        upper_lim = jnp.percentile(normal_scores, histogram_percentile).item()
-        for k, loader in anomalous_loaders.items():
-            scores = []
-            for batch in loader:
-                scores.append(self.scores(batch))
-            scores = jnp.concatenate(scores)
-            anomalous_scores[k] = scores
 
-            true_labels = jnp.concatenate(
-                [jnp.ones_like(scores), jnp.zeros_like(normal_scores)]
-            )
-            all_scores = jnp.concatenate([scores, normal_scores])
-            auc_roc = sklearn.metrics.roc_auc_score(
-                y_true=true_labels,
-                y_score=all_scores,
-            )
-            ap = sklearn.metrics.average_precision_score(
-                y_true=true_labels,
-                y_score=all_scores,
-            )
-            logger.info(f"AUC_ROC ({k}): {auc_roc:.4f}")
-            logger.info(f"AP ({k}): {ap:.4f}")
-            metrics["AUC_ROC"][k] = auc_roc
-            metrics["AP"][k] = ap
+        scores = []
+        # Normal=0, Anomalous=1
+        labels = []
+        for batch in test_loader:
+            inputs, new_labels = batch
+            scores.append(self.scores(inputs))
+            labels.append(new_labels)
+        scores = jnp.concatenate(scores)
+        labels = jnp.concatenate(labels)
 
-            # We use the most anomalous scores to compute the cutoff, to make sure
-            # all score distributions are visible in the histogram
-            upper_lim = max(
-                upper_lim, jnp.percentile(scores, histogram_percentile).item()
-            )
-            lower_lim = min(
-                lower_lim, jnp.percentile(scores, 100 - histogram_percentile).item()
-            )
+        auc_roc = sklearn.metrics.roc_auc_score(
+            y_true=labels,
+            y_score=scores,
+        )
+        ap = sklearn.metrics.average_precision_score(
+            y_true=labels,
+            y_score=scores,
+        )
+        logger.info(f"AUC_ROC: {auc_roc:.4f}")
+        logger.info(f"AP: {ap:.4f}")
+        metrics["AUC_ROC"] = auc_roc
+        metrics["AP"] = ap
+
+        upper_lim = jnp.percentile(scores, histogram_percentile).item()
+        lower_lim = jnp.percentile(scores, 100 - histogram_percentile).item()
 
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
@@ -176,27 +161,13 @@ class AnomalyDetector(ABC):
             json.dump(metrics, f)
 
         # Visualizations for anomaly scores
-        plt.hist(
-            normal_scores,
-            bins=bins,
-            alpha=0.5,
-            label="Normal",
-        )
-        if plot_all_hists:
-            for k, scores in list(anomalous_scores.items()):
-                plt.hist(
-                    scores,
-                    bins=bins,
-                    alpha=0.5,
-                    label=k,
-                )
-        else:
-            k, scores = next(iter(anomalous_scores.items()))
+        for i, name in enumerate(["Normal", "Anomalous"]):
+            vals = scores[labels == i]
             plt.hist(
-                scores,
+                vals,
                 bins=bins,
                 alpha=0.5,
-                label=k,
+                label=name,
             )
         plt.legend()
         plt.xlabel("Anomaly score")
@@ -204,28 +175,21 @@ class AnomalyDetector(ABC):
         plt.title("Anomaly score distribution")
         plt.savefig(self.save_path / "histogram.pdf")
 
-        # For now, we just plot the first anomalous dataset in the architecture figure,
-        # not sure what I want to do here long term
-        anomalous_dataset = anomalous_datasets[next(iter(anomalous_datasets.keys()))]
-        layer_scores = self.layer_anomalies(anomalous_dataset)
+        # TODO: it's kind of silly to do a second set of forward passes here.
+        layer_scores = self.layer_anomalies(test_dataset.anomalous_data)
 
         sample_loader = DataLoader(
-            anomalous_dataset,
+            test_dataset,
             batch_size=9,
-            shuffle=False,
-            collate_fn=_shared.numpy_collate,
+            # Shuffling to ideally get a mix of normal and anomalous data
+            shuffle=True,
+            collate_fn=numpy_collate,
         )
-        sample_inputs = next(iter(sample_loader))
+        sample_inputs, _ = next(iter(sample_loader))
         if isinstance(sample_inputs, (tuple, list)):
             sample_inputs = sample_inputs[0]
 
-        try:
-            self.plot(layer_scores, inputs=sample_inputs)
-        except RuntimeError as e:
-            if str(e) == "glfw.init() failed":
-                logger.warning("Skipping architecture plot")
-            else:
-                raise
+        self.plot(layer_scores, inputs=sample_inputs)
 
     def _get_drawable(self, layer_scores, inputs):
         return self.model.get_drawable(layer_scores=layer_scores, inputs=inputs)
@@ -245,12 +209,12 @@ class AnomalyDetector(ABC):
         renderer.render(plot, background_color=Colors.WHITE)
         renderer.save_rendered_image(self.save_path / "architecture.png")
 
-    def layer_anomalies(self, dataset):
+    def layer_anomalies(self, dataset: Dataset):
         dataloader = DataLoader(
             dataset,
             batch_size=self.max_batch_size,
             shuffle=False,
-            collate_fn=_shared.numpy_collate,
+            collate_fn=numpy_collate,
         )
         scores = 0
         num_elements = 0

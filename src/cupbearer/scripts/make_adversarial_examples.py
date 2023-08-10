@@ -37,6 +37,7 @@ def attack(cfg: Config):
     )
 
     adv_examples = []
+    labels = []
     num_examples = 0
 
     mean_original_loss = 0
@@ -44,21 +45,22 @@ def attack(cfg: Config):
     mean_new_accuracy = 0
 
     for i, batch in enumerate(dataloader):
-        inputs, labels = batch
+        inputs, new_labels = batch
         adv_inputs, original_loss = fgsm(
             forward_fn=lambda x: model.apply({"params": params}, x),
             inputs=inputs,
-            labels=labels,
+            labels=new_labels,
             eps=cfg.eps,
         )
         # FGSM might have given us pixel values that don't actually correspond to colors
         adv_inputs = jnp.clip(adv_inputs, 0, 1)
         adv_examples.append(adv_inputs)
+        labels.append(new_labels)
         num_examples += len(adv_inputs)
 
         new_logits = model.apply({"params": params}, adv_inputs)
-        one_hot = jax.nn.one_hot(labels, new_logits.shape[-1])
-        new_accuracy = jnp.mean(jnp.argmax(new_logits, -1) == labels)
+        one_hot = jax.nn.one_hot(new_labels, new_logits.shape[-1])
+        new_accuracy = jnp.mean(jnp.argmax(new_logits, -1) == new_labels)
         new_loss = optax.softmax_cross_entropy(logits=new_logits, labels=one_hot).mean()
         logger.info(f"original loss={original_loss}, new loss={new_loss}")
         mean_original_loss = (i * mean_original_loss + original_loss) / (i + 1)
@@ -75,8 +77,11 @@ def attack(cfg: Config):
         )
 
     adv_examples = jnp.concatenate(adv_examples, axis=0)
+    labels = jnp.concatenate(labels, axis=0)
     # Need to wrap the array in a container to make the orbax checkpointer work.
-    utils.save({"adv_examples": adv_examples}, cfg.dir.path / "adv_examples")
+    utils.save(
+        {"adv_examples": adv_examples, "labels": labels}, cfg.dir.path / "adv_examples"
+    )
     with open(cfg.dir.path / "adv_examples.json", "w") as f:
         json.dump(
             {

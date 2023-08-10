@@ -5,7 +5,7 @@ from typing import Optional
 
 from torch.utils.data import Dataset
 
-from cupbearer.data import DatasetConfig, TestDataConfig
+from cupbearer.data import DatasetConfig, TestDataConfig, TestDataMix
 from cupbearer.models import ModelConfig
 from cupbearer.models.computations import Model
 from cupbearer.utils.utils import BaseConfig
@@ -24,7 +24,7 @@ class TaskConfigBase(BaseConfig, ABC):
         return None
 
     @abstractmethod
-    def build_test_data(self) -> Dataset:
+    def build_test_data(self) -> TestDataMix:
         pass
 
 
@@ -95,7 +95,7 @@ class TaskConfig(TaskConfigBase, ABC):
             assert self._model is not None, "init_model must set _model"
         return self._model.build_params()
 
-    def build_test_data(self) -> Dataset:
+    def build_test_data(self) -> TestDataMix:
         normal = self._get_normal_test_data()
         anomalous = self._get_anomalous_test_data()
         self._test_data = TestDataConfig(

@@ -2,6 +2,7 @@ from cupbearer.utils.config_groups import register_config_group, register_config
 
 from ._shared import DatasetConfig, ToNumpy, TrainDataFromRun, Transform
 from ._shared import TestDataConfig as TestDataConfig
+from ._shared import TestDataMix as TestDataMix
 from ._shared import numpy_collate as numpy_collate
 from .adversarial import AdversarialExampleConfig
 from .backdoors import CornerPixelBackdoor, NoiseBackdoor
