@@ -32,15 +32,15 @@ class DatasetConfig(BaseConfig, ABC):
         """Create an instance of the Dataset described by this config."""
         dataset = self._build()
         transform = Compose(list(self.transforms.values()))
-        # add_transforms(dataset, transform)
         dataset = TransformDataset(dataset, transform)
         if self.max_size:
+            assert self.max_size <= len(dataset)
             dataset = Subset(dataset, range(self.max_size))
         return dataset
 
-    @abstractmethod
     def _build(self) -> Dataset:
-        pass
+        # Not an abstractmethod because e.g. TestDataConfig overrides build() instead.
+        raise NotImplementedError
 
     def _set_debug(self):
         super()._set_debug()
@@ -119,3 +119,60 @@ class TrainDataFromRun(DatasetConfig):
     def _build(self) -> Dataset:
         data_cfg = load_config(self.path, "train_data", DatasetConfig)
         return data_cfg.build()
+
+
+class TestDataMix(Dataset):
+    def __init__(
+        self,
+        normal: Dataset,
+        anomalous: Dataset,
+        normal_weight: float = 0.5,
+    ):
+        self.normal = normal
+        self.anomalous = anomalous
+        self.normal_weight = normal_weight
+        self._length = min(
+            int(len(normal) / normal_weight), int(len(anomalous) / (1 - normal_weight))
+        )
+        self.normal_len = int(self._length * normal_weight)
+        self.anomalous_len = self._length - self.normal_len
+
+    def __len__(self):
+        return self._length
+
+    def __getitem__(self, index):
+        if index < self.normal_len:
+            return self._remove_label(self.normal[index]), 0
+        else:
+            return self._remove_label(self.anomalous[index - self.normal_len]), 1
+
+    def _remove_label(self, sample):
+        if isinstance(sample, tuple):
+            sample = sample[0]
+
+        return sample
+
+
+@dataclass
+class TestDataConfig(DatasetConfig):
+    normal: DatasetConfig
+    anomalous: DatasetConfig
+    normal_weight: float = 0.5
+
+    def build(self) -> Dataset:
+        # We need to override this method because max_size needs to be applied in a
+        # different way: TestDataMix just has normal data first and then anomalous data,
+        # if we just used a Subset with indices 1...n, we'd get an incorrect ratio.
+        normal = self.normal.build()
+        anomalous = self.anomalous.build()
+        if self.max_size:
+            normal_size = int(self.max_size * self.normal_weight)
+            assert normal_size <= len(normal)
+            normal = Subset(normal, range(normal_size))
+            anomalous_size = self.max_size - normal_size
+            assert anomalous_size <= len(anomalous)
+            anomalous = Subset(anomalous, range(anomalous_size))
+        dataset = TestDataMix(normal, anomalous, self.normal_weight)
+        transform = Compose(list(self.transforms.values()))
+        dataset = TransformDataset(dataset, transform)
+        return dataset
