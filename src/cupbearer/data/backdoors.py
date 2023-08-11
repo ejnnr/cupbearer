@@ -8,10 +8,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 
-try:
-    from ._shared import Transform
-except:
-    from cupbearer.data._shared import Transform
+from ._shared import Transform
 
 
 @dataclass
@@ -114,24 +111,12 @@ class WanetBackdoor(Transform):
         rand_sample = torch.rand(1)
         if rand_sample <= self.p_backdoor + self.p_noise:
             # Compute full warping field given image size
-            # N.B. this is mostly based on description on report
-            # TODO check that this is accurate
             warping_field = F.interpolate(
                 input=self.control_grid,
                 size=(py, px),
                 mode='bicubic',
             ).movedim(1, -1)
             assert warping_field.size() == (1, py, px, 2)
-
-            fig, axs = plt.subplots(1, 2, num=11)
-            im = axs[0].imshow(self.control_grid[0, 0, ...])
-            axs[1].imshow(self.control_grid[0, 1, ...])
-            fig.colorbar(im)
-
-            fig, axs = plt.subplots(1, 2, num=21)
-            im = axs[0].imshow(warping_field[0, ..., 0])
-            axs[1].imshow(warping_field[0, ..., 1])
-            fig.colorbar(im)
 
             if rand_sample < self.p_noise:
                 # If noise mode
@@ -165,42 +150,4 @@ class WanetBackdoor(Transform):
             )
             assert img.size() == (bs, cs, py, px)
         
-        # TODO tmp remove all plotting
-        fig, axs = plt.subplots(1, 2, num=31)
-        im = axs[0].imshow(warping_field[0, ..., 0])
-        axs[1].imshow(warping_field[0, ..., 1])
-        fig.colorbar(im)
         return img.numpy(), target
-
-
-if __name__ == "__main__":
-    # For initial testing only
-    import matplotlib.pyplot as plt
-    
-    width = 24
-    height = 32
-    img = np.float32(np.stack([
-        np.mean(np.mgrid[1:n:(height+1)*1j, 1:n:(width+1)*1j] // 1 * (1 / n), axis=0)
-        for n in [3, 4, 5]
-    ], axis=0))[..., :-1, :-1]
-    #torch.full((height, width//2), 0.2)[None,...].repeat(3, 1, 1)
-    #img = torch.cat([half_image, 1 - half_image], dim=-1).numpy()
-    label = 12
-    print('label:', label)
-
-    transform = WanetBackdoor()
-    fig, axs = plt.subplots(1, 2, figsize=(10, 5))
-    axs[0].imshow(np.moveaxis(img, -3, -1))
-    old_img = img.copy()
-
-    img, label = transform(([img], [label]))
-    print('label:', label)
-    axs[1].imshow(np.squeeze(np.moveaxis(img, -3, -1)))
-
-    fix, axs = plt.subplots(1, 3, num=51)
-    for i_ax, ax in enumerate(axs):
-        im = ax.imshow(np.squeeze(img - old_img)[i_ax])
-        fig.colorbar(im)
-
-    plt.show()
-    print("Done")
