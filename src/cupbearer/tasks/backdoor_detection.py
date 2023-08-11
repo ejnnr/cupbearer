@@ -7,6 +7,7 @@ import simple_parsing
 from cupbearer.data import (
     CornerPixelBackdoor,
     NoiseBackdoor,
+    WanetBackdoor,
     Transform,
 )
 from cupbearer.data.backdoor_data import BackdoorData
@@ -23,6 +24,7 @@ class BackdoorDetection(TaskConfig):
         {
             "corner": CornerPixelBackdoor,
             "noise": NoiseBackdoor,
+            "wanet": WanetBackdoor,
         }
     )
 
