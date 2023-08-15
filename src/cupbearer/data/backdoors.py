@@ -8,10 +8,7 @@ from scipy.ndimage import map_coordinates
 # with torchvision transforms.
 import torch
 
-try:
-    from ._shared import Transform
-except ImportError:
-    from cupbearer.data._shared import Transform
+from ._shared import Transform
 
 
 @dataclass
@@ -113,7 +110,7 @@ class WanetBackdoor(Transform):
             py, px, cs = img.shape
         else:
             raise NotImplementedError(
-                'Only 3D image arrays are implemented. Channels come last.'
+                'Images are expected to have two spatial dimensions and channels last.'
             )
 
         rand_sample = np.random.rand(1)
@@ -154,50 +151,3 @@ class WanetBackdoor(Transform):
         assert img.shape == (py, px, cs)
         
         return img, target
-
-
-def view_matrices(*matrices, use_colorbar=False, **subplots_kws):
-    ''''Temporary utility function'''
-    fig, axs = plt.subplots(1, len(matrices), **subplots_kws)
-    if isinstance(axs, plt.Axes):
-        axs = [axs]
-    for ax, matrix in zip(axs, matrices):
-        im = ax.imshow(matrix)
-        if use_colorbar:
-            fig.colorbar(im, ax=ax)
-
-if __name__ == '__main__':
-    import matplotlib.pyplot as plt
-    import PIL
-
-    wanet = WanetBackdoor()
-
-    img = np.asarray(PIL.Image.open('/home/vikren/Pictures/hexagram_full.png'))
-    px, py, cs = img.shape
-
-    y, x = np.mgrid[0:1:py*1j, 0:1:px*1j]
-    identity_field = np.stack((y, x), axis=0)
-
-    warping_field = np.stack((map_coordinates(
-        input=grid,
-        coordinates=identity_field.reshape(2, -1) * (wanet.control_grid_width - 1),
-        order=3,
-        mode='nearest',
-    ) for grid in wanet.control_grid), axis=0)
-    assert warping_field.shape[0] == 2
-    warping_field = warping_field.reshape(2, py, px)
-    assert warping_field.shape[-3:] == (2, py, px)
-
-    view_matrices(*wanet.control_grid)
-    view_matrices(*warping_field)
-    view_matrices(*(identity_field * wanet.control_grid_width), use_colorbar=True)
-
-    view_matrices(img)
-    label = 0
-    print('label:', label)
-    old_img = img
-    img, label = wanet((img, label))
-    print('label:', label)
-    view_matrices(img)
-    view_matrices(np.mean(old_img - img, axis=-1), use_colorbar=True)
-    plt.show()
