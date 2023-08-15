@@ -140,13 +140,13 @@ class WanetBackdoor(Transform):
             warping_field = warping_field + np.mgrid[0:py,0:px]
 
             # Perform warping
-            img = np.stack((map_coordinates(
+            img = np.stack([map_coordinates(
                 input=img_channel,
                 coordinates=warping_field,
                 order=1,
                 mode='nearest',  # equivalent to clipping to borders?
                 prefilter=False,
-            ) for img_channel in np.moveaxis(img, -1, 0)), axis=-1)
+            ) for img_channel in np.moveaxis(img, -1, 0)], axis=-1)
         
         assert img.shape == (py, px, cs)
         
