@@ -2,13 +2,16 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
+from scipy.ndimage import map_coordinates
 
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
 import torch
-from torch.nn import functional as F
 
-from ._shared import Transform
+try:
+    from ._shared import Transform
+except ImportError:
+    from cupbearer.data._shared import Transform
 
 
 @dataclass
@@ -94,60 +97,107 @@ class WanetBackdoor(Transform):
         super().__post_init__()
 
         # Pre-compute warping field to be used for transform
-        control_grid_size = (1, 2, self.control_grid_width, self.control_grid_width)
-        self.control_grid = 2 * torch.rand(*control_grid_size) - 1
-        self.control_grid = self.control_grid / self.control_grid.abs().mean()
+        control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
+        self.control_grid = 2 * np.random.rand(*control_grid_shape) - 1
+        self.control_grid = self.control_grid / np.mean(np.abs(self.control_grid))
         self.control_grid = self.control_grid * self.warping_strength
-        assert self.control_grid.size() == control_grid_size
+        assert self.control_grid.shape == control_grid_shape
 
         p_transform = self.p_backdoor + self.p_noise
         assert 0 <= p_transform <= 1, "Probability must be between 0 and 1"
     
     def __call__(self, sample: Tuple[np.ndarray, int]):
-        # N.B. this function only works for 4D img with two spatial dimensions
         img, target = sample
-        img = torch.tensor(img)
-        bs, cs, py, px = img.size()
-        rand_sample = torch.rand(1)
+
+        if img.ndim == 3:
+            py, px, cs = img.shape
+        else:
+            raise NotImplementedError(
+                'Only 3D image arrays are implemented. Channels come last.'
+            )
+
+        rand_sample = np.random.rand(1)
         if rand_sample <= self.p_backdoor + self.p_noise:
-            # Compute full warping field given image size
-            warping_field = F.interpolate(
-                input=self.control_grid,
-                size=(py, px),
-                mode='bicubic',
-            ).movedim(1, -1)
-            assert warping_field.size() == (1, py, px, 2)
+
+            # Scale control grid to size of image
+            warping_field = np.stack([map_coordinates(
+                input=grid,
+                coordinates=np.mgrid[
+                    0:(self.control_grid_width - 1):(py * 1j),
+                    0:(self.control_grid_width - 1):(px * 1j),
+                ],
+                order=3,
+                mode='nearest',
+            ) for grid in self.control_grid], axis=0)
+            assert warping_field.shape == (2, py, px)
 
             if rand_sample < self.p_noise:
                 # If noise mode
-                noise = 2 * torch.rand_like(warping_field) - 1
+                noise = 2 * np.random.rand(*warping_field.shape) - 1
                 warping_field = warping_field + noise
             else:
                 # If adversary mode
                 target = self.target_class
             
-            # Make relative by adding to identity field
-            warping_field = warping_field / torch.tensor([[[[py, px]]]])
-            identity_field = torch.stack(torch.meshgrid(
-                torch.linspace(-1, 1, py),
-                torch.linspace(-1, 1, px),
-            )[::-1], 2).unsqueeze(0)
-            assert identity_field.size() == warping_field.size()
-            warping_field = identity_field + warping_field
-            
-            # Normalize to [-1, 1]
-            w_min, _ = warping_field.view(-1, 2).min(0)
-            w_max, _ = warping_field.view(-1, 2).max(0)
-            warping_field = 2 * (warping_field - w_min) / (w_max - w_min) - 1
-            assert warping_field.size() == (1, py, px, 2)
+            # Create coordinates by adding to identity field
+            warping_field = warping_field + np.mgrid[0:py,0:px]
 
-            # Clip field to not create empty parts in image
-            img = F.grid_sample(
-                img,
-                warping_field,
-                mode='bilinear',
-                padding_mode='border',  # clip to [-1, 1]
-            )
-            assert img.size() == (bs, cs, py, px)
+            # Perform warping
+            img = np.stack((map_coordinates(
+                input=img_channel,
+                coordinates=warping_field,
+                order=1,
+                mode='nearest',  # equivalent to clipping to borders?
+                prefilter=False,
+            ) for img_channel in np.moveaxis(img, -1, 0)), axis=-1)
         
-        return img.numpy(), target
+        assert img.shape == (py, px, cs)
+        
+        return img, target
+
+
+def view_matrices(*matrices, use_colorbar=False, **subplots_kws):
+    ''''Temporary utility function'''
+    fig, axs = plt.subplots(1, len(matrices), **subplots_kws)
+    if isinstance(axs, plt.Axes):
+        axs = [axs]
+    for ax, matrix in zip(axs, matrices):
+        im = ax.imshow(matrix)
+        if use_colorbar:
+            fig.colorbar(im, ax=ax)
+
+if __name__ == '__main__':
+    import matplotlib.pyplot as plt
+    import PIL
+
+    wanet = WanetBackdoor()
+
+    img = np.asarray(PIL.Image.open('/home/vikren/Pictures/hexagram_full.png'))
+    px, py, cs = img.shape
+
+    y, x = np.mgrid[0:1:py*1j, 0:1:px*1j]
+    identity_field = np.stack((y, x), axis=0)
+
+    warping_field = np.stack((map_coordinates(
+        input=grid,
+        coordinates=identity_field.reshape(2, -1) * (wanet.control_grid_width - 1),
+        order=3,
+        mode='nearest',
+    ) for grid in wanet.control_grid), axis=0)
+    assert warping_field.shape[0] == 2
+    warping_field = warping_field.reshape(2, py, px)
+    assert warping_field.shape[-3:] == (2, py, px)
+
+    view_matrices(*wanet.control_grid)
+    view_matrices(*warping_field)
+    view_matrices(*(identity_field * wanet.control_grid_width), use_colorbar=True)
+
+    view_matrices(img)
+    label = 0
+    print('label:', label)
+    old_img = img
+    img, label = wanet((img, label))
+    print('label:', label)
+    view_matrices(img)
+    view_matrices(np.mean(old_img - img, axis=-1), use_colorbar=True)
+    plt.show()
