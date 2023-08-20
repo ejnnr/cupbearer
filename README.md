@@ -17,6 +17,8 @@ The easy way: inside a virtual environment with Python >= 3.10, run
 ```bash
 pip install git+https://github.com/ejnnr/cupbearer.git
 ```
+(You could also `pip install cupbearer`, but note that the library is under heavy
+development and the PyPi version will often be outdated.)
 
 Alternatively, if you're going to do development work on the library itself:
 1. Clone this git repository
