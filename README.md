@@ -44,7 +44,7 @@ Let's look at an example, where we use a simple Mahalanobis distance-based detec
 methods to detect backdoors. First, we need to train a base model on poisoned data:
 ```bash
 python -m cupbearer.scripts.train_classifier \
-       --train_data backdoor
+       --train_data backdoor --train_data.backdoor.p_backdoor 0.1 \
        --train_data.original mnist --train_data.backdoor corner \
        --model mlp \
        --dir.full logs/classifier
@@ -69,7 +69,7 @@ also uses that to figure out which dataset to use (in this case, MNIST again).
 
 Finally, we can evaluate the detector on a mix of clean and poisoned images:
 ```bash
-python -m cupbearer.scripts.eval_detector
+python -m cupbearer.scripts.eval_detector \
        --detector from_run --detector.path logs/detector \
        --task backdoor --task.backdoor corner \
        --task.run_path logs/classifier \
@@ -78,18 +78,23 @@ python -m cupbearer.scripts.eval_detector
 Note that we reuse `logs/detector` as the output directory. This will add the evaluation
 results to the directory of the detector training run (it won't overwrite anything).
 
+If everything works, this should print out an AUCROC and AP of >0.99.
+
 The reason we need to specify some things, such as the task, multiple times is that
 these scripts also support much more flexible setups. For example, we could evaluate
 the detector on images with a *different* backdoor trigger (as an ablation to check
 that these are *not* flagged as anomalous), in which case we might also want
 to save the results to a different directory:
 ```bash
-python -m cupbearer.scripts.eval_detector
+python -m cupbearer.scripts.eval_detector \
        --detector from_run --detector.path logs/detector \
-       --task backdoor --task.backdoor noise --task.backdoor.std 0.2 \
+       --task backdoor --task.backdoor noise --task.backdoor.std 0.1 \
        --task.run_path logs/classifier \
-       --dir.full logs/detector_ablation \
+       --dir.full logs/detector_ablation
 ```
+This will still have an AUCROC and AP slightly greater than 0.5 because the noise is
+somewhat anomalous in terms of Mahalanobis distance, but it should be much closer to 0.5
+than before.
 
 In the future, there might be easier ways of getting "reasonable defaults" for some settings,
 for now you could just write small wrapper scripts for these kinds of pipelines.
