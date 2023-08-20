@@ -5,6 +5,15 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "cupbearer"
 version = "0.0.1"
+authors = [{ name = "Erik Jenner", email = "erik@ejenner.com" }]
+description = "A library for mechanistic anomaly detection"
+readme = "README.md"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
 requires-python = ">=3.10"
 dependencies = [
     "flax~=0.7.0",
@@ -26,6 +35,10 @@ dependencies = [
 dev = ["pytest", "pre-commit"]
 plots = ["iceberg-dsl==0.0.6"]
 wandb = ["wandb"]
+
+[project.urls]
+"Homepage" = "https://github.com/ejnnr/cupbearer"
+"Bug Tracker" = "https://github.com/ejnnr/cupbearer/issues"
 
 [tool.setuptools.packages.find]
 where = ["src"]
