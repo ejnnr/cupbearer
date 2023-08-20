@@ -12,14 +12,6 @@ from typing import Callable, List, Optional
 
 import flax.linen as nn
 import jax
-from iceberg import Colors, Corner, Drawable, PathStyle
-from iceberg.arrows import Arrow
-from iceberg.primitives import (
-    Arrange,
-    Compose,
-    Directions,
-    Line,
-)
 
 from cupbearer.data import _shared
 from cupbearer.models.computations import (
@@ -94,9 +86,21 @@ class Abstraction(nn.Module):
 
         return abstractions, predicted_abstractions[:-1], predicted_output
 
-    def get_drawable(
-        self, full_model: Model, layer_scores=None, inputs=None
-    ) -> Drawable:
+    def get_drawable(self, full_model: Model, layer_scores=None, inputs=None):
+        try:
+            from iceberg import Colors, Corner, PathStyle
+            from iceberg.arrows import Arrow
+            from iceberg.primitives import (
+                Arrange,
+                Compose,
+                Directions,
+                Line,
+            )
+        except ImportError:
+            raise ImportError(
+                "You need to install iceberg-dsl to use the abstraction visualization"
+            )
+
         model_drawable, model_nodes = full_model.get_drawable(return_nodes=True)
         abstraction_drawable, abstraction_nodes = draw_computation(
             self.computation, return_nodes=True, layer_scores=layer_scores

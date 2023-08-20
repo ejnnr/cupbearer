@@ -2,6 +2,7 @@
 .vscode
 .DS_Store
 *.egg-info
+.python-version
 __pycache__
 /data
 /results

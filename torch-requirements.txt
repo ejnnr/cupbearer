@@ -1,6 +1,0 @@
-# We have this in an extra file because of the index-url option.
-# We're using that to avoid installing CUDA dependencies from pip on linux,
-# to keep the Docker image smaller. (We don't need GPU support in pytorch).
---index-url https://download.pytorch.org/whl/cpu
-torch==2.0.0
-torchvision==0.15.1

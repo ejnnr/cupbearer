@@ -8,7 +8,6 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 import sklearn.metrics
-from iceberg import Colors, Renderer
 from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
@@ -210,6 +209,14 @@ class AnomalyDetector(ABC):
         layer_scores: Optional[jax.Array] = None,
         inputs: Optional[np.ndarray] = None,
     ):
+        try:
+            from iceberg import Colors, Renderer
+        except ImportError:
+            logger.info(
+                "Skipping architecture visualization because iceberg is missing"
+            )
+            return
+
         if not self.save_path:
             raise ValueError("No save path set")
 
