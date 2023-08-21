@@ -67,7 +67,7 @@ def test_pipeline(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
 
-    for file in {"histogram.pdf", "architecture.png", "eval.json", "config.yaml"}:
+    for file in {"histogram.pdf", "eval.json", "config.yaml"}:
         assert (tmp_path / "adversarial_abstraction" / file).is_file()
 
     #########################################
@@ -89,7 +89,6 @@ def test_pipeline(tmp_path, capsys):
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
     assert (tmp_path / "abstraction" / "histogram.pdf").is_file()
-    assert (tmp_path / "abstraction" / "architecture.png").is_file()
     assert (tmp_path / "abstraction" / "eval.json").is_file()
 
     ###############################################
@@ -122,5 +121,4 @@ def test_pipeline(tmp_path, capsys):
     )
     eval_detector.main(cfg)
     assert (tmp_path / "mahalanobis" / "histogram.pdf").is_file()
-    assert (tmp_path / "mahalanobis" / "architecture.png").is_file()
     assert (tmp_path / "mahalanobis" / "eval.json").is_file()

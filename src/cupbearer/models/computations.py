@@ -9,19 +9,6 @@ import flax.linen as nn
 import jax
 import jax.numpy as jnp
 import numpy as np
-from iceberg import Bounds, Color, Colors, Corner, Drawable, FontStyle, PathStyle
-from iceberg.arrows import Arrow
-from iceberg.primitives import (
-    Arrange,
-    Compose,
-    Directions,
-    Ellipse,
-    Grid,
-    Image,
-    Line,
-    Rectangle,
-    SimpleText,
-)
 
 
 class Orientation(Enum):
@@ -40,7 +27,15 @@ class Step(ABC):
     def __call__(self, x: jax.Array) -> jax.Array:
         pass
 
-    def get_drawable(self, orientation=Orientation.HORIZONTAL) -> Drawable:
+    def get_drawable(self, orientation=Orientation.HORIZONTAL):
+        try:
+            from iceberg import Bounds, Colors, FontStyle
+            from iceberg.primitives import Arrange, Rectangle, SimpleText
+        except ImportError:
+            raise ImportError(
+                "You need to install iceberg-dsl to use the network visualization"
+            )
+
         box = Rectangle(Bounds(size=(100, 100)), border_color=Colors.BLACK)
         text = None
         for font in FONTS:
@@ -100,9 +95,7 @@ class Model(nn.Module):
             return x, activations
         return x
 
-    def get_drawable(
-        self, return_nodes=False, layer_scores=None, inputs=None
-    ) -> Drawable:
+    def get_drawable(self, return_nodes=False, layer_scores=None, inputs=None):
         return draw_computation(self.computation, return_nodes, layer_scores, inputs)
 
 
@@ -286,6 +279,12 @@ def reduce_size(
 
 
 def make_image_grid(inputs):
+    try:
+        from iceberg.primitives import Grid, Image
+    except ImportError:
+        raise ImportError(
+            "You need to install iceberg-dsl to use the network visualization"
+        )
     # inputs is an array of shape (n_images, *image_dims).
     # We'll plot these inputs in a 3x3 grid.
 
@@ -312,7 +311,27 @@ def make_image_grid(inputs):
 
 def draw_computation(
     computation: Computation, return_nodes=False, layer_scores=None, inputs=None
-) -> Drawable:
+):
+    try:
+        from iceberg import (
+            Bounds,
+            Color,
+            Colors,
+            Corner,
+            PathStyle,
+        )
+        from iceberg.arrows import Arrow
+        from iceberg.primitives import (
+            Arrange,
+            Compose,
+            Directions,
+            Ellipse,
+            Line,
+        )
+    except ImportError:
+        raise ImportError(
+            "You need to install iceberg-dsl to use the network visualization"
+        )
     steps = [step.get_drawable() for step in computation]
     nodes = [
         Ellipse(Bounds(size=(50, 50)), border_color=Colors.BLACK) for _ in computation
