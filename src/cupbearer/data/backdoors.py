@@ -2,11 +2,11 @@ from dataclasses import dataclass
 from typing import Tuple
 
 import numpy as np
-from scipy.ndimage import map_coordinates
 
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
 import torch
+from scipy.ndimage import map_coordinates
 
 from ._shared import Transform
 
@@ -81,8 +81,8 @@ class NoiseBackdoor(Transform):
 
 @dataclass
 class WanetBackdoor(Transform):
-    '''Implements trigger transform from "Wanet – Imperceptible Warping-based
-    Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021.'''
+    """Implements trigger transform from "Wanet – Imperceptible Warping-based
+    Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021."""
 
     p_backdoor: float = 1.0
     p_noise: float = 0.0
@@ -102,7 +102,7 @@ class WanetBackdoor(Transform):
 
         p_transform = self.p_backdoor + self.p_noise
         assert 0 <= p_transform <= 1, "Probability must be between 0 and 1"
-    
+
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample
 
@@ -110,22 +110,27 @@ class WanetBackdoor(Transform):
             py, px, cs = img.shape
         else:
             raise NotImplementedError(
-                'Images are expected to have two spatial dimensions and channels last.'
+                "Images are expected to have two spatial dimensions and channels last."
             )
 
         rand_sample = np.random.rand(1)
         if rand_sample <= self.p_backdoor + self.p_noise:
-
             # Scale control grid to size of image
-            warping_field = np.stack([map_coordinates(
-                input=grid,
-                coordinates=np.mgrid[
-                    0:(self.control_grid_width - 1):(py * 1j),
-                    0:(self.control_grid_width - 1):(px * 1j),
+            warping_field = np.stack(
+                [
+                    map_coordinates(
+                        input=grid,
+                        coordinates=np.mgrid[
+                            0 : (self.control_grid_width - 1) : (py * 1j),
+                            0 : (self.control_grid_width - 1) : (px * 1j),
+                        ],
+                        order=3,
+                        mode="nearest",
+                    )
+                    for grid in self.control_grid
                 ],
-                order=3,
-                mode='nearest',
-            ) for grid in self.control_grid], axis=0)
+                axis=0,
+            )
             assert warping_field.shape == (2, py, px)
 
             if rand_sample < self.p_noise:
@@ -135,19 +140,25 @@ class WanetBackdoor(Transform):
             else:
                 # If adversary mode
                 target = self.target_class
-            
+
             # Create coordinates by adding to identity field
-            warping_field = warping_field + np.mgrid[0:py,0:px]
+            warping_field = warping_field + np.mgrid[0:py, 0:px]
 
             # Perform warping
-            img = np.stack([map_coordinates(
-                input=img_channel,
-                coordinates=warping_field,
-                order=1,
-                mode='nearest',  # equivalent to clipping to borders?
-                prefilter=False,
-            ) for img_channel in np.moveaxis(img, -1, 0)], axis=-1)
-        
+            img = np.stack(
+                [
+                    map_coordinates(
+                        input=img_channel,
+                        coordinates=warping_field,
+                        order=1,
+                        mode="nearest",  # equivalent to clipping to borders?
+                        prefilter=False,
+                    )
+                    for img_channel in np.moveaxis(img, -1, 0)
+                ],
+                axis=-1,
+            )
+
         assert img.shape == (py, px, cs)
-        
+
         return img, target

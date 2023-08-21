@@ -7,8 +7,8 @@ import simple_parsing
 from cupbearer.data import (
     CornerPixelBackdoor,
     NoiseBackdoor,
-    WanetBackdoor,
     Transform,
+    WanetBackdoor,
 )
 from cupbearer.data.backdoor_data import BackdoorData
 from cupbearer.models import StoredModel
