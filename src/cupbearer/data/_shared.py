@@ -1,13 +1,13 @@
-import functools
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 import jax.numpy as jnp
 import numpy as np
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
+from torchvision.transforms.functional import resize, InterpolationMode
 
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig
@@ -18,6 +18,32 @@ class Transform(BaseConfig, ABC):
     @abstractmethod
     def __call__(self, sample):
         pass
+
+
+@dataclass
+class AdaptedTransform(Transform, ABC):
+    @abstractmethod
+    def __img_call__(self, img):
+        pass
+    
+    def __rest_call__(self, *rest):
+        return (*rest,)
+
+    def __call__(self, sample):
+        if isinstance(sample, tuple):
+            img, *rest = sample
+        else:
+            img = sample
+            rest = None
+
+        img = self.__img_call__(img)
+
+        if rest is None:
+            return img
+        else:
+            rest = self.__rest_call__(*rest)
+
+        return (img, *rest)
 
 
 @dataclass(kw_only=True)
@@ -60,41 +86,33 @@ def numpy_collate(batch):
         return np.array(batch)
 
 
-def adapt_transform(transform):
-    """Adapt a transform designed to work on inputs to work on entire samples."""
-
-    @functools.wraps(transform)
-    def adapted(sample):
-        if isinstance(sample, tuple):
-            img, *rest = sample
-        else:
-            img = sample
-            rest = None
-
-        img = transform(img)
-
-        if rest is None:
-            return img
-        return (img, *rest)
-
-    return adapted
-
-
 # Needs to be a dataclass to make simple_parsing's serialization work correctly.
 @dataclass
-class ToNumpy(Transform):
-    def __call__(self, sample):
-        return _to_numpy(sample)
+class ToNumpy(AdaptedTransform):
+    def __img_call__(self, img):
+        out = np.array(img, dtype=jnp.float32) / 255.0
+        if out.ndim == 2:
+            # Add a channel dimension. Note that flax.linen.Conv expects
+            # the channel dimension to be the last one.
+            out = np.expand_dims(out, axis=-1)
+        return out
 
 
-@adapt_transform
-def _to_numpy(img):
-    out = np.array(img, dtype=jnp.float32) / 255.0
-    if out.ndim == 2:
-        # Add a channel dimension. Note that flax.linen.Conv expects
-        # the channel dimension to be the last one.
-        out = np.expand_dims(out, axis=-1)
-    return out
+@dataclass
+class Resize(AdaptedTransform):
+    size: tuple[int, ...]
+    interpolation: InterpolationMode = InterpolationMode.BILINEAR
+    max_size: Optional[int] = None
+    antialias: Optional[Union[str, bool]] = 'warn'
+
+    def __img_call__(self, img):
+        return resize(
+            img,
+            size=self.size,
+            interpolation=self.interpolation,
+            max_size=self.max_size,
+            antialias=self.antialias,
+        )
 
 
 class TransformDataset(Dataset):

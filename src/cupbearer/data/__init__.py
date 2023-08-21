@@ -6,13 +6,14 @@ from ._shared import TestDataMix as TestDataMix
 from ._shared import numpy_collate as numpy_collate
 from .adversarial import AdversarialExampleConfig
 from .backdoors import CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
-from .pytorch import CIFAR10, MNIST, PytorchConfig
+from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 
 DATASETS = {
     "pytorch": PytorchConfig,
     "mnist": MNIST,
     "cifar10": CIFAR10,
+    "gtsrb": GTSRB,
     "from_run": TrainDataFromRun,
     "adversarial": AdversarialExampleConfig,
     "toy_features": ToyFeaturesConfig,
