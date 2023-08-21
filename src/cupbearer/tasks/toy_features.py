@@ -1,15 +1,10 @@
-import math
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
-from cupbearer.data._shared import TrainDataFromRun
-from cupbearer.data.adversarial import AdversarialExampleConfig
 from cupbearer.data.toy_ambiguous_features import ToyFeaturesConfig
 from cupbearer.models import StoredModel
 
 from . import TaskConfig
-from dataclasses import dataclass
 
 
 @dataclass

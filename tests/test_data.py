@@ -1,10 +1,11 @@
 from dataclasses import dataclass
+
 import pytest
-from torch.utils.data import Dataset
 
 # We shouldn't import TestDataMix directly because that will make pytest think
 # it's a test.
 from cupbearer import data
+from torch.utils.data import Dataset
 
 
 class DummyDataset(Dataset):
