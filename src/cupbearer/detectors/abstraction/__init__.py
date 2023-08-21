@@ -92,7 +92,7 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
     normal_weight: float = 0.5
     clip: bool = True
     # This is a bit hacky: this detector doesn't support training, so maybe we shouldn't
-    # inherit from AbstractionConfig.
+    # inherit from AbstractionDetectorConfig.
     train: None = None
 
     def build(self, model, params, rng, save_dir) -> AdversarialAbstractionDetector:
@@ -110,6 +110,7 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
                 num_train_samples=self.num_train_samples,
                 num_steps=self.num_steps,
                 normal_weight=self.normal_weight,
+                max_batch_size=self.max_batch_size,
                 clip=self.clip,
                 save_path=save_dir,
             )
@@ -125,6 +126,7 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
             num_train_samples=self.num_train_samples,
             num_steps=self.num_steps,
             normal_weight=self.normal_weight,
+            max_batch_size=self.max_batch_size,
             clip=self.clip,
         )
 

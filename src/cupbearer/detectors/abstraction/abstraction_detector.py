@@ -76,9 +76,7 @@ def compute_losses(
     assert isinstance(predicted_abstractions, list)
     assert len(abstractions) == len(predicted_abstractions) + 1
     b, *_ = abstractions[0].shape
-    assert logits.shape == (b, 10)
-    # Output dimension of abstraction may be different from full computation,
-    # depending on the output_loss_fn. So only check batch dimension.
+    assert logits.shape[0] == b
     assert predicted_logits.shape[0] == b
 
     output_losses = output_loss_fn(predicted_logits, logits)

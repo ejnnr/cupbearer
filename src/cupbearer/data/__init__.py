@@ -7,6 +7,7 @@ from ._shared import numpy_collate as numpy_collate
 from .adversarial import AdversarialExampleConfig
 from .backdoors import CornerPixelBackdoor, NoiseBackdoor
 from .pytorch import CIFAR10, MNIST, PytorchConfig
+from .toy_ambiguous_features import ToyFeaturesConfig
 
 DATASETS = {
     "pytorch": PytorchConfig,
@@ -14,6 +15,7 @@ DATASETS = {
     "cifar10": CIFAR10,
     "from_run": TrainDataFromRun,
     "adversarial": AdversarialExampleConfig,
+    "toy_features": ToyFeaturesConfig,
 }
 
 TRANSFORMS = {

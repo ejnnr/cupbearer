@@ -138,7 +138,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
 
             keys = set(train_grads.keys())
             assert keys == set(new_grads.keys())
-            assert keys <= {"tau_maps", "computational_steps"}, keys
+            assert keys == {"tau_maps", "computational_steps"}, keys
 
             # For the computational steps, we want to minimize both losses, so just
             # add the normal gradients. For the tau maps, we want to maximize the loss

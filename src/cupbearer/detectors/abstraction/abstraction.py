@@ -147,7 +147,8 @@ class Abstraction(nn.Module):
 
         res = Compose((*lines, *positioned_tau_maps, both_computations))
 
-        if inputs is not None:
+        # Only visualize inputs if they're images:
+        if inputs is not None and inputs[0].ndim == 3:
             grid = make_image_grid(inputs)
             res = res.next_to(grid, Directions.LEFT * 20)
 
