@@ -98,7 +98,9 @@ class WanetBackdoor(Transform):
         control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
         self.control_grid = 2 * np.random.rand(*control_grid_shape) - 1
         self.control_grid = self.control_grid / np.mean(np.abs(self.control_grid))
-        self.control_grid = self.control_grid * self.warping_strength
+        self.control_grid = self.control_grid * 0.5 * self.warping_strength
+        # N.B. the 0.5 comes from how the original did their rescaling, see
+        # https://github.com/ejnnr/cupbearer/pull/2#issuecomment-1688338610
         assert self.control_grid.shape == control_grid_shape
 
         p_transform = self.p_backdoor + self.p_noise
