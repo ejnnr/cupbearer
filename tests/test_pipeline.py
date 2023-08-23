@@ -122,3 +122,21 @@ def test_pipeline(tmp_path, capsys):
     eval_detector.main(cfg)
     assert (tmp_path / "mahalanobis" / "histogram.pdf").is_file()
     assert (tmp_path / "mahalanobis" / "eval.json").is_file()
+
+    ############################
+    # WaNet training
+    ############################
+    logger.info("Running WaNet training")
+    cfg = parse(
+        train_classifier_conf.Config,
+        args=f"--debug_with_logging --dir.full {tmp_path / 'wanet'} "
+        "--train_data backdoor --train_data.original mnist "
+        "--train_data.backdoor wanet --model mlp",
+        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    )
+    save_cfg(cfg)
+    train_classifier.main(cfg)
+
+    assert (tmp_path / "base" / "config.yaml").is_file()
+    assert (tmp_path / "base" / "model").is_dir()
+    assert (tmp_path / "base" / "metrics.json").is_file()

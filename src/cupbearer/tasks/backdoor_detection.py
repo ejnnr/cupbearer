@@ -8,6 +8,7 @@ from cupbearer.data import (
     CornerPixelBackdoor,
     NoiseBackdoor,
     Transform,
+    WanetBackdoor,
 )
 from cupbearer.data.backdoor_data import BackdoorData
 from cupbearer.models import StoredModel
@@ -23,6 +24,7 @@ class BackdoorDetection(TaskConfig):
         {
             "corner": CornerPixelBackdoor,
             "noise": NoiseBackdoor,
+            "wanet": WanetBackdoor,
         }
     )
 
