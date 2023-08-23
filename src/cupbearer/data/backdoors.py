@@ -89,6 +89,7 @@ class WanetBackdoor(Transform):
     control_grid_width: int = 4
     warping_strength: float = 0.5
     target_class: int = 0
+    grid_rescale: float = 1.0
 
     def __post_init__(self):
         super().__post_init__()
@@ -143,6 +144,17 @@ class WanetBackdoor(Transform):
 
             # Create coordinates by adding to identity field
             warping_field = warping_field + np.mgrid[0:py, 0:px]
+
+            # Rescale and clip to not have values outside image
+            if self.grid_rescale != 1.0:
+                warping_field = warping_field * self.grid_rescale + (
+                    1 - self.grid_rescale
+                ) / np.array([py, px]).reshape(2, 1, 1)
+            warping_field = np.clip(
+                warping_field,
+                a_min=0,
+                a_max=np.array([py, px]).reshape(2, 1, 1),
+            )
 
             # Perform warping
             img = np.stack(
