@@ -121,7 +121,7 @@ class WanetBackdoor(Transform):
             # Scale control grid to size of image
             warping_field = np.stack(
                 [
-                    map_coordinates(
+                    map_coordinates(  # map_coordinates and upsample diffs slightly
                         input=grid,
                         coordinates=np.mgrid[
                             0 : (self.control_grid_width - 1) : (py * 1j),
@@ -161,7 +161,7 @@ class WanetBackdoor(Transform):
             # Perform warping
             img = np.stack(
                 [
-                    map_coordinates(
+                    map_coordinates(  # map_coordinates and interpolate diffs slightly
                         input=img_channel,
                         coordinates=warping_field,
                         order=1,
