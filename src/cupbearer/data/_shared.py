@@ -22,6 +22,8 @@ class Transform(BaseConfig, ABC):
 
 @dataclass
 class AdaptedTransform(Transform, ABC):
+    """Adapt a transform designed to work on inputs to work on img, label pairs."""
+
     @abstractmethod
     def __img_call__(self, img):
         pass
