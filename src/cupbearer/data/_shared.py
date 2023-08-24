@@ -7,7 +7,7 @@ import jax.numpy as jnp
 import numpy as np
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
-from torchvision.transforms.functional import resize, InterpolationMode
+from torchvision.transforms.functional import InterpolationMode, resize
 
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig
@@ -25,7 +25,7 @@ class AdaptedTransform(Transform, ABC):
     @abstractmethod
     def __img_call__(self, img):
         pass
-    
+
     def __rest_call__(self, *rest):
         return (*rest,)
 
@@ -103,7 +103,7 @@ class Resize(AdaptedTransform):
     size: tuple[int, ...]
     interpolation: InterpolationMode = InterpolationMode.BILINEAR
     max_size: Optional[int] = None
-    antialias: Optional[Union[str, bool]] = 'warn'
+    antialias: Optional[Union[str, bool]] = "warn"
 
     def __img_call__(self, img):
         return resize(
