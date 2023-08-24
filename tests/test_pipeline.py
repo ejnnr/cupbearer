@@ -130,7 +130,7 @@ def test_pipeline(tmp_path, capsys):
     cfg = parse(
         train_classifier_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'wanet'} "
-        "--train_data backdoor --train_data.original mnist "
+        "--train_data backdoor --train_data.original gtsrb "
         "--train_data.backdoor wanet --model mlp",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
