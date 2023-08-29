@@ -19,6 +19,14 @@ class Transform(BaseConfig, ABC):
     def __call__(self, sample):
         pass
 
+    def store(self, basepath):
+        """Save transformer state to reproduce instance later."""
+        pass
+
+    def load(self, basepath):
+        """Load transformer state to reproduce stored instance."""
+        pass
+
 
 @dataclass(kw_only=True)
 class DatasetConfig(BaseConfig, ABC):

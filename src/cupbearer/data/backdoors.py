@@ -1,3 +1,4 @@
+import os
 from dataclasses import dataclass
 from typing import Tuple
 
@@ -81,7 +82,7 @@ class NoiseBackdoor(Transform):
 
 @dataclass
 class WanetBackdoor(Transform):
-    """Implements trigger transform from "Wanet – Imperceptible Warping-based
+    """Implements trigger transform from "Wanet - Imperceptible Warping-based
     Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021."""
 
     p_backdoor: float = 1.0
@@ -105,6 +106,27 @@ class WanetBackdoor(Transform):
 
         p_transform = self.p_backdoor + self.p_noise
         assert 0 <= p_transform <= 1, "Probability must be between 0 and 1"
+
+    @staticmethod
+    def _get_savefile_fullpath(basepath):
+        return os.path.join(basepath, "wanet_backdoor.npy")
+
+    def store(self, basepath):
+        super().store(basepath)
+        # TODO If img size is known the transform can be significantly sped up
+        # by pre-computing and saving the full flow field instead.
+        np.save(self._get_savefile_fullpath(basepath), self.control_grid)
+
+    def load(self, basepath):
+        super().load(basepath)
+        self.control_grid = np.load(self._get_savefile_fullpath(basepath))
+
+        # TODO might be okay to just update control_grid_width with a warning
+        assert (
+            2,
+            self.control_grid_width,
+            self.control_grid_width,
+        ) == self.control_grid.shape
 
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample

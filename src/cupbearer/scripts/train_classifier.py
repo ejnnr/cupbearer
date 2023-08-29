@@ -115,6 +115,10 @@ def main(cfg: Config):
     )
     if cfg.dir.path:
         trainer.save_model()
+        try:
+            cfg.train_data.backdoor.store(cfg.dir.path)
+        except AttributeError:
+            pass
     trainer.close_loggers()
 
 
