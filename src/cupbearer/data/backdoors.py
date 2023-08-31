@@ -7,6 +7,7 @@ import numpy as np
 # with torchvision transforms.
 import torch
 from scipy.ndimage import map_coordinates
+from simple_parsing import field
 
 from ._shared import Transform
 
@@ -64,19 +65,28 @@ class NoiseBackdoor(Transform):
     p_backdoor: float = 1.0
     std: float = 0.3
     target_class: int = 0
+    no_clip: bool = field(action="store_true")
 
     def __post_init__(self):
         super().__post_init__()
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
 
+    @property
+    def clip(self) -> bool:
+        return not self.no_clip
+
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample
-        if torch.rand(1) > self.p_backdoor:
-            return img, target
-        else:
+        if torch.rand(1) <= self.p_backdoor:
+            assert self.no_clip or np.all(img <= 1), "Image not in range [0, 1]"
             noise = np.random.normal(0, self.std, img.shape)
             img = img + noise
-            return img, self.target_class
+            if self.clip:
+                img = np.clip(img, 0, 1)
+
+            target = self.target_class
+
+        return img, target
 
 
 @dataclass
