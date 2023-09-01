@@ -71,12 +71,15 @@ class NoiseBackdoor(Transform):
 
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample
-        if torch.rand(1) > self.p_backdoor:
-            return img, target
-        else:
+        if torch.rand(1) <= self.p_backdoor:
+            assert np.all(img <= 1), "Image not in range [0, 1]"
             noise = np.random.normal(0, self.std, img.shape)
             img = img + noise
-            return img, self.target_class
+            img = np.clip(img, 0, 1)
+
+            target = self.target_class
+
+        return img, target
 
 
 @dataclass
