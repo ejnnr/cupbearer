@@ -19,12 +19,19 @@ class Config(ScriptConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
-    num_classes: int = 10
     max_steps: Optional[int] = None
     wandb: bool = False
     dir: DirConfig = mutable_field(
         DirConfig, base=os.path.join("logs", "train_classifier")
     )
+
+    @property
+    def num_classes(self):
+        return self.train_data.num_classes
+
+    def __post_init__(self):
+        super().__post_init__()
+        self.model.output_dim = self.num_classes
 
     def _set_debug(self):
         super()._set_debug()

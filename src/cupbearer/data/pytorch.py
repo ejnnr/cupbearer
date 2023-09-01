@@ -11,6 +11,7 @@ from ._shared import Resize, ToNumpy, Transform
 @dataclass(kw_only=True)
 class PytorchConfig(DatasetConfig):
     name: str
+    num_classes: int
     train: bool = True
     transforms: dict[str, Transform] = mutable_field({"to_numpy": ToNumpy()})
 
@@ -32,16 +33,19 @@ class PytorchConfig(DatasetConfig):
 @dataclass
 class MNIST(PytorchConfig):
     name: str = "torchvision.datasets.MNIST"
+    num_classes: int = 10
 
 
 @dataclass
 class CIFAR10(PytorchConfig):
     name: str = "torchvision.datasets.CIFAR10"
+    num_classes: int = 10
 
 
 @dataclass
 class GTSRB(PytorchConfig):
     name: str = "torchvision.datasets.GTSRB"
+    num_classes: int = 43
     transforms: dict[str, Transform] = mutable_field(
         {
             "resize": Resize(size=(32, 32)),
