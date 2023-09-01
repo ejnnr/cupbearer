@@ -19,5 +19,9 @@ class BackdoorData(DatasetConfig):
             "backdoor": self.backdoor,
         }
 
+    @property
+    def num_classes(self):
+        return self.original.num_classes
+
     def _build(self):
         return self.original._build()
