@@ -71,6 +71,7 @@ class CNN(ModelConfig):
 MODELS = {
     "mlp": MLP,
     "cnn": CNN,
+    "from_run": StoredModel,
 }
 
 register_config_group(ModelConfig, MODELS)
