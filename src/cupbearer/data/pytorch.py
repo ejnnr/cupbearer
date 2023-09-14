@@ -11,6 +11,8 @@ from ._shared import Resize, ToNumpy, Transform
 @dataclass(kw_only=True)
 class PytorchConfig(DatasetConfig):
     name: str
+    # This is an abstractproperty on the parent class, but it's a bit more
+    # convenient to just make it a field here.
     num_classes: int
     train: bool = True
     transforms: dict[str, Transform] = mutable_field({"to_numpy": ToNumpy()})

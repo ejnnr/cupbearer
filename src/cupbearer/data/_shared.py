@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
@@ -55,6 +55,10 @@ class DatasetConfig(BaseConfig, ABC):
     # of this is also that it's easier to override specific transforms.
     transforms: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
+
+    @abstractproperty
+    def num_classes(self) -> int:
+        pass
 
     def build(self) -> Dataset:
         """Create an instance of the Dataset described by this config."""
@@ -136,6 +140,11 @@ class TransformDataset(Dataset):
 class TrainDataFromRun(DatasetConfig):
     path: Path
 
+    @property
+    def num_classes(self):
+        data_cfg = load_config(self.path, "train_data", DatasetConfig)
+        return data_cfg.num_classes
+
     def _build(self) -> Dataset:
         data_cfg = load_config(self.path, "train_data", DatasetConfig)
         return data_cfg.build()
@@ -172,6 +181,11 @@ class TestDataConfig(DatasetConfig):
     normal: DatasetConfig
     anomalous: DatasetConfig
     normal_weight: float = 0.5
+
+    @property
+    def num_classes(self):
+        assert (n := self.normal.num_classes) == self.anomalous.num_classes
+        return n
 
     def build(self) -> TestDataMix:
         # We need to override this method because max_size needs to be applied in a

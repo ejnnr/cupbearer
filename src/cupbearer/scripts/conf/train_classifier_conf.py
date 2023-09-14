@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from cupbearer.data import DatasetConfig
-from cupbearer.models import ModelConfig
+from cupbearer.models import CNN, MLP, ModelConfig
 from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
 from cupbearer.utils.scripts import DirConfig, ScriptConfig
@@ -31,7 +31,9 @@ class Config(ScriptConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        self.model.output_dim = self.num_classes
+        # HACK: Need to add new architectures here as they get implemented.
+        if isinstance(self.model, (MLP, CNN)):
+            self.model.output_dim = self.num_classes
 
     def _set_debug(self):
         super()._set_debug()
