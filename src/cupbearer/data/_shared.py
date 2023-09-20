@@ -20,11 +20,11 @@ class Transform(BaseConfig, ABC):
         pass
 
     def store(self, basepath):
-        """Save transformer state to reproduce instance later."""
+        """Save transform state to reproduce instance later."""
         pass
 
     def load(self, basepath):
-        """Load transformer state to reproduce stored instance."""
+        """Load transform state to reproduce stored instance."""
         pass
 
 
