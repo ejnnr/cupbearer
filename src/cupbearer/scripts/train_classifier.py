@@ -115,10 +115,8 @@ def main(cfg: Config):
     )
     if cfg.dir.path:
         trainer.save_model()
-        try:
-            cfg.train_data.backdoor.store(cfg.dir.path)
-        except AttributeError:
-            pass
+        for trafo in cfg.train_data.transforms.values():
+            trafo.store(cfg.dir.path)
     trainer.close_loggers()
 
 

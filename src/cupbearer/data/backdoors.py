@@ -95,14 +95,7 @@ class WanetBackdoor(Transform):
     def __post_init__(self):
         super().__post_init__()
 
-        # Pre-compute warping field to be used for transform
-        control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
-        self.control_grid = 2 * np.random.rand(*control_grid_shape) - 1
-        self.control_grid = self.control_grid / np.mean(np.abs(self.control_grid))
-        self.control_grid = self.control_grid * 0.5 * self.warping_strength
-        # N.B. the 0.5 comes from how the original did their rescaling, see
-        # https://github.com/ejnnr/cupbearer/pull/2#issuecomment-1688338610
-        assert self.control_grid.shape == control_grid_shape
+        self._warping_field = None
 
         p_transform = self.p_backdoor + self.p_noise
         assert 0 <= p_transform <= 1, "Probability must be between 0 and 1"
@@ -115,18 +108,46 @@ class WanetBackdoor(Transform):
         super().store(basepath)
         # TODO If img size is known the transform can be significantly sped up
         # by pre-computing and saving the full flow field instead.
-        np.save(self._get_savefile_fullpath(basepath), self.control_grid)
+        if self._warping_field is None:
+            raise RuntimeError("Can't store warping field, it hasn't been compute yet.")
+        np.save(self._get_savefile_fullpath(basepath), self._warping_field)
 
     def load(self, basepath):
         super().load(basepath)
-        self.control_grid = np.load(self._get_savefile_fullpath(basepath))
+        self._warping_field = np.load(self._get_savefile_fullpath(basepath))
 
-        # TODO might be okay to just update control_grid_width with a warning
-        assert (
-            2,
-            self.control_grid_width,
-            self.control_grid_width,
-        ) == self.control_grid.shape
+    def warping_field(self, px, py):
+        if self._warping_field is None:
+            control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
+            control_grid = 2 * np.random.rand(*control_grid_shape) - 1
+            control_grid = control_grid / np.mean(np.abs(control_grid))
+            # N.B. the 0.5 comes from how the original did their rescaling, see
+            # https://github.com/ejnnr/cupbearer/pull/2#issuecomment-1688338610
+            control_grid = control_grid * 0.5 * self.warping_strength
+            assert control_grid.shape == control_grid_shape
+            # Scale control grid to size of image
+            field = np.stack(
+                [
+                    map_coordinates(  # map_coordinates and upsample diffs slightly
+                        input=grid,
+                        coordinates=np.mgrid[
+                            0 : (self.control_grid_width - 1) : (py * 1j),
+                            0 : (self.control_grid_width - 1) : (px * 1j),
+                        ],
+                        order=3,
+                        mode="nearest",
+                    )
+                    for grid in control_grid
+                ],
+                axis=0,
+            )
+            # Create coordinates by adding to identity field
+            field = field + np.mgrid[0:py, 0:px]
+
+            self._warping_field = field
+
+        assert self._warping_field.shape == (2, py, px)
+        return self._warping_field
 
     def __call__(self, sample: Tuple[np.ndarray, int]):
         img, target = sample
@@ -140,24 +161,7 @@ class WanetBackdoor(Transform):
 
         rand_sample = np.random.rand(1)
         if rand_sample <= self.p_backdoor + self.p_noise:
-            # Scale control grid to size of image
-            warping_field = np.stack(
-                [
-                    map_coordinates(  # map_coordinates and upsample diffs slightly
-                        input=grid,
-                        coordinates=np.mgrid[
-                            0 : (self.control_grid_width - 1) : (py * 1j),
-                            0 : (self.control_grid_width - 1) : (px * 1j),
-                        ],
-                        order=3,
-                        mode="nearest",
-                    )
-                    for grid in self.control_grid
-                ],
-                axis=0,
-            )
-            assert warping_field.shape == (2, py, px)
-
+            warping_field = self.warping_field(px, py)
             if rand_sample < self.p_noise:
                 # If noise mode
                 noise = 2 * np.random.rand(*warping_field.shape) - 1
@@ -165,9 +169,6 @@ class WanetBackdoor(Transform):
             else:
                 # If adversary mode
                 target = self.target_class
-
-            # Create coordinates by adding to identity field
-            warping_field = warping_field + np.mgrid[0:py, 0:px]
 
             # Rescale and clip to not have values outside image
             if self.grid_rescale != 1.0:

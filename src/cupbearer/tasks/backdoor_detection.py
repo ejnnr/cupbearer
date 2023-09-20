@@ -17,9 +17,10 @@ from cupbearer.utils.scripts import load_config
 from . import TaskConfig
 
 
-@dataclass
+@dataclass(kw_only=True)
 class BackdoorDetection(TaskConfig):
     run_path: Path
+    no_load: bool = simple_parsing.field(action="store_true")
     backdoor: Transform = simple_parsing.subgroups(
         {
             "corner": CornerPixelBackdoor,
@@ -36,6 +37,8 @@ class BackdoorDetection(TaskConfig):
 
     def _get_anomalous_test_data(self):
         copy = deepcopy(self._train_data)
+        if not self.no_load:
+            self.backdoor.load(self.run_path)
         return BackdoorData(original=copy, backdoor=self.backdoor)
 
     def _init_model(self):

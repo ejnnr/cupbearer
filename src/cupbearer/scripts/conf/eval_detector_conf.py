@@ -13,7 +13,6 @@ class Config(ScriptConfig):
     detector: DetectorConfig = config_group(DetectorConfig)
     save_config: bool = False
     pbar: bool = field(action="store_true")
-    no_load: bool = field(action="store_true")
 
     def _set_debug(self):
         super()._set_debug()

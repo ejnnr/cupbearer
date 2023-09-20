@@ -16,10 +16,6 @@ def main(cfg: Config):
         save_dir=cfg.dir.path,
     )
 
-    if not cfg.no_load and hasattr(cfg.task, "backdoor"):
-        # Load backdoor from run_path
-        cfg.task.backdoor.load(cfg.task.run_path)
-
     # Evaluate detector
     detector.eval(
         train_dataset=train_data,

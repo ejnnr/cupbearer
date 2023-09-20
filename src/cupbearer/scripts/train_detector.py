@@ -15,10 +15,6 @@ def main(cfg: Config):
         rng=jax.random.PRNGKey(cfg.seed),
     )
 
-    if not cfg.no_load and hasattr(cfg.task, "backdoor"):
-        # Load backdoor from run_path
-        cfg.task.backdoor.load(cfg.task.run_path)
-
     # We want to convert the train dataclass to a dict, but *not* recursively.
     train_kwargs = vars(cfg.detector.train)
     detector.train(reference_data, **train_kwargs)
