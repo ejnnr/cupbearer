@@ -11,6 +11,7 @@ class ToyFeaturesConfig(DatasetConfig):
     correlated: bool = True
     size: int = 1000
     noise: float = 0.1
+    num_classes: int = 2
 
     def _build(self):
         return ToyDataset(self.size, self.correlated, self.noise)

@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 from cupbearer.utils import utils
 
-from . import DatasetConfig
+from . import DatasetConfig, TrainDataFromRun
 
 
 @dataclass
@@ -28,6 +28,11 @@ class AdversarialExampleConfig(DatasetConfig):
             attack_batch_size=self.attack_batch_size,
             success_threshold=self.success_threshold,
         )
+
+    @property
+    def num_classes(self):
+        data_cfg = TrainDataFromRun(path=self.run_path)
+        return data_cfg.num_classes
 
     def _set_debug(self):
         super()._set_debug()
@@ -45,11 +50,7 @@ class AdversarialExampleDataset(Dataset):
     ):
         base_run = Path(base_run)
         self.base_run = base_run
-        try:
-            data = utils.load(base_run / "adv_examples")
-            self.examples = data["adv_examples"]
-            self.labels = data["labels"]
-        except FileNotFoundError:
+        if not (base_run / "adv_examples").exists():
             logger.info(
                 "Adversarial examples not found, running attack with default settings"
             )
@@ -80,9 +81,9 @@ class AdversarialExampleDataset(Dataset):
                 print(result.stdout)
                 print(result.stderr)
 
-            data = utils.load(base_run / "adv_examples")
-            self.examples = data["adv_examples"]
-            self.labels = data["labels"]
+        data = utils.load(base_run / "adv_examples")
+        self.examples = data["adv_examples"]
+        self.labels = data["labels"]
 
         if num_examples is None:
             num_examples = len(self.examples)

@@ -26,6 +26,8 @@ class DummyDataset(Dataset):
 class DummyConfig(data.DatasetConfig):
     length: int
     value: str
+    # Doesn't apply or matter
+    num_classes: int = 0
 
     def _build(self) -> Dataset:
         return DummyDataset(self.length, self.value)

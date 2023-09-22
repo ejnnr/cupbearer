@@ -5,11 +5,9 @@ the other documentation files on specific subpackages.
 
 ## Configuration
 Different parts of `cupbearer` interface with each other through many configuration
-dataclasses. This makes it easy to use newly added parts from the existing command
-line scripts, without modifying them. For example, the main interface for an
-anomaly detector is the `DetectorConfig` ABC. If a new detector defines a subclass
-of this ABC and registers it, it will automatically be available in the `train_detector`
-and `eval_detector` scripts.
+dataclasses. Each dataset, model, task, detector, script, etc. should expose all its
+hyperparameters and configuration options through such a dataclass. That way,
+all options will automatically be configurable from the command line.
 
 Many of the configuration dataclass ABCs have one or several `build()` methods that
 create the actual object of interest based on the configuration. For example,
