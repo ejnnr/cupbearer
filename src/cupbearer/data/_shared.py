@@ -68,10 +68,20 @@ class DatasetConfig(BaseConfig, ABC):
     def num_classes(self) -> int:
         pass
 
+    def get_transforms(self) -> list[Transform]:
+        """Return a list of transforms that should be applied to this dataset.
+
+        Most subclasses won't need to override this, since it just returns
+        the transforms field by default. But in some cases, we need to apply custom
+        processing to this that can't be handled in __post_init__ (see BackdoorData
+        for an example).
+        """
+        return list(self.transforms.values())
+
     def build(self) -> Dataset:
         """Create an instance of the Dataset described by this config."""
         dataset = self._build()
-        transform = Compose(list(self.transforms.values()))
+        transform = Compose(self.get_transforms())
         dataset = TransformDataset(dataset, transform)
         if self.max_size:
             assert self.max_size <= len(dataset)
@@ -148,14 +158,32 @@ class TransformDataset(Dataset):
 class TrainDataFromRun(DatasetConfig):
     path: Path
 
+    def __post_init__(self):
+        super().__post_init__()
+        self._cfg = None
+
+    @property
+    def cfg(self):
+        if self._cfg is None:
+            # It's important we cache this, not mainly for performance reasons,
+            # but because otherwise we'd get different instances every time.
+            # Mostly that would be fine, but e.g. the Wanet backdoor transform
+            # actually has state not captures by its field (it's not a "real" dataclass)
+            self._cfg = load_config(self.path, "train_data", DatasetConfig)
+
+        return self._cfg
+
     @property
     def num_classes(self):
-        data_cfg = load_config(self.path, "train_data", DatasetConfig)
-        return data_cfg.num_classes
+        return self.cfg.num_classes
 
     def _build(self) -> Dataset:
-        data_cfg = load_config(self.path, "train_data", DatasetConfig)
-        return data_cfg.build()
+        return self.cfg._build()
+
+    def get_transforms(self) -> list[Transform]:
+        transforms = self.cfg.get_transforms() + super().get_transforms()
+        print(transforms)
+        return transforms
 
 
 class TestDataMix(Dataset):

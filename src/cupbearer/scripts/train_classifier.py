@@ -115,7 +115,7 @@ def main(cfg: Config):
     )
     if cfg.dir.path:
         trainer.save_model()
-        for trafo in cfg.train_data.transforms.values():
+        for trafo in cfg.train_data.get_transforms():
             trafo.store(cfg.dir.path)
     trainer.close_loggers()
 

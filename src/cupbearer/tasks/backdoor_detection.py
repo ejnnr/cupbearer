@@ -30,7 +30,6 @@ class BackdoorDetection(TaskConfig):
     )
 
     def _init_train_data(self):
-        # TODO: would be nice to use test data instead during eval
         data_cfg = load_config(self.run_path, "train_data", BackdoorData)
         # Remove the backdoor
         self._train_data = data_cfg.original
