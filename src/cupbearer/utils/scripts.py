@@ -5,6 +5,7 @@ from typing import Any, Callable, Optional, Type, TypeVar
 
 import simple_parsing
 from cupbearer.utils.utils import BaseConfig
+from loguru import logger
 from simple_parsing.helpers import field, mutable_field
 
 
@@ -80,6 +81,7 @@ def load_config(
     name: Optional[str] = None,
     expected_type: Type[T] = ScriptConfig,
 ) -> T:
+    logger.debug(f"Loading config '{name}' from {path}")
     path = Path(path)
     cfg = ScriptConfig.load(path / "config.yaml", drop_extra_fields=False)
 

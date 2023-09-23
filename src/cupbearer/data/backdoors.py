@@ -7,6 +7,7 @@ import numpy as np
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
 import torch
+from loguru import logger
 from scipy.ndimage import map_coordinates
 
 from ._shared import Transform
@@ -109,6 +110,9 @@ class WanetBackdoor(Transform):
 
     def store(self, basepath):
         super().store(basepath)
+        logger.debug(
+            f"Storing warping field to {self._get_savefile_fullpath(basepath)}"
+        )
         # TODO If img size is known the transform can be significantly sped up
         # by pre-computing and saving the full flow field instead.
         if self._warping_field is None:
@@ -117,10 +121,14 @@ class WanetBackdoor(Transform):
 
     def load(self, basepath):
         super().load(basepath)
+        logger.debug(
+            f"Loading warping field from {self._get_savefile_fullpath(basepath)}"
+        )
         self._warping_field = np.load(self._get_savefile_fullpath(basepath))
 
     def warping_field(self, px, py):
         if self._warping_field is None:
+            logger.debug("Generating new warping field")
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
             control_grid = 2 * np.random.rand(*control_grid_shape) - 1
             control_grid = control_grid / np.mean(np.abs(control_grid))

@@ -336,7 +336,9 @@ class TrainerModule(ABC):
 
         return avg_metrics
 
-    def eval_model(self, data_loaders: Mapping[str, SizedIterable]) -> Dict[str, Any]:
+    def eval_model(
+        self, data_loaders: Mapping[str, SizedIterable], max_steps: Optional[int] = None
+    ) -> Dict[str, Any]:
         """
         Evaluates the model on a dataset.
 
@@ -349,7 +351,9 @@ class TrainerModule(ABC):
         """
         # Test model on all images of a data loader and return avg loss
         metrics = {}
-        for data_loader_name, data_loader in data_loaders.items():
+        for i, (data_loader_name, data_loader) in enumerate(data_loaders.items()):
+            if max_steps is not None and i >= max_steps:
+                break
             num_elements = 0
             data_loader_metrics = defaultdict(float)
             for batch in data_loader:
