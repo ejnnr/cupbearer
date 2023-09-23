@@ -1,3 +1,4 @@
+import pytest
 from cupbearer.scripts import eval_detector, train_classifier, train_detector
 from cupbearer.scripts.conf import (
     eval_detector_conf,
@@ -9,6 +10,7 @@ from loguru import logger
 from simple_parsing import ArgumentGenerationMode, parse
 
 
+@pytest.mark.slow
 def test_pipeline(tmp_path, capsys):
     tmp_path.mkdir(exist_ok=True)
     ############################
@@ -137,6 +139,6 @@ def test_pipeline(tmp_path, capsys):
     save_cfg(cfg)
     train_classifier.main(cfg)
 
-    assert (tmp_path / "base" / "config.yaml").is_file()
-    assert (tmp_path / "base" / "model").is_dir()
-    assert (tmp_path / "base" / "metrics.json").is_file()
+    assert (tmp_path / "wanet" / "config.yaml").is_file()
+    assert (tmp_path / "wanet" / "model").is_dir()
+    assert (tmp_path / "wanet" / "metrics.json").is_file()
