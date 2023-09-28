@@ -1,6 +1,8 @@
 import jax
 from cupbearer.utils.scripts import run
 
+from . import eval_detector
+from .conf import eval_detector_conf
 from .conf.train_detector_conf import Config
 
 
@@ -20,6 +22,14 @@ def main(cfg: Config):
     detector.train(reference_data, **train_kwargs)
     if cfg.dir.path is not None:
         detector.save_weights(cfg.dir.path / "detector")
+        eval_cfg = eval_detector_conf.Config(
+            dir=cfg.dir,
+            task=cfg.task,
+            seed=cfg.seed,
+            debug=cfg.debug,
+            debug_with_logging=cfg.debug_with_logging,
+        )
+        run(eval_detector.main, eval_cfg)
 
 
 if __name__ == "__main__":
