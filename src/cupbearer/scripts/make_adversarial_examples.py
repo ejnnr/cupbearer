@@ -5,9 +5,8 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import optax
-from cupbearer.data import TrainDataFromRun, numpy_collate
+from cupbearer.data import numpy_collate
 from cupbearer.data.adversarial import fgsm
-from cupbearer.models import StoredModel
 from cupbearer.scripts.conf.make_adversarial_examples_conf import Config
 from cupbearer.utils import utils
 from cupbearer.utils.scripts import run
@@ -15,20 +14,15 @@ from loguru import logger
 from torch.utils.data import DataLoader
 
 
-def attack(cfg: Config):
-    if cfg.dir.path is None:
-        raise ValueError("Must specify a run path")
-
+def main(cfg: Config):
+    assert cfg.dir.path is not None  # make type checker happy
     if os.path.exists(cfg.dir.path / f"adv_examples.{utils.SUFFIX}"):
         logger.info("Adversarial examples already exist, skipping attack")
         return
+    model = cfg.model.build_model()
+    params = cfg.model.build_params()
 
-    model_cfg = StoredModel(path=cfg.dir.path)
-    model = model_cfg.build_model()
-    params = model_cfg.build_params()
-
-    data_cfg = TrainDataFromRun(path=cfg.dir.path)
-    dataset = data_cfg.build()
+    dataset = cfg.data.build()
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
@@ -80,7 +74,8 @@ def attack(cfg: Config):
     labels = jnp.concatenate(labels, axis=0)
     # Need to wrap the array in a container to make the orbax checkpointer work.
     utils.save(
-        {"adv_examples": adv_examples, "labels": labels}, cfg.dir.path / "adv_examples"
+        {"adv_examples": adv_examples, "labels": labels},
+        cfg.dir.path / "adv_examples",
     )
     with open(cfg.dir.path / "adv_examples.json", "w") as f:
         json.dump(
@@ -109,4 +104,4 @@ def attack(cfg: Config):
 
 
 if __name__ == "__main__":
-    run(attack, Config)
+    run(main, Config)

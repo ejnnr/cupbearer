@@ -92,9 +92,10 @@ class DatasetConfig(BaseConfig, ABC):
         # Not an abstractmethod because e.g. TestDataConfig overrides build() instead.
         raise NotImplementedError
 
-    def _set_debug(self):
-        super()._set_debug()
-        self.max_size = 2
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.max_size = 2
 
 
 def numpy_collate(batch):
@@ -159,7 +160,6 @@ class TrainDataFromRun(DatasetConfig):
     path: Path
 
     def __post_init__(self):
-        super().__post_init__()
         self._cfg = None
 
     @property

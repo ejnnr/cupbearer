@@ -35,10 +35,11 @@ class Config(ScriptConfig):
         if isinstance(self.model, (MLP, CNN)):
             self.model.output_dim = self.num_classes
 
-    def _set_debug(self):
-        super()._set_debug()
-        self.num_epochs = 1
-        self.max_steps = 1
-        self.max_batch_size = 2
-        self.wandb = False
-        self.batch_size = 2
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.num_epochs = 1
+            self.max_steps = 1
+            self.max_batch_size = 2
+            self.wandb = False
+            self.batch_size = 2

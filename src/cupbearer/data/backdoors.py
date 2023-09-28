@@ -32,7 +32,6 @@ class CornerPixelBackdoor(Transform):
     target_class: int = 0
 
     def __post_init__(self):
-        super().__post_init__()
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
         assert self.corner in [
             "top-left",
@@ -68,7 +67,6 @@ class NoiseBackdoor(Transform):
     target_class: int = 0
 
     def __post_init__(self):
-        super().__post_init__()
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
 
     def __call__(self, sample: Tuple[np.ndarray, int]):
@@ -97,8 +95,6 @@ class WanetBackdoor(Transform):
     grid_rescale: float = 1.0
 
     def __post_init__(self):
-        super().__post_init__()
-
         self._warping_field = None
 
         p_transform = self.p_backdoor + self.p_noise

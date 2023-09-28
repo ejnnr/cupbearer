@@ -16,14 +16,13 @@ from . import DatasetConfig, TrainDataFromRun
 
 
 @dataclass
-class AdversarialExampleConfig(DatasetConfig):
-    run_path: Path
+class AdversarialExampleConfig(DatasetConfig, utils.PathConfigMixin):
     attack_batch_size: Optional[int] = None
     success_threshold: float = 0.1
 
     def _build(self) -> Dataset:
         return AdversarialExampleDataset(
-            base_run=self.run_path,
+            base_run=self.get_path(),
             num_examples=self.max_size,
             attack_batch_size=self.attack_batch_size,
             success_threshold=self.success_threshold,
@@ -31,13 +30,14 @@ class AdversarialExampleConfig(DatasetConfig):
 
     @property
     def num_classes(self):
-        data_cfg = TrainDataFromRun(path=self.run_path)
+        data_cfg = TrainDataFromRun(path=self.get_path())
         return data_cfg.num_classes
 
-    def _set_debug(self):
-        super()._set_debug()
-        self.attack_batch_size = 2
-        self.success_threshold = 1.0
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.attack_batch_size = 2
+            self.success_threshold = 1.0
 
 
 class AdversarialExampleDataset(Dataset):

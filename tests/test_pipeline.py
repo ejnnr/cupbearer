@@ -5,7 +5,7 @@ from cupbearer.scripts.conf import (
     train_classifier_conf,
     train_detector_conf,
 )
-from cupbearer.utils.scripts import save_cfg
+from cupbearer.utils.scripts import run
 from loguru import logger
 from simple_parsing import ArgumentGenerationMode, parse
 
@@ -24,8 +24,7 @@ def test_pipeline(tmp_path, capsys):
         "--train_data.backdoor corner --model mlp",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    save_cfg(cfg)
-    train_classifier.main(cfg)
+    run(train_classifier.main, cfg)
 
     assert (tmp_path / "base" / "config.yaml").is_file()
     assert (tmp_path / "base" / "model").is_dir()
@@ -38,12 +37,11 @@ def test_pipeline(tmp_path, capsys):
     cfg = parse(
         train_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
-        f"--task backdoor --task.backdoor corner --task.run_path {tmp_path / 'base'} "
+        f"--task backdoor --task.backdoor corner --task.path {tmp_path / 'base'} "
         "--detector abstraction",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    save_cfg(cfg)
-    train_detector.main(cfg)
+    run(train_detector.main, cfg)
     assert (tmp_path / "abstraction" / "config.yaml").is_file()
     assert (tmp_path / "abstraction" / "detector").is_dir()
     assert (tmp_path / "abstraction" / "metrics.json").is_file()
@@ -57,15 +55,14 @@ def test_pipeline(tmp_path, capsys):
         args=(
             f"--debug_with_logging --dir.full {tmp_path / 'adversarial_abstraction'} "
             f"--task backdoor --task.backdoor corner "
-            f"--task.run_path {tmp_path / 'base'} "
+            f"--task.path {tmp_path / 'base'} "
             "--detector adversarial_abstraction "
             f"--detector.load_path {tmp_path / 'abstraction'} "
             "--save_config true"
         ),
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    save_cfg(cfg)
-    eval_detector.main(cfg)
+    run(eval_detector.main, cfg)
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
 
@@ -79,15 +76,10 @@ def test_pipeline(tmp_path, capsys):
     cfg = parse(
         eval_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
-        f"--task backdoor --task.backdoor corner --task.run_path {tmp_path / 'base'} "
-        f"--detector from_run --detector.path {tmp_path / 'abstraction'} "
-        "--save_config true",
+        f"--task backdoor --task.backdoor corner --task.path {tmp_path / 'base'} ",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    # It's important we don't overwrite the config file here since it's needed to load
-    # the detector correctly!
-    save_cfg(cfg, save_config=False)
-    eval_detector.main(cfg)
+    run(eval_detector.main, cfg)
     captured = capsys.readouterr()
     assert "Randomly initializing abstraction" not in captured.err
     assert (tmp_path / "abstraction" / "histogram.pdf").is_file()
@@ -100,12 +92,11 @@ def test_pipeline(tmp_path, capsys):
     cfg = parse(
         train_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
-        f"--task adversarial_examples --task.run_path {tmp_path / 'base'} "
+        f"--task adversarial_examples --task.path {tmp_path / 'base'} "
         "--detector mahalanobis",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    save_cfg(cfg)
-    train_detector.main(cfg)
+    run(train_detector.main, cfg)
     assert (tmp_path / "mahalanobis" / "config.yaml").is_file()
     assert (tmp_path / "mahalanobis" / "detector").is_dir()
 
@@ -116,12 +107,10 @@ def test_pipeline(tmp_path, capsys):
     cfg = parse(
         eval_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
-        f"--task adversarial_examples --task.run_path {tmp_path / 'base'} "
-        f"--detector from_run --detector.path {tmp_path / 'mahalanobis'} "
-        "--save_config true",
+        f"--task adversarial_examples --task.path {tmp_path / 'base'} ",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    eval_detector.main(cfg)
+    run(eval_detector.main, cfg)
     assert (tmp_path / "mahalanobis" / "histogram.pdf").is_file()
     assert (tmp_path / "mahalanobis" / "eval.json").is_file()
 
@@ -136,8 +125,7 @@ def test_pipeline(tmp_path, capsys):
         "--train_data.backdoor wanet --model mlp",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    save_cfg(cfg)
-    train_classifier.main(cfg)
+    run(train_classifier.main, cfg)
 
     assert (tmp_path / "wanet" / "config.yaml").is_file()
     assert (tmp_path / "wanet" / "model").is_dir()

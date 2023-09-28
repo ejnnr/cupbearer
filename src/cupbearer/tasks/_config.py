@@ -8,10 +8,11 @@ from torch.utils.data import Dataset
 from cupbearer.data import DatasetConfig, TestDataConfig, TestDataMix
 from cupbearer.models import ModelConfig
 from cupbearer.models.computations import Model
-from cupbearer.utils.utils import BaseConfig
+from cupbearer.utils.utils import BaseConfig, PathConfigMixin
 
 
-class TaskConfigBase(BaseConfig, ABC):
+@dataclass(kw_only=True)
+class TaskConfigBase(BaseConfig, ABC, PathConfigMixin):
     @abstractmethod
     def build_train_data(self) -> Dataset:
         pass
@@ -34,13 +35,14 @@ class TaskConfig(TaskConfigBase, ABC):
     max_train_size: Optional[int] = None
     max_test_size: Optional[int] = None
 
-    def _set_debug(self):
-        super()._set_debug()
-        # Needs to be at least two because otherwise Mahalanobis distance scores are
-        # NaN.
-        self.max_train_size = 2
-        # Needs to be at least two so it can contain both normal and anomalous data.
-        self.max_test_size = 2
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            # Needs to be at least two because otherwise Mahalanobis distance scores are
+            # NaN.
+            self.max_train_size = 2
+            # Needs to be at least two so it can contain both normal and anomalous data.
+            self.max_test_size = 2
 
     def __post_init__(self):
         # We'll only actually instantiate these when we need them, in case relevant

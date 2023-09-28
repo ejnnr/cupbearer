@@ -8,7 +8,7 @@ import re
 import shutil
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, TypeVar, Union
+from typing import Iterable, Optional, TypeVar, Union
 
 import flax
 import jax
@@ -177,16 +177,44 @@ class BaseConfig(serialization.serializable.Serializable):
             self, dict_factory, recurse, save_dc_types=True
         )
 
-    def __post_init__(self):
-        if self.debug:
-            self._set_debug()
+    def setup_and_validate(self) -> None:
+        """A hook to validate the configuration before it is used.
 
-    def _set_debug(self):
+        The reason this exists in addition to __post_init__() is the order in which
+        classes in the configuration tree are instantiated. __post_init__() is called
+        first on children and then on parents, but sometimes a parent needs to override
+        values in its children, and validation should happen after that.
+        """
+        for cfg in self.subconfigs():
+            cfg.debug = self.debug
+
+    def subconfigs(self) -> Iterable["BaseConfig"]:
         for field in dataclasses.fields(self):
             value = getattr(self, field.name)
             if isinstance(value, BaseConfig):
-                value.debug = True
-                value._set_debug()
+                yield value
+
+    def _traverse_setup(self):
+        # It's important we first setup self and then children, since we want children
+        # to have access to any information we passed down.
+        self.setup_and_validate()
+        for cfg in self.subconfigs():
+            cfg._traverse_setup()
+
+
+@dataclass(kw_only=True)
+class PathConfigMixin:
+    # If not set by the user, this will be automatically set by scripts to the log dir.
+    path: Optional[Path] = None
+
+    def get_path(self) -> Path:
+        if self.path is None:
+            raise ValueError("Path requested but not set")
+        return self.path
+
+    def set_path(self, path: Optional[Path]):
+        if self.path is None:
+            self.path = path
 
 
 def get_object(path: str):

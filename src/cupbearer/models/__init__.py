@@ -1,10 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
 
 from cupbearer.utils.config_groups import register_config_group
 from cupbearer.utils.scripts import load_config
-from cupbearer.utils.utils import BaseConfig, load, mutable_field
+from cupbearer.utils.utils import BaseConfig, PathConfigMixin, load, mutable_field
 
 from .computations import Model, cnn, mlp
 
@@ -20,16 +19,14 @@ class ModelConfig(BaseConfig, ABC):
 
 
 @dataclass
-class StoredModel(ModelConfig):
-    path: Path
-
+class StoredModel(ModelConfig, PathConfigMixin):
     def build_model(self) -> Model:
-        model_cfg = load_config(self.path, "model", ModelConfig)
+        model_cfg = load_config(self.get_path(), "model", ModelConfig)
 
         return model_cfg.build_model()
 
     def build_params(self):
-        return load(self.path / "model")["params"]
+        return load(self.get_path() / "model")["params"]
 
 
 @dataclass
@@ -40,11 +37,12 @@ class MLP(ModelConfig):
     def build_model(self) -> Model:
         return Model(mlp(output_dim=self.output_dim, hidden_dims=self.hidden_dims))
 
-    def _set_debug(self):
-        super()._set_debug()
-        # TODO: we need at least two layers here because abstractions currently
-        # only work in that case. Abstraction implementation should be fixed.
-        self.hidden_dims = [2, 2]
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            # TODO: we need at least two layers here because abstractions currently
+            # only work in that case. Abstraction implementation should be fixed.
+            self.hidden_dims = [2, 2]
 
 
 @dataclass
@@ -62,10 +60,11 @@ class CNN(ModelConfig):
             )
         )
 
-    def _set_debug(self):
-        super()._set_debug()
-        self.channels = [2]
-        self.dense_dims = [2]
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.channels = [2]
+            self.dense_dims = [2]
 
 
 MODELS = {

@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Type, TypeVar
 
 import simple_parsing
-from cupbearer.utils.utils import BaseConfig
+from cupbearer.utils.utils import BaseConfig, PathConfigMixin
 from loguru import logger
 from simple_parsing.helpers import field, mutable_field
 
@@ -40,8 +40,12 @@ class ScriptConfig(BaseConfig):
             self.dir.base = None
         if self.debug_with_logging:
             self.debug = True
-        # Only call this now that self.debug is set.
-        super().__post_init__()
+
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        for cfg in self.subconfigs():
+            if isinstance(cfg, PathConfigMixin):
+                cfg.set_path(self.dir.path)
 
 
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
@@ -49,12 +53,15 @@ ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
 
 def run(
     script: Callable[[ConfigType], Any],
-    cfg_type: type[ConfigType],
+    cfg: type[ConfigType] | ConfigType,
 ):
-    cfg = simple_parsing.parse(
-        cfg_type,
-        argument_generation_mode=simple_parsing.ArgumentGenerationMode.NESTED,
-    )
+    if isinstance(cfg, type):
+        cfg = simple_parsing.parse(
+            cfg,
+            argument_generation_mode=simple_parsing.ArgumentGenerationMode.NESTED,
+        )
+
+    cfg._traverse_setup()
 
     save_cfg(cfg, save_config=cfg.save_config)
 

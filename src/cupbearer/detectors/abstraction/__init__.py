@@ -27,11 +27,12 @@ class AbstractionTrainConfig(TrainConfig):
     max_steps: Optional[int] = None
     # TODO: should be possible to configure loggers (e.g. wandb)
 
-    def _set_debug(self):
-        super()._set_debug()
-        self.batch_size = 2
-        self.num_epochs = 1
-        self.max_steps = 1
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.batch_size = 2
+            self.num_epochs = 1
+            self.max_steps = 1
 
 
 @dataclass
@@ -130,7 +131,8 @@ class AdversarialAbstractionConfig(AbstractionDetectorConfig):
             clip=self.clip,
         )
 
-    def _set_debug(self):
-        super()._set_debug()
-        self.num_train_samples = 1
-        self.num_steps = 1
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.num_train_samples = 1
+            self.num_steps = 1

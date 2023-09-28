@@ -14,9 +14,11 @@ class MahalanobisTrainConfig(TrainConfig):
     pbar: bool = True
     debug: bool = False
 
-    def _set_debug(self):
-        self.max_batches = 2
-        self.batch_size = 2
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.max_batches = 2
+            self.batch_size = 2
 
 
 @dataclass
