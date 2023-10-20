@@ -3,6 +3,7 @@ from dataclasses import dataclass, field
 import jax
 import jax.numpy as jnp
 import optax
+from jax import lax
 from torch.utils.data import DataLoader
 
 from cupbearer.data import numpy_collate
@@ -111,7 +112,20 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         # This is the same direction of KL divergence that Redwood used in one of their
         # projects, though I don't know if they had a strong reason for it.
         # Arguably a symmetric metric would make more sense, but might not matter much.
-        kl = jax.scipy.special.rel_entr(original_p, finetuned_p).sum(-1)
+        p, q = original_p, finetuned_p
+        # Adapted from jax.scipy.special.rel_entr in Jax >= 0.4.16
+        both_gt_zero_mask = lax.bitwise_and((p > 0), (q > 0))
+        one_zero_mask = lax.bitwise_and((p == 0), (q >= 0))
+
+        safe_p = jnp.where(both_gt_zero_mask, p, 1)
+        safe_q = jnp.where(both_gt_zero_mask, q, 1)
+        log_val = lax.sub(
+            jax.scipy.special.xlogy(safe_p, safe_p),
+            jax.scipy.special.xlogy(safe_p, safe_q),
+        )
+        kl = jnp.where(
+            both_gt_zero_mask, log_val, jnp.where(one_zero_mask, q, jnp.inf)
+        ).sum(-1)
         return kl
 
     def _get_trained_variables(self, saving: bool = False):
