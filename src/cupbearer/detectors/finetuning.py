@@ -108,7 +108,9 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             # a more specific one here.
             raise ValueError("Infinite KL divergence")
 
-        # TODO: which direction do we want here? Or maybe just some other metric?
+        # This is the same direction of KL divergence that Redwood used in one of their
+        # projects, though I don't know if they had a strong reason for it.
+        # Arguably a symmetric metric would make more sense, but might not matter much.
         kl = jax.scipy.special.rel_entr(original_p, finetuned_p).sum(-1)
         return kl
 
