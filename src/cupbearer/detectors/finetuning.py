@@ -111,9 +111,6 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         kl = jax.scipy.special.rel_entr(original_p, finetuned_p).sum(-1)
         return kl
 
-        # HACK: temporary alternative for testing:
-        # return jnp.sum((original_p - finetuned_p) ** 2, axis=-1)
-
     def _get_trained_variables(self, saving: bool = False):
         return {
             "params": self.finetuned_params,
