@@ -58,7 +58,9 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             override_variables={
                 "params": self.params
             },  # Use existing parameters for initialization
-            example_input=clean_dataset[0][0][None],
+            # clean_dataset[0] is the first element, which is an (image, label) tuple.
+            # The second 0 picks the image, then we add a singleton batch dimension.
+            example_input=clean_dataset[0][0][None, ...],
         )
 
         # Create a DataLoader for the clean dataset
