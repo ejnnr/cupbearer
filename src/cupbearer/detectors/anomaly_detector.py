@@ -133,13 +133,15 @@ class AnomalyDetector(ABC):
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
         for batch in test_loader:
             inputs, new_labels = batch
-            new_scores = self.layerwise_scores(inputs)
-            scores.append(new_scores.mean(axis=0))
-            # Sum over batch axis
-            layer_scores = layer_scores + new_scores.sum(axis=1)
-            num_elements += new_scores.shape[1]
+            try:
+                new_scores = self.layerwise_scores(inputs)
+                scores.append(new_scores.mean(axis=0))
+                # Sum over batch axis
+                layer_scores = layer_scores + new_scores.sum(axis=1)
+            except NotImplementedError:
+                scores.append(self.scores(inputs))
+            num_elements += scores[-1].shape[0]
             labels.append(new_labels)
-        assert isinstance(layer_scores, jax.Array)
         # We're also taking the mean over the dataset:
         layer_scores = layer_scores / num_elements
         scores = jnp.concatenate(scores)
@@ -199,7 +201,10 @@ class AnomalyDetector(ABC):
         if isinstance(sample_inputs, (tuple, list)):
             sample_inputs = sample_inputs[0]
 
-        self.plot(layer_scores, inputs=sample_inputs)
+        # Can only plot if we have layerwise scores (which some methods
+        # don't support)
+        if isinstance(layer_scores, jax.Array):
+            self.plot(layer_scores, inputs=sample_inputs)
 
     def _get_drawable(self, layer_scores, inputs):
         return self.model.get_drawable(layer_scores=layer_scores, inputs=inputs)
