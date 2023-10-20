@@ -39,7 +39,7 @@ class FinetuningTrainer(trainer.TrainerModule):
 class FinetuningAnomalyDetector(AnomalyDetector):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self.finetuned_params = None  # Initialize finetuned parameters to None
+        self.finetuned_params = None
 
     def train(
         self,
@@ -50,7 +50,6 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         # Not used, but will be passed by the detector train script
         debug: bool = False,
     ):
-        # Create a FinetuningTrainer instance
         trainer_instance = FinetuningTrainer(
             model=self.model,
             loss_fn=self.loss_fn,
