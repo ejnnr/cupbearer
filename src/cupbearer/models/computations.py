@@ -78,7 +78,12 @@ class Step(ABC):
 Computation = List[Step]
 
 
-class Model(nn.Module):
+class Model(nn.Module, ABC):
+    def get_drawable(self):
+        raise NotImplementedError
+
+
+class ComputationModel(Model):
     computation: Computation
 
     @nn.compact

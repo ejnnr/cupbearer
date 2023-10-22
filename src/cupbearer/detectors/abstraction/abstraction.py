@@ -252,6 +252,9 @@ def get_default_abstraction(
     be smaller. `output_dim` is the output dimension of the abstraction. If None, the
     model's output dimension is used.
     """
+    # TODO: we'll have to change this: if `model` is based on a HookedTransformer,
+    # use some other default abstraction instead. Can do that later though and just
+    # not support abstractions with language models at first.
     abstract_computation = reduce_size(model.computation, size_reduction, output_dim)
     tau_maps = get_tau_maps(abstract_computation)
     return abstraction_cls(computation=abstract_computation, tau_maps=tau_maps)
