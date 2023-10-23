@@ -1,6 +1,6 @@
 from cupbearer.utils.config_groups import register_config_group, register_config_option
 
-from ._shared import DatasetConfig, ToNumpy, TrainDataFromRun, Transform
+from ._shared import DatasetConfig, NoData, ToNumpy, TrainDataFromRun, Transform
 from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
 from ._shared import numpy_collate as numpy_collate
@@ -17,6 +17,7 @@ DATASETS = {
     "from_run": TrainDataFromRun,
     "adversarial": AdversarialExampleConfig,
     "toy_features": ToyFeaturesConfig,
+    "none": NoData,
 }
 
 TRANSFORMS = {
