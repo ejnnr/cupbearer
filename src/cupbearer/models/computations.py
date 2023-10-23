@@ -236,14 +236,12 @@ class SoftmaxDrop(Step, nn.Module):
 
 
 def constant_init(
-    key: jax.random.KeyArray, shape: Sequence[int], dtype=jnp.float_, value=0.0
+    key: jax.Array, shape: Sequence[int], dtype=jnp.float_, value=0.0
 ) -> jax.Array:
     return jnp.full(shape, value, dtype=dtype)
 
 
-def identity_init(
-    key: jax.random.KeyArray, shape: Sequence[int], dtype=jnp.float_
-) -> jax.Array:
+def identity_init(key: jax.Array, shape: Sequence[int], dtype=jnp.float_) -> jax.Array:
     assert len(shape) >= 2
     assert shape[-1] == shape[-2]
     eye = jnp.eye(shape[-1], dtype=dtype)

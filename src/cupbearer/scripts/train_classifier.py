@@ -22,8 +22,9 @@ class ClassificationTrainer(trainer.TrainerModule):
         def losses(params, state, batch):
             images, labels = batch
             logits = state.apply_fn({"params": params}, images)
-            one_hot = jax.nn.one_hot(labels, self.num_classes)
-            losses = optax.softmax_cross_entropy(logits=logits, labels=one_hot)
+            losses = optax.softmax_cross_entropy_with_integer_labels(
+                logits=logits, labels=labels
+            )
             loss = jnp.mean(losses)
             correct = jnp.argmax(logits, -1) == labels
             accuracy = jnp.mean(correct)
