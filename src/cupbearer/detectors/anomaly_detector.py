@@ -135,11 +135,22 @@ class AnomalyDetector(ABC):
             inputs, new_labels = batch
             try:
                 new_scores = self.layerwise_scores(inputs)
+            except NotImplementedError:
+                scores.append(self.scores(inputs))
+            else:
+                if type(self).scores != AnomalyDetector.scores:
+                    # scores() method was overriden by subclass, but the subclass
+                    # also implements layerwise_scores(). It's unclear what we're
+                    # supposed to do in that case, so raise an error for now.
+                    # Note we're raising this in the `else` block so it doesn't
+                    # get caught.
+                    raise NotImplementedError(
+                        f"{type(self)} overrides scores() but also implements "
+                        "layerwise_scores(). This is currently not supported."
+                    )
                 scores.append(new_scores.mean(axis=0))
                 # Sum over batch axis
                 layer_scores = layer_scores + new_scores.sum(axis=1)
-            except NotImplementedError:
-                scores.append(self.scores(inputs))
             num_elements += scores[-1].shape[0]
             labels.append(new_labels)
         # We're also taking the mean over the dataset:
@@ -254,6 +265,11 @@ class AnomalyDetector(ABC):
     def layerwise_scores(self, batch) -> jax.Array:
         """Compute anomaly scores for the given inputs for each layer.
 
+        You can just raise a NotImplementedError here for detectors that don't compute
+        layerwise scores. In that case, you need to override `scores`. For detectors
+        that can compute layerwise scores, you should override this method instead
+        of `scores` since allows some additional metrics to be computed.
+
         Args:
             batch: a batch of input data to the model (potentially including labels).
 
@@ -263,6 +279,10 @@ class AnomalyDetector(ABC):
 
     def scores(self, batch):
         """Compute anomaly scores for the given inputs.
+
+        If you override this, then your implementation of `layerwise_scores()`
+        needs to raise a NotImplementedError. Implementing both this and
+        `layerwise_scores()` is not supported.
 
         Args:
             batch: a batch of input data to the model (potentially including labels).
