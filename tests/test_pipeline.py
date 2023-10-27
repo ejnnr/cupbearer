@@ -1,3 +1,4 @@
+import numpy as np
 import pytest
 from cupbearer.scripts import eval_detector, train_classifier, train_detector
 from cupbearer.scripts.conf import (
@@ -92,15 +93,20 @@ def test_pipeline(tmp_path, capsys):
     assert (tmp_path / "mahalanobis" / "histogram.pdf").is_file()
     assert (tmp_path / "mahalanobis" / "eval.json").is_file()
 
+
+@pytest.mark.slow
+def test_wanet(tmp_path, capsys):
     ############################
-    # WaNet training
+    # WaNet
     ############################
     logger.info("Running WaNet training")
     cfg = parse(
         train_classifier_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path / 'wanet'} "
         "--train_data backdoor --train_data.original gtsrb "
-        "--train_data.backdoor wanet --model mlp",
+        "--train_data.backdoor wanet --model mlp "
+        "--val_data.backdoor backdoor --val_data.backdoor.original gtsrb "
+        "--val_data.backdoor.backdoor wanet",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_classifier.main, cfg)
@@ -108,3 +114,13 @@ def test_pipeline(tmp_path, capsys):
     assert (tmp_path / "wanet" / "config.yaml").is_file()
     assert (tmp_path / "wanet" / "model").is_dir()
     assert (tmp_path / "wanet" / "metrics.json").is_file()
+    # Check that NoData is handled correctly
+    for name, data_cfg in cfg.val_data.items():
+        if name == "backdoor":
+            assert np.allclose(
+                data_cfg.backdoor.warping_field,
+                cfg.train_data.backdoor.warping_field,
+            )
+        else:
+            with pytest.raises(NotImplementedError):
+                data_cfg.build()
