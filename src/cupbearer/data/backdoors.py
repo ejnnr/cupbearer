@@ -1,7 +1,7 @@
 import os
 from abc import ABC
 from dataclasses import dataclass
-from typing import Tuple
+from typing import Optional, Tuple
 
 import numpy as np
 
@@ -91,11 +91,19 @@ class WanetBackdoor(Backdoor):
     control_grid_width: int = 4  # Side length of unscaled warping field
     warping_strength: float = 0.5  # Strength of warping effect
     grid_rescale: float = 1.0  # Factor to rescale grid from warping effect
+    _control_grid: Optional[
+        tuple[
+            list[list[float]],
+            list[list[float]],
+        ]
+    ] = None  # Used for reproducibility, typically not set manually
 
     def __post_init__(self):
         super().__post_init__()
-        self._control_grid = None
         self._warping_field = None
+
+        # Init control_grid so that it is saved in config
+        self.control_grid
 
         assert 0 <= self.p_noise <= 1, "Probability must be between 0 and 1"
         assert (
@@ -111,7 +119,7 @@ class WanetBackdoor(Backdoor):
             # N.B. the 0.5 comes from how the original did their rescaling, see
             # https://github.com/ejnnr/cupbearer/pull/2#issuecomment-1688338610
             control_grid = control_grid * 0.5 * self.warping_strength
-            self._control_grid = tuple(control_grid.tolist())
+            self.control_grid = control_grid
         else:
             control_grid = np.array(self._control_grid)
 
@@ -125,7 +133,9 @@ class WanetBackdoor(Backdoor):
         control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
         if control_grid.shape != control_grid_shape:
             raise ValueError("Control grid shape is incompatible.")
-        self._control_grid = control_grid
+
+        # We keep self._control_grid serializable
+        self._control_grid = tuple(control_grid.tolist())
 
     @property
     def warping_field(self) -> np.ndarray:

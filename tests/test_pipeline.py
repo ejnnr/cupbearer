@@ -96,6 +96,7 @@ def test_pipeline(tmp_path, capsys):
 
 @pytest.mark.slow
 def test_wanet(tmp_path, capsys):
+    tmp_path.mkdir(exist_ok=True)
     ############################
     # WaNet
     ############################
@@ -124,3 +125,17 @@ def test_wanet(tmp_path, capsys):
         else:
             with pytest.raises(NotImplementedError):
                 data_cfg.build()
+
+    # Check that from_run can load WanetBackdoor properly
+    train_detector_cfg = parse(
+        train_detector_conf.Config,
+        args=f"--debug_with_logging --dir.full {tmp_path / 'wanet-mahalanobis'} "
+        f"--task backdoor --task.backdoor wanet --task.path {tmp_path / 'wanet'} "
+        "--detector mahalanobis",
+        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    )
+    run(train_detector.main, train_detector_cfg)
+    assert np.allclose(
+        train_detector_cfg.task.backdoor.warping_field,
+        cfg.train_data.backdoor.warping_field,
+    )
