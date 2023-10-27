@@ -4,9 +4,9 @@ from dataclasses import dataclass
 import simple_parsing
 
 from cupbearer.data import (
+    Backdoor,
     CornerPixelBackdoor,
     NoiseBackdoor,
-    Transform,
     WanetBackdoor,
 )
 from cupbearer.data.backdoor_data import BackdoorData
@@ -19,7 +19,7 @@ from . import TaskConfig
 @dataclass(kw_only=True)
 class BackdoorDetection(TaskConfig):
     no_load: bool = simple_parsing.field(action="store_true")
-    backdoor: Transform = simple_parsing.subgroups(
+    backdoor: Backdoor = simple_parsing.subgroups(
         {
             "corner": CornerPixelBackdoor,
             "noise": NoiseBackdoor,
