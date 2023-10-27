@@ -175,20 +175,19 @@ class WanetBackdoor(Backdoor):
 
     def store(self, basepath):
         super().store(basepath)
-        logger.debug(
-            f"Storing warping field to {self._get_savefile_fullpath(basepath)}"
-        )
-        try:
-            np.save(self._get_savefile_fullpath(basepath), self.warping_field)
-        except AttributeError:
-            raise RuntimeError("Can't store warping field, it is not initialized.")
+        logger.debug(f"Storing control grid to {self._get_savefile_fullpath(basepath)}")
+        np.save(self._get_savefile_fullpath(basepath), self.control_grid)
 
     def load(self, basepath):
         super().load(basepath)
         logger.debug(
-            f"Loading warping field from {self._get_savefile_fullpath(basepath)}"
+            f"Loading control grid from {self._get_savefile_fullpath(basepath)}"
         )
-        self._warping_field = np.load(self._get_savefile_fullpath(basepath))
+        control_grid = np.load(self._get_savefile_fullpath(basepath))
+        if control_grid.shape[-1] != self.control_grid_width:
+            logger.warning("Control grid width updated from load.")
+            self.control_grid_width = control_grid.shape[-1]
+        self.control_grid = control_grid
 
     def _warp(self, img: np.ndarray, warping_field: np.ndarray) -> np.ndarray:
         if img.ndim == 3:
