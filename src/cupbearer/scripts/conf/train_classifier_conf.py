@@ -2,7 +2,7 @@ import os
 from dataclasses import dataclass
 from typing import Optional
 
-from cupbearer.data import DatasetConfig, ValidationConfig
+from cupbearer.data import BackdoorData, DatasetConfig, ValidationConfig, WanetBackdoor
 from cupbearer.models import CNN, MLP, ModelConfig
 from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
@@ -37,10 +37,10 @@ class Config(ScriptConfig):
 
         # For datasets that are not necessarily deterministic based only on
         # arguments, this is where validation sets are set to follow train_data
-        if hasattr(self.train_data, "backdoor"):
+        if isinstance(self.train_data, BackdoorData):
             for name, val_config in self.val_data.items():
                 # WanetBackdoor
-                try:
+                if isinstance(self.train_data.backdoor, WanetBackdoor):
                     str_factor = (
                         val_config.backdoor.warping_strength
                         / self.train_data.backdoor.warping_strength
@@ -48,8 +48,6 @@ class Config(ScriptConfig):
                     val_config.backdoor.control_grid = (
                         str_factor * self.train_data.backdoor.control_grid
                     )
-                except AttributeError:
-                    pass
 
     def setup_and_validate(self):
         super().setup_and_validate()
