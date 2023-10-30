@@ -1,45 +1,35 @@
 import json
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Optional
 
-import jax
-import jax.numpy as jnp
 import numpy as np
 import sklearn.metrics
+import torch
 from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from cupbearer.data import TestDataMix, numpy_collate
-from cupbearer.models.computations import Model
+from cupbearer.data import TestDataMix
+from cupbearer.models.models import HookedModel
 from cupbearer.utils import utils
 
 
 class AnomalyDetector(ABC):
     def __init__(
         self,
-        model: Model,
-        params,
-        rng,
+        model: HookedModel,
         max_batch_size: int = 4096,
         save_path: Path | str | None = None,
     ):
         self.model = model
-        self.params = params
-        self.rng = rng
         # For storing the original detector variables when finetuning
         self._original_variables = None
         self.max_batch_size = max_batch_size
         self.save_path = None if save_path is None else Path(save_path)
-
-        self.forward_fn = jax.jit(
-            lambda x: self.model.apply(
-                {"params": self.params}, x, return_activations=True
-            )
-        )
 
         self.trained = False
 
@@ -49,8 +39,7 @@ class AnomalyDetector(ABC):
             inputs = batch[0]
         else:
             inputs = batch
-        output, activations = self.forward_fn(inputs)
-        return output, activations
+        return self.model.get_activations(inputs)
 
     @abstractmethod
     def train(self, dataset, debug: bool = False, **kwargs):
@@ -118,7 +107,6 @@ class AnomalyDetector(ABC):
             # normal/anomalous data is distributed into batches. In that case, we want
             # to mix them by default.
             shuffle=True,
-            collate_fn=numpy_collate,
         )
 
         metrics = {}
@@ -134,9 +122,9 @@ class AnomalyDetector(ABC):
         for batch in test_loader:
             inputs, new_labels = batch
             try:
-                new_scores = self.layerwise_scores(inputs)
+                new_scores = self.layerwise_scores(inputs).detach().cpu().numpy()
             except NotImplementedError:
-                scores.append(self.scores(inputs))
+                scores.append(self.scores(inputs).detach().cpu().numpy())
             else:
                 if type(self).scores != AnomalyDetector.scores:
                     # scores() method was overriden by subclass, but the subclass
@@ -155,8 +143,8 @@ class AnomalyDetector(ABC):
             labels.append(new_labels)
         # We're also taking the mean over the dataset:
         layer_scores = layer_scores / num_elements
-        scores = jnp.concatenate(scores)
-        labels = jnp.concatenate(labels)
+        scores = np.concatenate(scores)
+        labels = np.concatenate(labels)
 
         auc_roc = sklearn.metrics.roc_auc_score(
             y_true=labels,
@@ -171,7 +159,7 @@ class AnomalyDetector(ABC):
         metrics["AUC_ROC"] = auc_roc
         metrics["AP"] = ap
 
-        upper_lim = jnp.percentile(scores, histogram_percentile).item()
+        upper_lim = np.percentile(scores, histogram_percentile).item()
         # Usually there aren't extremely low outliers, so we just use the minimum,
         # otherwise this tends to weirdly cut of the histogram.
         lower_lim = scores.min().item()
@@ -206,7 +194,6 @@ class AnomalyDetector(ABC):
             batch_size=9,
             # Shuffling to ideally get a mix of normal and anomalous data
             shuffle=True,
-            collate_fn=numpy_collate,
         )
         sample_inputs, _ = next(iter(sample_loader))
         if isinstance(sample_inputs, (tuple, list)):
@@ -214,7 +201,7 @@ class AnomalyDetector(ABC):
 
         # Can only plot if we have layerwise scores (which some methods
         # don't support)
-        if isinstance(layer_scores, jax.Array):
+        if isinstance(layer_scores, np.ndarray):
             self.plot(layer_scores, inputs=sample_inputs)
 
     def _get_drawable(self, layer_scores, inputs):
@@ -222,7 +209,7 @@ class AnomalyDetector(ABC):
 
     def plot(
         self,
-        layer_scores: Optional[jax.Array] = None,
+        layer_scores: Optional[np.ndarray] = None,
         inputs: Optional[np.ndarray] = None,
     ):
         try:
@@ -248,21 +235,20 @@ class AnomalyDetector(ABC):
             dataset,
             batch_size=self.max_batch_size,
             shuffle=False,
-            collate_fn=numpy_collate,
         )
         scores = 0
         num_elements = 0
         for batch in dataloader:
             new_scores = self.layerwise_scores(batch)
             # Sum over batch axis
-            scores = scores + new_scores.sum(axis=1)
+            scores = scores + new_scores.sum(dim=1)
             num_elements += new_scores.shape[1]
         # We're also taking the mean over the dataset
         scores = scores / num_elements
         return scores
 
     @abstractmethod
-    def layerwise_scores(self, batch) -> jax.Array:
+    def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
         """Compute anomaly scores for the given inputs for each layer.
 
         You can just raise a NotImplementedError here for detectors that don't compute
@@ -274,10 +260,10 @@ class AnomalyDetector(ABC):
             batch: a batch of input data to the model (potentially including labels).
 
         Returns:
-            An array of anomaly scores with shape (n_layers, batch).
+            A dictionary with anomaly scores, each element has shape (batch, ).
         """
 
-    def scores(self, batch):
+    def scores(self, batch) -> torch.Tensor:
         """Compute anomaly scores for the given inputs.
 
         If you override this, then your implementation of `layerwise_scores()`
@@ -290,7 +276,11 @@ class AnomalyDetector(ABC):
         Returns:
             A batch of anomaly scores for the inputs.
         """
-        return self.layerwise_scores(batch).mean(axis=0)
+        scores = self.layerwise_scores(batch).values()
+        assert len(scores) > 0
+        # Type checker doesn't take into account that scores is non-empty,
+        # so thinks this might be a float.
+        return sum(v for v in scores) / len(scores)  # type: ignore
 
     def _get_trained_variables(self, saving: bool = False):
         return {}
@@ -305,3 +295,23 @@ class AnomalyDetector(ABC):
     def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {path}")
         self._set_trained_variables(utils.load(path))
+
+
+class ActivationBasedDetector(AnomalyDetector):
+    """AnomalyDetector using activations."""
+
+    def __init__(
+        self,
+        model: HookedModel,
+        activation_names: Collection[str],
+        max_batch_size: int = 4096,
+        save_path: Path | str | None = None,
+    ):
+        super().__init__(
+            model=model, max_batch_size=max_batch_size, save_path=save_path
+        )
+        self.activation_names = activation_names
+
+    def get_activations(self, batch):
+        inputs = utils.inputs_from_batch(batch)
+        return self.model.get_activations(inputs, self.activation_names)

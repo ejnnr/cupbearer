@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from cupbearer.utils.utils import get_object, mutable_field
 
 from . import DatasetConfig
-from ._shared import Resize, ToNumpy, Transform
+from ._shared import Resize, ToTensor, Transform
 
 
 @dataclass(kw_only=True)
@@ -15,7 +15,7 @@ class PytorchConfig(DatasetConfig):
     # convenient to just make it a field here.
     num_classes: int
     train: bool = True
-    transforms: dict[str, Transform] = mutable_field({"to_numpy": ToNumpy()})
+    transforms: dict[str, Transform] = mutable_field({"to_tensor": ToTensor()})
 
     @property
     def _dataset_kws(self):
@@ -51,7 +51,7 @@ class GTSRB(PytorchConfig):
     transforms: dict[str, Transform] = mutable_field(
         {
             "resize": Resize(size=(32, 32)),
-            "to_numpy": ToNumpy(),
+            "to_tensor": ToTensor(),
         }
     )
 

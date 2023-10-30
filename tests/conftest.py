@@ -1,4 +1,5 @@
 import pytest
+from _pytest.tmpdir import _mk_tmp
 
 
 def pytest_addoption(parser):
@@ -17,3 +18,12 @@ def pytest_collection_modifyitems(config, items):
         for item in items:
             if "slow" in item.keywords:
                 item.add_marker(skip_slow)
+
+
+@pytest.fixture(scope="module")
+def module_tmp_path(request, tmp_path_factory):
+    # Need to implement our own version because the built-in tmp_path only supports
+    # function scopes, and can't be used in any module-scoped fixtures.
+    # See https://github.com/pytest-dev/pytest/issues/363
+    # Taken from https://docs.pytest.org/en/6.2.x/_modules/_pytest/tmpdir.html#tmp_path
+    return _mk_tmp(request, tmp_path_factory)

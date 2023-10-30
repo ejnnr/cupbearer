@@ -1,95 +1,126 @@
 import numpy as np
 import pytest
-from cupbearer.scripts import eval_detector, train_classifier, train_detector
+from cupbearer.scripts import (
+    eval_classifier,
+    train_classifier,
+    train_detector,
+)
 from cupbearer.scripts.conf import (
-    eval_detector_conf,
+    eval_classifier_conf,
     train_classifier_conf,
     train_detector_conf,
 )
 from cupbearer.utils.scripts import run
-from loguru import logger
 from simple_parsing import ArgumentGenerationMode, parse
 
 
-@pytest.mark.slow
-def test_pipeline(tmp_path, capsys):
-    tmp_path.mkdir(exist_ok=True)
-    ############################
-    # Classifier training
-    ############################
-    logger.info("Running classifier training")
+@pytest.fixture(scope="module")
+def classifier_path(module_tmp_path):
+    """Trains a classifier and returns the path to the training run directory."""
+    module_tmp_path.mkdir(exist_ok=True)
     cfg = parse(
         train_classifier_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path / 'base'} "
-        "--train_data backdoor --train_data.original mnist "
-        "--train_data.backdoor corner --model mlp",
+        args=f"--debug_with_logging --dir.full {module_tmp_path} "
+        "--train_data mnist --model mlp",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_classifier.main, cfg)
 
-    assert (tmp_path / "base" / "config.yaml").is_file()
-    assert (tmp_path / "base" / "model").is_dir()
-    assert (tmp_path / "base" / "metrics.json").is_file()
+    assert (module_tmp_path / "config.yaml").is_file()
+    assert (module_tmp_path / "model.ckpt").is_file()
+    assert (module_tmp_path / "tensorboard").is_dir()
 
-    #########################################
-    # Abstraction training (backdoor)
-    #########################################
-    logger.info("Running abstraction training")
+    return module_tmp_path
+
+
+@pytest.mark.slow
+def test_eval_classifier(classifier_path):
     cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path / 'abstraction'} "
-        f"--task backdoor --task.backdoor corner --task.path {tmp_path / 'base'} "
-        "--detector abstraction",
+        eval_classifier_conf.Config,
+        args=f"--debug_with_logging --dir.full {classifier_path} "
+        "--data mnist --data.train false",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    run(train_detector.main, cfg)
-    assert (tmp_path / "abstraction" / "config.yaml").is_file()
-    assert (tmp_path / "abstraction" / "detector").is_dir()
-    assert (tmp_path / "abstraction" / "metrics.json").is_file()
+    run(eval_classifier.main, cfg)
 
-    captured = capsys.readouterr()
-    assert "Randomly initializing abstraction" not in captured.err
-    assert (tmp_path / "abstraction" / "histogram.pdf").is_file()
-    assert (tmp_path / "abstraction" / "eval.json").is_file()
+    assert (classifier_path / "eval.json").is_file()
 
-    #########################################
-    # Adversarial abstraction eval (backdoor)
-    #########################################
-    logger.info("Running adversarial abstraction eval")
-    cfg = parse(
-        eval_detector_conf.Config,
-        args=(
-            f"--debug_with_logging --dir.full {tmp_path / 'adversarial_abstraction'} "
-            f"--task backdoor --task.backdoor corner "
-            f"--task.path {tmp_path / 'base'} "
-            "--detector adversarial_abstraction "
-            f"--detector.load_path {tmp_path / 'abstraction'} "
-            "--save_config true"
-        ),
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
-    )
-    run(eval_detector.main, cfg)
-    captured = capsys.readouterr()
-    assert "Randomly initializing abstraction" not in captured.err
 
-    for file in {"histogram.pdf", "eval.json", "config.yaml"}:
-        assert (tmp_path / "adversarial_abstraction" / file).is_file()
+# @pytest.mark.slow
+# def test_train_abstraction_corner_backdoor(classifier_path, tmp_path, capsys):
+#     cfg = parse(
+#         train_detector_conf.Config,
+#         args=f"--debug_with_logging --dir.full {tmp_path} "
+#         f"--task backdoor --task.backdoor corner --task.path {classifier_path} "
+#         "--detector abstraction",
+#         argument_generation_mode=ArgumentGenerationMode.NESTED,
+#     )
+#     run(train_detector.main, cfg)
+#     assert (tmp_path / "config.yaml").is_file()
+#     assert (tmp_path / "detector.ckpt").is_file()
+#     assert (tmp_path / "tensorboard").is_dir()
 
-    ###############################################
-    # Mahalanobis training (adversarial examples)
-    ###############################################
-    logger.info("Running mahalanobis training")
+#     captured = capsys.readouterr()
+#     assert "Randomly initializing abstraction" not in captured.err
+#     assert (tmp_path / "histogram.pdf").is_file()
+#     assert (tmp_path / "eval.json").is_file()
+
+
+# TODO: add back in adversarial abstractions, will need a trained abstraction as fixture
+# probably?
+# @pytest.mark.slow
+# def test_eval_adversarial_abstraction():
+#     cfg = parse(
+#         eval_detector_conf.Config,
+#         args=(
+#             f"--debug_with_logging --dir.full {tmp_path / 'adversarial_abstraction'} "
+#             f"--task backdoor --task.backdoor corner "
+#             f"--task.path {tmp_path / 'base'} "
+#             "--detector adversarial_abstraction "
+#             f"--detector.load_path {tmp_path / 'abstraction'} "
+#             "--save_config true"
+#         ),
+#         argument_generation_mode=ArgumentGenerationMode.NESTED,
+#     )
+#     run(eval_detector.main, cfg)
+#     captured = capsys.readouterr()
+#     assert "Randomly initializing abstraction" not in captured.err
+
+#     for file in {"histogram.pdf", "eval.json", "config.yaml"}:
+#         assert (tmp_path / "adversarial_abstraction" / file).is_file()
+
+
+# @pytest.mark.slow
+# def train_mahalanobis_advex(classifier_path, tmp_path):
+#     cfg = parse(
+#         train_detector_conf.Config,
+#         args=f"--debug_with_logging --dir.full {tmp_path} "
+#         f"--task adversarial_examples --task.path {classifier_path} "
+#         "--detector mahalanobis",
+#         argument_generation_mode=ArgumentGenerationMode.NESTED,
+#     )
+#     run(train_detector.main, cfg)
+#     assert (tmp_path / "config.yaml").is_file()
+#     assert (tmp_path / "detector.ckpt").is_file()
+#     # Eval outputs:
+#     assert (tmp_path / "histogram.pdf").is_file()
+#     assert (tmp_path / "eval.json").is_file()
+
+
+@pytest.mark.slow
+def train_mahalanobis_backdoor(classifier_path, tmp_path):
     cfg = parse(
         train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path / 'mahalanobis'} "
-        f"--task adversarial_examples --task.path {tmp_path / 'base'} "
+        args=f"--debug_with_logging --dir.full {tmp_path} "
+        f"--task backdoor --task.backdoor corner --task.path {classifier_path} "
         "--detector mahalanobis",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_detector.main, cfg)
-    assert (tmp_path / "mahalanobis" / "config.yaml").is_file()
-    assert (tmp_path / "mahalanobis" / "detector").is_dir()
+    assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "detector.ckpt").is_file()
     # Eval outputs:
+<<<<<<< HEAD
     assert (tmp_path / "mahalanobis" / "histogram.pdf").is_file()
     assert (tmp_path / "mahalanobis" / "eval.json").is_file()
 
@@ -139,3 +170,7 @@ def test_wanet(tmp_path, capsys):
         train_detector_cfg.task.backdoor.warping_field,
         cfg.train_data.backdoor.warping_field,
     )
+=======
+    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "eval.json").is_file()
+>>>>>>> fc10822 (WIP for pytorch transition)

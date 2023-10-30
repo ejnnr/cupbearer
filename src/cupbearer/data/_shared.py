@@ -3,11 +3,10 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Union
 
-import jax.numpy as jnp
 import numpy as np
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
-from torchvision.transforms.functional import InterpolationMode, resize
+from torchvision.transforms.functional import InterpolationMode, resize, to_tensor
 
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig
@@ -98,28 +97,14 @@ class DatasetConfig(BaseConfig, ABC):
             self.max_size = 2
 
 
-def numpy_collate(batch):
-    """Variant of the default collate_fn that returns ndarrays instead of tensors."""
-    if isinstance(batch[0], np.ndarray):
-        return np.stack(batch)
-    elif isinstance(batch[0], (tuple, list)):
-        transposed = zip(*batch)
-        return [numpy_collate(samples) for samples in transposed]
-    elif isinstance(batch[0], dict):
-        return {key: numpy_collate([d[key] for d in batch]) for key in batch[0]}
-    else:
-        return np.array(batch)
-
-
 # Needs to be a dataclass to make simple_parsing's serialization work correctly.
 @dataclass
-class ToNumpy(AdaptedTransform):
+class ToTensor(AdaptedTransform):
     def __img_call__(self, img):
-        out = np.array(img, dtype=jnp.float32) / 255.0
+        out = to_tensor(img)
         if out.ndim == 2:
-            # Add a channel dimension. Note that flax.linen.Conv expects
-            # the channel dimension to be the last one.
-            out = np.expand_dims(out, axis=-1)
+            # Add a channel dimension. (Using pytorch's CHW convention)
+            out = np.expand_dims(out, axis=0)
         return out
 
 
@@ -168,7 +153,8 @@ class TrainDataFromRun(DatasetConfig):
             # It's important we cache this, not mainly for performance reasons,
             # but because otherwise we'd get different instances every time.
             # Mostly that would be fine, but e.g. the Wanet backdoor transform
-            # actually has state not captures by its field (it's not a "real" dataclass)
+            # actually has state not captured by its fields
+            # (it's not a "real" dataclass)
             self._cfg = load_config(self.path, "train_data", DatasetConfig)
 
         return self._cfg
@@ -182,7 +168,6 @@ class TrainDataFromRun(DatasetConfig):
 
     def get_transforms(self) -> list[Transform]:
         transforms = self.cfg.get_transforms() + super().get_transforms()
-        print(transforms)
         return transforms
 
 

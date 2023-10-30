@@ -1,10 +1,8 @@
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Optional
 
-import jax
-import jax.numpy as jnp
-import optax
-from flax.core.frozen_dict import FrozenDict
+import torch
+import torch.nn.functional as F
 from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
@@ -13,91 +11,43 @@ from cupbearer.detectors.abstraction.abstraction import (
     abstraction_collate,
 )
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
-from cupbearer.models.computations import Model
 from cupbearer.utils import trainer
 from cupbearer.utils.optimizers import OptimizerConfig
 
 
-def kl_loss_fn(predicted_logits, logits):
-    # KL divergence between actual and predicted output:
-    # TODO: Should probably just use something like distrax.
-    probs = jax.nn.softmax(logits, axis=-1)
-    logprobs = jax.nn.log_softmax(logits, axis=-1)
-    predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
-    output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
-    return output_losses
-
-
-def single_class_loss_fn(predicted_logits, logits, target=0):
-    # This loss function only cares about correctly predicting whether the output
-    # is a specific digit (like zero) or not.
-    # It combines the probabilities for all non-zero classes
-    # into a single "non-zero" class. Assumes that output_dim of the abstraction is 2.
-    assert predicted_logits.ndim == logits.ndim == 2
-    assert logits.shape[-1] == 10, logits.shape
-    assert predicted_logits.shape[-1] == 2, predicted_logits.shape
-    assert predicted_logits.shape[0] == logits.shape[0]
-
-    all_probs = jax.nn.softmax(logits, axis=-1)
-    target_probs = all_probs[:, target]
-    non_target_probs = all_probs[:, :target].sum(axis=-1) + all_probs[
-        :, target + 1 :
-    ].sum(-1)
-    probs = jnp.stack([non_target_probs, target_probs], axis=-1)
-    logprobs = jnp.log(probs)
-    predicted_logprobs = jax.nn.log_softmax(predicted_logits, axis=-1)
-    output_losses = (probs * (logprobs - predicted_logprobs)).sum(axis=-1)
-    return output_losses
-
-
-OUTPUT_LOSS_FNS: dict[str, Callable] = {
-    "kl": kl_loss_fn,
-    "single_class": single_class_loss_fn,
-}
-
-
-def norm(x):
+def norm(x: torch.Tensor):
     """Compute the L2 norm along all but the first axis."""
-    # Can't use jnp.linalg.norm because it only supporst up to two axes.
-    return jnp.sqrt((x**2).sum(axis=tuple(range(1, x.ndim))))
+    return torch.norm(x, p=2, dim=tuple(range(1, x.ndim)))
 
 
 def compute_losses(
-    params, state, batch, output_loss_fn: Callable, return_batch=False, layerwise=False
+    abstraction_model: Abstraction,
+    batch: tuple[torch.Tensor, dict[str, torch.Tensor]],
+    return_batch=False,
+    layerwise=False,
 ):
-    logits, activations = batch
-    abstractions, predicted_abstractions, predicted_logits = state.apply_fn(
-        {"params": params}, activations
-    )
-    norms = jax.tree_map(norm, abstractions)
-    norms = jax.tree_map(lambda x: x.mean(), norms)
-    avg_norm = sum(norms) / len(norms)
-    assert isinstance(abstractions, list)
-    assert isinstance(predicted_abstractions, list)
-    assert len(abstractions) == len(predicted_abstractions) + 1
-    b, *_ = abstractions[0].shape
-    assert logits.shape[0] == b
-    assert predicted_logits.shape[0] == b
-
-    output_losses = output_loss_fn(predicted_logits, logits)
-    output_loss = output_losses.mean()
+    _, activations = batch
+    abstractions, predicted_abstractions = abstraction_model(activations)
 
     # Consistency loss:
-    layer_losses = []
-    # Skip the first abstraction, since there's no prediction for that
-    for actual_abstraction, predicted_abstraction in zip(
-        abstractions[1:], predicted_abstractions
-    ):
-        actual_abstraction = actual_abstraction.reshape(b, -1)
-        predicted_abstraction = predicted_abstraction.reshape(b, -1)
+    layer_losses = {}
+    for k in abstractions:
+        predicted_abstraction = predicted_abstractions[k]
+        if predicted_abstraction is None:
+            # We didn't make a prediction for this one
+            continue
+        actual_abstraction = abstractions[k]
+        batch_size = actual_abstraction.shape[0]
+        actual_abstraction = actual_abstraction.view(batch_size, -1)
+        predicted_abstraction = predicted_abstraction.view(batch_size, -1)
         # Cosine distance can be NaN if one of the inputs is exactly zero
         # which is why we need the eps (which sets cosine distance to 1 in that case).
         # This doesn't happen in realistic scenarios, but in tests with very small
         # hidden dimensions and ReLUs, it's possible.
-        losses = optax.cosine_distance(
-            predicted_abstraction, actual_abstraction, epsilon=1e-6
-        )
-        layer_losses.append(losses)
+        predicted_abstraction = F.normalize(predicted_abstraction, dim=1, eps=1e-6)
+        actual_abstraction = F.normalize(actual_abstraction, dim=1, eps=1e-6)
+        losses = 1 - (predicted_abstraction * actual_abstraction).sum(dim=1)
+        layer_losses[k] = losses
 
     consistency_losses = jnp.stack(layer_losses, axis=0).mean(axis=0)
     consistency_losses /= len(predicted_abstractions)
@@ -113,10 +63,9 @@ def compute_losses(
         return layer_losses
 
     if return_batch:
-        return output_losses + consistency_losses
+        return consistency_losses
 
-    consistency_loss = consistency_losses.mean()
-    loss = output_loss + consistency_loss
+    loss = consistency_losses.mean()
 
     return loss, (output_loss, consistency_loss, avg_norm)
 
@@ -195,8 +144,6 @@ class AbstractionDetector(AnomalyDetector):
     def __init__(
         self,
         model: Model,
-        params,
-        rng,
         abstraction: Abstraction,
         abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
         output_loss_fn: str = "kl",
@@ -206,9 +153,7 @@ class AbstractionDetector(AnomalyDetector):
         self.abstraction = abstraction
         self.abstraction_state = abstraction_state
         self.output_loss_fn = output_loss_fn
-        super().__init__(
-            model, params, rng, max_batch_size=max_batch_size, save_path=save_path
-        )
+        super().__init__(model, max_batch_size=max_batch_size, save_path=save_path)
 
     def train(
         self,

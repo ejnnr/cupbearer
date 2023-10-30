@@ -1,13 +1,12 @@
-import jax.numpy as jnp
+import torch
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from cupbearer.data import numpy_collate
-from cupbearer.detectors.anomaly_detector import AnomalyDetector
+from cupbearer.detectors.anomaly_detector import ActivationBasedDetector
 from cupbearer.detectors.mahalanobis.helpers import mahalanobis, update_covariance
 
 
-class MahalanobisDetector(AnomalyDetector):
+class MahalanobisDetector(ActivationBasedDetector):
     def train(
         self,
         dataset,
@@ -22,15 +21,14 @@ class MahalanobisDetector(AnomalyDetector):
             dataset,
             batch_size=batch_size,
             shuffle=False,
-            collate_fn=numpy_collate,
         )
-        example_inputs = next(iter(data_loader))
-        _, example_activations = self._model(example_inputs)
-        # For each layer, get the number of entries of activations (without batch dim)
-        activation_sizes = [x[0].size for x in example_activations]
-        means = [jnp.zeros(size) for size in activation_sizes]
-        Cs = [jnp.zeros((size, size)) for size in activation_sizes]
-        ns = [0 for _ in activation_sizes]
+        example_batch = next(iter(data_loader))
+        _, example_activations = self.get_activations(example_batch)
+
+        activation_sizes = {k: v.numel() for k, v in example_activations.items()}
+        means = {k: torch.zeros(size) for k, size in activation_sizes.items()}
+        Cs = {k: torch.zeros((size, size)) for k, size in activation_sizes.items()}
+        ns = {k: 0 for k in activation_sizes.keys()}
 
         # TODO: could consider computing a separate mean for each class,
         # I think that's more standard for OOD detection in classification,
@@ -41,29 +39,30 @@ class MahalanobisDetector(AnomalyDetector):
         for i, batch in enumerate(data_loader):
             if max_batches and i >= max_batches:
                 break
-            _, activations = self._model(batch)
-            # TODO: use jit compilation
-            for i, activation in enumerate(activations):
+            _, activations = self.get_activations(batch)
+
+            for k, activation in activations.items():
                 # Flatten the activations to (batch, dim)
                 activation = activation.reshape(activation.shape[0], -1)
-                means[i], Cs[i], ns[i] = update_covariance(
-                    means[i], Cs[i], ns[i], activation
+                means[k], Cs[k], ns[k] = update_covariance(
+                    means[k], Cs[k], ns[k], activation
                 )
 
         self.means = means
-        self.covariances = [C / (n - 1) for C, n in zip(Cs, ns)]
-        self.inv_covariances = [
-            jnp.linalg.pinv(C, rcond=rcond, hermitian=True) for C in self.covariances
-        ]
+        self.covariances = {k: C / (ns[k] - 1) for k, C in Cs.items()}
+        self.inv_covariances = {
+            k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
+            for k, C in self.covariances.items()
+        }
         self.inv_diag_covariances = None
         if relative:
-            self.inv_diag_covariances = [
-                jnp.where(jnp.diag(C) > rcond, 1 / jnp.diag(C), 0)
-                for C in self.covariances
-            ]
+            self.inv_diag_covariances = {
+                k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
+                for k, C in self.covariances.items()
+            }
 
     def layerwise_scores(self, batch):
-        _, activations = self._model(batch)
+        _, activations = self.get_activations(batch)
         return mahalanobis(
             activations,
             self.means,

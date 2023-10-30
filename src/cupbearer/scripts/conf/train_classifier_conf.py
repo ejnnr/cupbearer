@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from cupbearer.data import BackdoorData, DatasetConfig, ValidationConfig, WanetBackdoor
-from cupbearer.models import CNN, MLP, ModelConfig
+from cupbearer.models import CNNConfig, MLPConfig, ModelConfig
 from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
 from cupbearer.utils.scripts import DirConfig, ScriptConfig
@@ -32,7 +32,7 @@ class Config(ScriptConfig):
     def __post_init__(self):
         super().__post_init__()
         # HACK: Need to add new architectures here as they get implemented.
-        if isinstance(self.model, (MLP, CNN)):
+        if isinstance(self.model, (MLPConfig, CNNConfig)):
             self.model.output_dim = self.num_classes
 
         # For datasets that are not necessarily deterministic based only on
