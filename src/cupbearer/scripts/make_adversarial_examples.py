@@ -5,7 +5,6 @@ import jax
 import jax.numpy as jnp
 import matplotlib.pyplot as plt
 import optax
-from cupbearer.data import numpy_collate
 from cupbearer.data.adversarial import fgsm
 from cupbearer.scripts.conf.make_adversarial_examples_conf import Config
 from cupbearer.utils import utils
@@ -27,7 +26,6 @@ def main(cfg: Config):
         dataset,
         batch_size=cfg.batch_size,
         shuffle=False,
-        collate_fn=numpy_collate,
     )
 
     adv_examples = []

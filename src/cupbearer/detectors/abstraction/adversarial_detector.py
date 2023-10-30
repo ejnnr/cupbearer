@@ -62,7 +62,7 @@ class AdversarialAbstractionDetector(AbstractionDetector):
         self.train_loader = DataLoader(
             dataset=train_dataset,
             batch_size=self.num_train_samples,
-            collate_fn=abstraction_collate(self.model, self.params),
+            collate_fn=abstraction_collate(self.model),
             drop_last=True,
         )
         # Infinite version of the dataloader:

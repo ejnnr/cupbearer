@@ -6,7 +6,6 @@ import optax
 from jax import lax
 from torch.utils.data import DataLoader
 
-from cupbearer.data import numpy_collate
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.detectors.config import DetectorConfig, TrainConfig
 from cupbearer.utils import trainer
@@ -68,7 +67,6 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         clean_loader = DataLoader(
             dataset=clean_dataset,
             batch_size=batch_size,
-            collate_fn=numpy_collate,
         )
 
         # Finetune the model on the clean dataset

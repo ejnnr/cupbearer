@@ -2,13 +2,9 @@ import os
 from dataclasses import dataclass
 from typing import Tuple
 
-import numpy as np
-
-# We use torch to generate random numbers, to keep things consistent
-# with torchvision transforms.
 import torch
 from loguru import logger
-from scipy.ndimage import map_coordinates
+from torch.nn.functional import interpolate
 
 from ._shared import Transform
 
@@ -40,22 +36,21 @@ class CornerPixelBackdoor(Transform):
             "bottom-right",
         ], "Invalid corner specified"
 
-    def __call__(self, sample: Tuple[np.ndarray, int]):
+    def __call__(self, sample: Tuple[torch.Tensor, int]):
         img, target = sample
 
         # No backdoor, don't do anything
         if torch.rand(1) > self.p_backdoor:
             return img, target
 
-        # Note that channel dimension is last.
         if self.corner == "top-left":
-            img[0, 0] = 1
+            img[:, 0, 0] = 1
         elif self.corner == "top-right":
-            img[-1, 0] = 1
+            img[:, -1, 0] = 1
         elif self.corner == "bottom-left":
-            img[0, -1] = 1
+            img[:, 0, -1] = 1
         elif self.corner == "bottom-right":
-            img[-1, -1] = 1
+            img[:, -1, -1] = 1
 
         return img, self.target_class
 
@@ -69,13 +64,13 @@ class NoiseBackdoor(Transform):
     def __post_init__(self):
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
 
-    def __call__(self, sample: Tuple[np.ndarray, int]):
+    def __call__(self, sample: Tuple[torch.Tensor, int]):
         img, target = sample
         if torch.rand(1) <= self.p_backdoor:
-            assert np.all(img <= 1), "Image not in range [0, 1]"
-            noise = np.random.normal(0, self.std, img.shape)
+            assert torch.all(img <= 1), "Image not in range [0, 1]"
+            noise = torch.normal(0, self.std, img.shape)
             img = img + noise
-            img = np.clip(img, 0, 1)
+            img = torch.clamp(img, 0, 1)
 
             target = self.target_class
 
@@ -102,7 +97,7 @@ class WanetBackdoor(Transform):
 
     @staticmethod
     def _get_savefile_fullpath(basepath):
-        return os.path.join(basepath, "wanet_backdoor.npy")
+        return os.path.join(basepath, "wanet_backdoor.pt")
 
     def store(self, basepath):
         super().store(basepath)
@@ -113,50 +108,41 @@ class WanetBackdoor(Transform):
         # by pre-computing and saving the full flow field instead.
         if self._warping_field is None:
             raise RuntimeError("Can't store warping field, it hasn't been compute yet.")
-        np.save(self._get_savefile_fullpath(basepath), self._warping_field)
+        torch.save(self._get_savefile_fullpath(basepath), self._warping_field)
 
     def load(self, basepath):
         super().load(basepath)
         logger.debug(
             f"Loading warping field from {self._get_savefile_fullpath(basepath)}"
         )
-        self._warping_field = np.load(self._get_savefile_fullpath(basepath))
+        self._warping_field = torch.load(self._get_savefile_fullpath(basepath))
 
     def warping_field(self, px, py):
         if self._warping_field is None:
             logger.debug("Generating new warping field")
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
-            control_grid = 2 * np.random.rand(*control_grid_shape) - 1
-            control_grid = control_grid / np.mean(np.abs(control_grid))
+            control_grid = 2 * torch.rand(*control_grid_shape) - 1
+            control_grid = control_grid / control_grid.abs().mean()
             # N.B. the 0.5 comes from how the original did their rescaling, see
             # https://github.com/ejnnr/cupbearer/pull/2#issuecomment-1688338610
             control_grid = control_grid * 0.5 * self.warping_strength
             assert control_grid.shape == control_grid_shape
             # Scale control grid to size of image
-            field = np.stack(
-                [
-                    map_coordinates(  # map_coordinates and upsample diffs slightly
-                        input=grid,
-                        coordinates=np.mgrid[
-                            0 : (self.control_grid_width - 1) : (py * 1j),
-                            0 : (self.control_grid_width - 1) : (px * 1j),
-                        ],
-                        order=3,
-                        mode="nearest",
-                    )
-                    for grid in control_grid
-                ],
-                axis=0,
-            )
+            field = interpolate(
+                control_grid.unsqueeze(0),
+                size=(py, px),
+                mode="bilinear",
+                align_corners=False,
+            ).squeeze(0)
             # Create coordinates by adding to identity field
-            field = field + np.mgrid[0:py, 0:px]
+            field = field + torch.meshgrid(torch.arange(py), torch.arange(px))
 
             self._warping_field = field
 
         assert self._warping_field.shape == (2, py, px)
         return self._warping_field
 
-    def __call__(self, sample: Tuple[np.ndarray, int]):
+    def __call__(self, sample: Tuple[torch.Tensor, int]):
         img, target = sample
 
         if img.ndim == 3:
@@ -166,12 +152,12 @@ class WanetBackdoor(Transform):
                 "Images are expected to have two spatial dimensions and channels last."
             )
 
-        rand_sample = np.random.rand(1)
+        rand_sample = torch.rand(1)
         if rand_sample <= self.p_backdoor + self.p_noise:
             warping_field = self.warping_field(px, py)
             if rand_sample < self.p_noise:
                 # If noise mode
-                noise = 2 * np.random.rand(*warping_field.shape) - 1
+                noise = 2 * torch.rand(*warping_field.shape) - 1
                 warping_field = warping_field + noise
             else:
                 # If adversary mode
@@ -181,26 +167,27 @@ class WanetBackdoor(Transform):
             if self.grid_rescale != 1.0:
                 warping_field = warping_field * self.grid_rescale + (
                     1 - self.grid_rescale
-                ) / np.array([py, px]).reshape(2, 1, 1)
-            warping_field = np.clip(
+                ) / torch.tensor([py, px]).view(2, 1, 1)
+            warping_field = torch.clamp(
                 warping_field,
-                a_min=0,
-                a_max=np.array([py, px]).reshape(2, 1, 1),
+                min=0,
+                max=torch.tensor([py, px]).view(2, 1, 1),
             )
 
             # Perform warping
-            img = np.stack(
+            img = torch.stack(
                 [
-                    map_coordinates(  # map_coordinates and interpolate diffs slightly
-                        input=img_channel,
-                        coordinates=warping_field,
-                        order=1,
-                        mode="nearest",  # equivalent to clipping to borders?
-                        prefilter=False,
+                    interpolate(
+                        img_channel.unsqueeze(0).unsqueeze(0),
+                        size=warping_field.shape[1:],
+                        mode="bilinear",
+                        align_corners=False,
                     )
-                    for img_channel in np.moveaxis(img, -1, 0)
+                    .squeeze(0)
+                    .squeeze(0)
+                    for img_channel in img.permute(2, 0, 1)
                 ],
-                axis=-1,
+                dim=-1,
             )
 
         assert img.shape == (py, px, cs)

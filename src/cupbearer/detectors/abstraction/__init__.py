@@ -6,7 +6,7 @@ from cupbearer.data import DatasetConfig
 from cupbearer.detectors.abstraction.adversarial_detector import (
     AdversarialAbstractionDetector,
 )
-from cupbearer.models.computations import Model
+from cupbearer.models.models import Model
 from cupbearer.utils.config_groups import config_group, register_config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
 from cupbearer.utils.utils import BaseConfig, get_object

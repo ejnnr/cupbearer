@@ -1,9 +1,8 @@
 from cupbearer.utils.config_groups import register_config_group, register_config_option
 
-from ._shared import DatasetConfig, ToNumpy, TrainDataFromRun, Transform
+from ._shared import DatasetConfig, ToTensor, TrainDataFromRun, Transform
 from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
-from ._shared import numpy_collate as numpy_collate
 from .adversarial import AdversarialExampleConfig
 from .backdoors import CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
@@ -20,7 +19,7 @@ DATASETS = {
 }
 
 TRANSFORMS = {
-    "to_numpy": ToNumpy,
+    "to_tensor": ToTensor,
     "corner": CornerPixelBackdoor,
     "noise": NoiseBackdoor,
     "wanet": WanetBackdoor,
