@@ -206,12 +206,16 @@ def test_backdoor_img_changes(clean_image_config, BackdoorConfig):
             p_backdoor=1.0,
         ),
     )
-    for (clean_img, _), (anomalous_img, _) in zip(
+    for clean_sample, (anomalous_img, _) in zip(
         clean_config.build(),
         anomalous_config.build(),
     ):
+        clean_img, _ = clean_sample
+
         # Check that something has changed
-        assert not np.all(clean_img == anomalous_img)
+        assert clean_img is not anomalous_config.backdoor(clean_sample)[0]
+        assert np.any(clean_img != anomalous_config.backdoor(clean_sample)[0])
+        assert np.any(clean_img != anomalous_img)
 
         # Check that pixel values still in valid range
         assert np.min(clean_img) >= 0

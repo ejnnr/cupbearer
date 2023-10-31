@@ -32,6 +32,9 @@ class Backdoor(Transform, ABC):
             return sample
 
         img, label = sample
+
+        # Do changes out of place
+        img = np.copy(img)
         return self.inject_backdoor(img), self.target_class
 
 
