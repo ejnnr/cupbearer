@@ -9,7 +9,7 @@ from .hooked_model import HookedModel
 class MLP(HookedModel):
     def __init__(
         self,
-        input_shape: list[int] | tuple[int],
+        input_shape: list[int] | tuple[int, ...],
         output_dim: int,
         hidden_dims: list[int],
     ):
@@ -45,7 +45,7 @@ class MLP(HookedModel):
 class CNN(HookedModel):
     def __init__(
         self,
-        input_shape: list[int] | tuple[int],
+        input_shape: list[int] | tuple[int, ...],
         output_dim: int,
         channels: list[int],
         dense_dims: list[int],
