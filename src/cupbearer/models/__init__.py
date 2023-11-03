@@ -5,7 +5,7 @@ import torch
 
 from cupbearer.utils.config_groups import register_config_group
 from cupbearer.utils.scripts import load_config
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin, load, mutable_field
+from cupbearer.utils.utils import BaseConfig, PathConfigMixin, mutable_field
 
 from .hooked_model import HookedModel
 from .models import CNN, MLP
@@ -26,7 +26,10 @@ class StoredModel(ModelConfig, PathConfigMixin):
 
         # Our convention is that LightningModules store the actual pytorch model
         # as a `model` attribute.
-        state_dict = torch.load(self.get_path() / "model.ckpt")["model"]
+        state_dict = torch.load(self.get_path() / "model.ckpt")["state_dict"]
+        # We want the state_dict for the 'model' submodule, so remove
+        # the 'model.' prefix from the keys.
+        state_dict = {k[6:]: v for k, v in state_dict.items() if k.startswith("model.")}
         assert isinstance(model, torch.nn.Module)
         model.load_state_dict(state_dict)
         return model

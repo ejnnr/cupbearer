@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Optional
 
 import numpy as np
 import sklearn.metrics
@@ -34,11 +33,7 @@ class AnomalyDetector(ABC):
         self.trained = False
 
     def _model(self, batch):
-        # batch may contain labels or other info, if so we strip it out
-        if isinstance(batch, (tuple, list)):
-            inputs = batch[0]
-        else:
-            inputs = batch
+        inputs = utils.inputs_from_batch(batch)
         return self.model.get_activations(inputs)
 
     @abstractmethod
@@ -113,8 +108,6 @@ class AnomalyDetector(ABC):
         assert 0 < histogram_percentile <= 100
 
         scores = []
-        layer_scores = 0
-        num_elements = 0
         # Normal=0, Anomalous=1
         labels = []
         if pbar:
@@ -141,8 +134,6 @@ class AnomalyDetector(ABC):
                 layer_scores = layer_scores + new_scores.sum(axis=1)
             num_elements += scores[-1].shape[0]
             labels.append(new_labels)
-        # We're also taking the mean over the dataset:
-        layer_scores = layer_scores / num_elements
         scores = np.concatenate(scores)
         labels = np.concatenate(labels)
 
@@ -188,64 +179,6 @@ class AnomalyDetector(ABC):
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
         plt.savefig(self.save_path / "histogram.pdf")
-
-        sample_loader = DataLoader(
-            test_dataset,
-            batch_size=9,
-            # Shuffling to ideally get a mix of normal and anomalous data
-            shuffle=True,
-        )
-        sample_inputs, _ = next(iter(sample_loader))
-        if isinstance(sample_inputs, (tuple, list)):
-            sample_inputs = sample_inputs[0]
-
-        # Can only plot if we have layerwise scores (which some methods
-        # don't support)
-        if isinstance(layer_scores, np.ndarray):
-            self.plot(layer_scores, inputs=sample_inputs)
-
-    def _get_drawable(self, layer_scores, inputs):
-        return self.model.get_drawable(layer_scores=layer_scores, inputs=inputs)
-
-    def plot(
-        self,
-        layer_scores: Optional[np.ndarray] = None,
-        inputs: Optional[np.ndarray] = None,
-    ):
-        try:
-            from iceberg import Colors, Renderer
-        except ImportError:
-            logger.info(
-                "Skipping architecture visualization because iceberg is missing"
-            )
-            return
-
-        if not self.save_path:
-            raise ValueError("No save path set")
-
-        plot = self._get_drawable(layer_scores, inputs)
-        plot = plot.pad(10).scale(2)
-
-        renderer = Renderer()
-        renderer.render(plot, background_color=Colors.WHITE)
-        renderer.save_rendered_image(self.save_path / "architecture.png")
-
-    def layer_anomalies(self, dataset: Dataset):
-        dataloader = DataLoader(
-            dataset,
-            batch_size=self.max_batch_size,
-            shuffle=False,
-        )
-        scores = 0
-        num_elements = 0
-        for batch in dataloader:
-            new_scores = self.layerwise_scores(batch)
-            # Sum over batch axis
-            scores = scores + new_scores.sum(dim=1)
-            num_elements += new_scores.shape[1]
-        # We're also taking the mean over the dataset
-        scores = scores / num_elements
-        return scores
 
     @abstractmethod
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:

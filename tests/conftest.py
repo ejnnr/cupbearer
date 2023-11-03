@@ -1,5 +1,20 @@
+import os
+
 import pytest
 from _pytest.tmpdir import _mk_tmp
+
+# Hack to make pytest crash instead of catching exceptions. This is useful for debugging
+# tests in VSCode, because otherwise the debugger won't stop on uncaught exceptions.
+# See https://stackoverflow.com/questions/62419998/how-can-i-get-pytest-to-not-catch-exceptions
+if os.getenv("_PYTEST_RAISE", "0") != "0":
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_exception_interact(call):
+        raise call.excinfo.value
+
+    @pytest.hookimpl(tryfirst=True)
+    def pytest_internalerror(excinfo):
+        raise excinfo.value
 
 
 def pytest_addoption(parser):
