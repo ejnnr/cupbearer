@@ -37,7 +37,7 @@ class HookedModel(torch.nn.Module):
 
     def call_submodule(self, name: str, x):
         """Call a submodule in a way that captures its activations.
-        They will be added under their own namespace, starting with '{name}.'
+        They will be added under their own namespace, starting with '{name}_'
         """
         submodule = getattr(self, name)
         if not self._capturing:
@@ -52,9 +52,9 @@ class HookedModel(torch.nn.Module):
             # the namespace part to convert them into the right names from the
             # submodule's perspective.
             subnames = {
-                n[len(f"{name}.") :] for n in self._names if n.startswith(f"{name}.")
+                n[len(f"{name}_") :] for n in self._names if n.startswith(f"{name}_")
             }
         x, activations = submodule.get_activations(x, subnames)
         for subname, activation in activations.items():
-            self.store(f"{name}.{subname}", activation)
+            self.store(f"{name}_{subname}", activation)
         return x

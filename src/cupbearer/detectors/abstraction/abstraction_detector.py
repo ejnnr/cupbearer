@@ -1,36 +1,28 @@
 from pathlib import Path
-from typing import Optional
+from typing import Any, Callable, Optional
 
+import lightning as L
 import torch
 import torch.nn.functional as F
-from loguru import logger
 from torch.utils.data import DataLoader, Dataset
 
-from cupbearer.detectors.abstraction.abstraction import (
-    Abstraction,
-    abstraction_collate,
+from cupbearer.detectors.abstraction.abstraction import Abstraction
+from cupbearer.detectors.anomaly_detector import (
+    ActivationBasedDetector,
 )
-from cupbearer.detectors.anomaly_detector import AnomalyDetector
-from cupbearer.utils import trainer
+from cupbearer.models import HookedModel
 from cupbearer.utils.optimizers import OptimizerConfig
-
-
-def norm(x: torch.Tensor):
-    """Compute the L2 norm along all but the first axis."""
-    return torch.norm(x, p=2, dim=tuple(range(1, x.ndim)))
 
 
 def compute_losses(
     abstraction_model: Abstraction,
-    batch: tuple[torch.Tensor, dict[str, torch.Tensor]],
-    return_batch=False,
+    activations: dict[str, torch.Tensor],
     layerwise=False,
-):
-    _, activations = batch
+) -> dict[str, torch.Tensor] | torch.Tensor:
     abstractions, predicted_abstractions = abstraction_model(activations)
 
     # Consistency loss:
-    layer_losses = {}
+    layer_losses: dict[str, torch.Tensor] = {}
     for k in abstractions:
         predicted_abstraction = predicted_abstractions[k]
         if predicted_abstraction is None:
@@ -49,111 +41,64 @@ def compute_losses(
         losses = 1 - (predicted_abstraction * actual_abstraction).sum(dim=1)
         layer_losses[k] = losses
 
-    consistency_losses = jnp.stack(layer_losses, axis=0).mean(axis=0)
-    consistency_losses /= len(predicted_abstractions)
-
     if layerwise:
-        layer_losses = jnp.stack(layer_losses, axis=0)
-        if not return_batch:
-            # Take mean over batch dimension
-            layer_losses = layer_losses.mean(axis=1)
-            layer_losses = jnp.concatenate([layer_losses, jnp.array([output_loss])])
-        else:
-            layer_losses = jnp.concatenate([layer_losses, output_losses[None]])
         return layer_losses
 
-    if return_batch:
-        return consistency_losses
-
-    loss = consistency_losses.mean()
-
-    return loss, (output_loss, consistency_loss, avg_norm)
+    n = len(layer_losses)
+    assert n > 0
+    return sum(x for x in layer_losses.values()) / n  # type: ignore
 
 
-class AbstractionTrainer(trainer.TrainerModule):
+class AbstractionModule(L.LightningModule):
     def __init__(
         self,
-        output_loss_fn: str = "kl",
-        **kwargs,
+        get_activations: Callable[[torch.Tensor], tuple[Any, dict[str, torch.Tensor]]],
+        abstraction: Abstraction,
+        optim_cfg: OptimizerConfig,
     ):
-        super().__init__(
-            **kwargs,
-        )
-        # The output loss function describes how to compute the loss between the
-        # actual output and the predicted one. It should take a batch of predicted
-        # outputs and a batch of actual outputs and return a *batch* of losses.
-        # The main point is to allow ignoring certain differences in the output
-        # that we aren't aiming to predict
-        self.output_loss_fn = OUTPUT_LOSS_FNS[output_loss_fn]
+        super().__init__()
+        self.save_hyperparameters(ignore=["get_activations", "abstraction"])
 
-    def create_functions(self):
-        def train_step(state, batch):
-            def loss_fn(params):
-                return compute_losses(
-                    params, state, batch, output_loss_fn=self.output_loss_fn
-                )
+        self.get_activations = get_activations
+        self.abstraction = abstraction
+        self.optim_cfg = optim_cfg
 
-            (loss, (output_loss, consistency_loss, _)), grads = jax.value_and_grad(
-                loss_fn, has_aux=True
-            )(state.params)
+    def _shared_step(self, batch):
+        _, activations = self.get_activations(batch)
+        losses = compute_losses(self.abstraction, activations)
+        assert isinstance(losses, torch.Tensor)
+        assert losses.ndim == 1 and len(losses) == len(batch)
+        loss = losses.mean(0)
+        return loss
 
-            state = state.apply_gradients(grads=grads)
-            metrics = {
-                "loss": loss,
-                "output_loss": output_loss,
-                "consistency_loss": consistency_loss,
-            }
-            return state, metrics
+    def training_step(self, batch, batch_idx):
+        loss = self._shared_step(batch)
+        self.log("train/loss", loss, prog_bar=True)
+        return loss
 
-        def eval_step(state, batch):
-            # Note that this class expects the eval dataloader to return not just
-            # logits/activations, but also the original data. That's necessary
-            # to compute metrics on specific clases (zero in this case).
-            logits, activations = batch
-            (
-                loss,
-                (output_loss, consistency_loss, _),
-            ) = compute_losses(  # type: ignore
-                state.params,
-                state,
-                (logits, activations),
-                output_loss_fn=self.output_loss_fn,
-            )
-            metrics = {
-                "loss": loss,
-                "output_loss": output_loss,
-                "consistency_loss": consistency_loss,
-            }
-            return metrics
-
-        return train_step, eval_step
-
-    def on_training_epoch_end(self, epoch_idx, metrics):
-        logger.info(self._prettify_metrics(metrics))
-
-    def on_validation_epoch_end(self, epoch_idx: int, metrics, val_loader):
-        logger.info(self._prettify_metrics(metrics))
-
-    def _prettify_metrics(self, metrics):
-        return "\n" + "\n".join(f"{k}: {v:.4f}" for k, v in metrics.items())
+    def configure_optimizers(self):
+        # Note we only optimize over the abstraction parameters, the model is frozen
+        return self.optim_cfg.build(self.abstraction.parameters())
 
 
-class AbstractionDetector(AnomalyDetector):
+class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
 
     def __init__(
         self,
-        model: Model,
+        model: HookedModel,
         abstraction: Abstraction,
-        abstraction_state: Optional[trainer.InferenceState | trainer.TrainState] = None,
-        output_loss_fn: str = "kl",
         max_batch_size: int = 4096,
         save_path: str | Path | None = None,
     ):
         self.abstraction = abstraction
-        self.abstraction_state = abstraction_state
-        self.output_loss_fn = output_loss_fn
-        super().__init__(model, max_batch_size=max_batch_size, save_path=save_path)
+        names = list(abstraction.tau_maps.keys())
+        super().__init__(
+            model,
+            activation_names=names,
+            max_batch_size=max_batch_size,
+            save_path=save_path,
+        )
 
     def train(
         self,
@@ -166,114 +111,50 @@ class AbstractionDetector(AnomalyDetector):
         debug: bool = False,
         **kwargs,
     ):
-        # First sample, only input without label.
-        # Also need to add a batch dimension
-        example_input = dataset[0][0][None]
-        _, example_activations = self._model(example_input)
-        self.rng, trainer_rng = jax.random.split(self.rng)
-        trainer = AbstractionTrainer(
-            model=self.abstraction,
-            output_loss_fn=self.output_loss_fn,
-            example_input=example_activations,
-            log_dir=self.save_path,
-            optimizer=optimizer.build(),
-            rng=trainer_rng,
-            **kwargs,
-        )
-        train_loader = DataLoader(
-            dataset=dataset,
-            batch_size=batch_size,
-            # TODO: I think this should plausibly be handled in AbstractionTrainer
-            # now after the refactor.
-            # Or maybe AbstractionTrainer and AbstractionDetector should just be merged.
-            collate_fn=abstraction_collate(self.model, self.params),
-        )
-        val_loaders = {}
-        if validation_datasets is not None:
-            for key, ds in validation_datasets.items():
-                val_loaders[key] = DataLoader(
-                    dataset=ds,
-                    batch_size=self.max_batch_size,
-                    collate_fn=abstraction_collate(self.model, self.params),
-                )
-        trainer.train_model(
-            train_loader=train_loader,
-            val_loaders=val_loaders,
-            test_loaders=None,
-            num_epochs=num_epochs,
-            max_steps=max_steps,
-        )
-        trainer.close_loggers()
+        # Possibly we should store this as a submodule to save optimizers and continue
+        # training later. But as long as we don't actually make use of that,
+        # this is easiest.
+        module = AbstractionModule(self.get_activations, self.abstraction, optimizer)
 
-        self.abstraction_state = trainer.state
+        train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
+        # TODO: implement validation loaders
+        # checkpoint_callback = ModelCheckpoint(
+        #     dirpath=self.save_path,
+        #     filename="detector",
+        # )
+
+        trainer = L.Trainer(
+            max_epochs=num_epochs,
+            max_steps=max_steps or -1,
+            # callbacks=[checkpoint_callback],
+            enable_checkpointing=False,
+            logger=None,
+            default_root_dir=self.save_path,
+        )
+        self.model.eval()
+        # We don't need gradients for base model parameters:
+        required_grad = {}
+        for name, param in self.model.named_parameters():
+            required_grad[name] = param.requires_grad
+            param.requires_grad = False
+        # HACK: by adding the model as a submodule to the LightningModule, it gets
+        # transferred to the same device Lightning uses for everything else
+        # (which seems tricky to do manually).
+        module.model = self.model
+        trainer.fit(model=module, train_dataloaders=train_loader)
+
+        # Restore original requires_grad values:
+        for name, param in self.model.named_parameters():
+            param.requires_grad = required_grad[name]
 
     def layerwise_scores(self, batch):
-        batch = self._model(batch)
-        self._ensure_abstraction_state(batch)
-
-        return compute_losses(
-            params=self.abstraction_state.params,  # type: ignore
-            state=self.abstraction_state,
-            batch=batch,
-            output_loss_fn=OUTPUT_LOSS_FNS[self.output_loss_fn],
-            return_batch=True,
-            layerwise=True,
-        )
-
-    def _ensure_abstraction_state(self, batch):
-        if self.abstraction_state is None:
-            logger.info("Randomly initializing abstraction.")
-            self.rng, model_rng, init_rng = jax.random.split(self.rng, 3)
-            output, activations = batch
-            variables = self.abstraction.init(init_rng, activations)
-            self.abstraction_state = trainer.InferenceState(
-                self.abstraction.apply,
-                params=variables["params"],
-                batch_stats=variables.get("batch_stats", None),
-                rng=model_rng,
-            )
-
-    def _get_drawable(self, layer_scores, inputs):
-        assert self.abstraction is not None
-        return self.abstraction.get_drawable(
-            full_model=self.model, layer_scores=layer_scores, inputs=inputs
-        )
+        _, activations = self._model(batch)
+        return compute_losses(self.abstraction, activations, layerwise=True)
 
     def _get_trained_variables(self, saving: bool = False):
-        state = self.abstraction_state
-        if state is None:
-            return {}
-        result = {
-            "params": state.params,
-            "batch_stats": state.batch_stats,
-        }
-
-        # We currently never save the optimizer to disk, mainly because the serizalition
-        # implementation in utils.save() wouldn't work for tx.
-        # TODO: now that there's pickle support, may want to revisit that.
-        if isinstance(state, trainer.TrainState) and not saving:
-            result["step"] = state.step
-            result["tx"] = state.tx
-            result["opt_state"] = state.opt_state
-
-        return result
+        # TODO: for saving=False we should return optimizer here if we want to make
+        # the finetuning API work, I think
+        return self.abstraction.state_dict()
 
     def _set_trained_variables(self, variables):
-        self.rng, model_rng = jax.random.split(self.rng)
-        if "opt_state" in variables:
-            self.abstraction_state = trainer.TrainState(
-                apply_fn=self.abstraction.apply,
-                step=variables["step"],
-                params=FrozenDict(variables["params"]),
-                batch_stats=variables["batch_stats"],
-                tx=variables["tx"],
-                opt_state=variables["opt_state"],
-                rng=model_rng,
-            )
-        else:
-            self.abstraction_state = trainer.InferenceState(
-                apply_fn=self.abstraction.apply,
-                params=FrozenDict(variables["params"]),
-                batch_stats=variables["batch_stats"],
-                rng=model_rng,
-            )
+        self.abstraction.load_state_dict(variables)

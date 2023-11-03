@@ -34,11 +34,11 @@ class MLP(HookedModel):
         x = x.view(x.shape[0], -1)
         for i, layer in enumerate(self.layers[:-1]):
             x = layer(x)
-            self.store(f"post_linear.{i}", x)
+            self.store(f"post_linear_{i}", x)
             x = F.relu(x)
-            self.store(f"post_relu.{i}", x)
+            self.store(f"post_relu_{i}", x)
         x = self.layers[-1](x)
-        self.store(f"post_linear.{len(self.layers) - 1}", x)
+        self.store(f"post_linear_{len(self.layers) - 1}", x)
         return x
 
 
@@ -82,12 +82,12 @@ class CNN(HookedModel):
     def forward(self, x):
         for i, layer in enumerate(self.conv_layers):
             x = layer(x)
-            self.store(f"conv.post_conv.{i}", x)
+            self.store(f"conv_post_conv_{i}", x)
             x = F.relu(x)
-            self.store(f"conv.post_relu.{i}", x)
+            self.store(f"conv_post_relu_{i}", x)
             x = F.max_pool2d(x, 2)
-            self.store(f"conv.post_pool.{i}", x)
-        x = F.max_pool2d(x, x.shape[-2:])
+            self.store(f"conv_post_pool_{i}", x)
+        x = F.adaptive_max_pool2d(x, (1, 1))
         self.store("post_global_pool", x)
         x = self.call_submodule("mlp", x)
         return x
