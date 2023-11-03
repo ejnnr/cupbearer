@@ -102,13 +102,14 @@ def mlp_abstraction(
     for i, (in_features, out_features) in enumerate(
         zip(abstract_dims[:-1], abstract_dims[1:])
     ):
-        if i < len(abstract_dims):
-            tau_maps[f"post_linear_{i}"] = nn.Linear(full_dims[i], in_features)
-        else:
-            tau_maps[f"post_linear_{i}"] = nn.Identity()
-        if i > 0:
-            # TODO: should potentially include ReLU here, but want to try this version
-            steps[f"post_linear_{i}"] = nn.Linear(in_features, out_features)
+        tau_maps[f"post_linear_{i}"] = nn.Linear(full_dims[i], in_features)
+        # TODO: should potentially include ReLU here, but want to try this version
+        # The i + 1 is needed because steps[name] describes how to compute the
+        # *output* of the layer with name `name`, which is the next one relative
+        # to the one we're currently looking at.
+        steps[f"post_linear_{i + 1}"] = nn.Linear(in_features, out_features)
+
+    tau_maps[f"post_linear_{len(abstract_dims) - 1}"] = nn.Identity()
 
     return tau_maps, steps
 
@@ -123,28 +124,44 @@ def get_default_abstraction(model: HookedModel, size_reduction: int) -> Abstract
         for i, (in_features, out_features) in enumerate(
             zip(abstract_dims[:-1], abstract_dims[1:])
         ):
-            tau_maps[f"post_conv_{i}"] = nn.Conv2d(
+            tau_maps[f"conv_post_conv_{i}"] = nn.Conv2d(
                 model.channels[i],
                 in_features,
                 model.kernel_sizes[i],
                 padding="same",
             )
-            if i > 0:
+            if i < len(abstract_dims) - 1:
                 # TODO: should potentially include ReLU here, but want to try this
-                steps[f"post_conv_{i}"] = nn.Sequential(
+                steps[f"conv_post_conv_{i + 1}"] = nn.Sequential(
                     nn.MaxPool2d(2),
                     nn.Conv2d(
                         in_features, out_features, model.kernel_sizes[i], padding="same"
                     ),
                 )
+        tau_maps[f"conv_post_conv_{len(abstract_dims) - 1}"] = nn.Conv2d(
+            model.channels[-1],
+            abstract_dims[-1],
+            model.kernel_sizes[-1],
+            padding="same",
+        )
 
         mlp_tau_maps, mlp_steps = mlp_abstraction(model.mlp, size_reduction)
         for k, v in mlp_tau_maps.items():
             tau_maps[f"mlp_{k}"] = v
             if k == "post_linear_0":
+                next_mlp_dim = (
+                    model.mlp.hidden_dims[0]
+                    if model.mlp.hidden_dims
+                    else model.mlp.output_dim
+                )
                 # Need to include a global pooling step here first
                 steps[f"mlp_{k}"] = nn.Sequential(
-                    nn.AdaptiveMaxPool2d((1, 1)), nn.Flatten(), mlp_steps[k]
+                    nn.AdaptiveMaxPool2d((1, 1)),
+                    nn.Flatten(),
+                    # Need to create a Linear layer here since from the perspective
+                    # of the MLP abstraction, this is the step from input to first
+                    # activation, which isn't represented.
+                    nn.Linear(abstract_dims[-1], next_mlp_dim),
                 )
             else:
                 steps[f"mlp_{k}"] = mlp_steps[k]
