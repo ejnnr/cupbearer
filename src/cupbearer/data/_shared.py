@@ -1,58 +1,16 @@
-from abc import ABC, abstractmethod, abstractproperty
+from abc import ABC, abstractproperty
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
 from torchvision.transforms.functional import InterpolationMode, resize, to_tensor
 
+from cupbearer.data.transforms import Transform
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig
-
-
-@dataclass
-class Transform(BaseConfig, ABC):
-    @abstractmethod
-    def __call__(self, sample):
-        pass
-
-    def store(self, basepath):
-        """Save transform state to reproduce instance later."""
-        pass
-
-    def load(self, basepath):
-        """Load transform state to reproduce stored instance."""
-        pass
-
-
-@dataclass
-class AdaptedTransform(Transform, ABC):
-    """Adapt a transform designed to work on inputs to work on img, label pairs."""
-
-    @abstractmethod
-    def __img_call__(self, img):
-        pass
-
-    def __rest_call__(self, *rest):
-        return (*rest,)
-
-    def __call__(self, sample):
-        if isinstance(sample, tuple):
-            img, *rest = sample
-        else:
-            img = sample
-            rest = None
-
-        img = self.__img_call__(img)
-
-        if rest is None:
-            return img
-        else:
-            rest = self.__rest_call__(*rest)
-
-        return (img, *rest)
 
 
 @dataclass(kw_only=True)

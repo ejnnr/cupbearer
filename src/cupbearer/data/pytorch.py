@@ -15,7 +15,13 @@ class PytorchConfig(DatasetConfig):
     # convenient to just make it a field here.
     num_classes: int
     train: bool = True
-    transforms: dict[str, Transform] = mutable_field({"to_tensor": ToTensor()})
+    transforms: dict[str, Transform] = mutable_field(
+        {
+            "to_tensor": ToTensor(),
+            "random_crop": None,  # TODO
+            "random_rotation": None,  # TODO
+        }
+    )
 
     @property
     def _dataset_kws(self):
@@ -42,6 +48,12 @@ class MNIST(PytorchConfig):
 class CIFAR10(PytorchConfig):
     name: str = "torchvision.datasets.CIFAR10"
     num_classes: int = 10
+    transforms: dict[str, Transform] = mutable_field(
+        dict(
+            PytorchConfig.transforms,
+            **{"random_horizontal_flip": None},  # TODO
+        )
+    )
 
 
 @dataclass
@@ -49,10 +61,10 @@ class GTSRB(PytorchConfig):
     name: str = "torchvision.datasets.GTSRB"
     num_classes: int = 43
     transforms: dict[str, Transform] = mutable_field(
-        {
-            "resize": Resize(size=(32, 32)),
-            "to_tensor": ToTensor(),
-        }
+        dict(
+            {"resize": Resize(32, 32)},
+            **PytorchConfig.transforms,
+        )
     )
 
     @property
