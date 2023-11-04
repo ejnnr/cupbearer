@@ -19,7 +19,7 @@ class MahalanobisDetector(ActivationBasedDetector):
     ):
         # This entire training method doesn't require gradients, we're just computing
         # averages etc.
-        with torch.no_grad():
+        with torch.inference_mode():
             data_loader = DataLoader(
                 dataset,
                 batch_size=batch_size,

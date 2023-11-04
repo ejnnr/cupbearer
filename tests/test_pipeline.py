@@ -87,21 +87,25 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
 #         assert (tmp_path / "adversarial_abstraction" / file).is_file()
 
 
-# @pytest.mark.slow
-# def train_mahalanobis_advex(classifier_path, tmp_path):
-#     cfg = parse(
-#         train_detector_conf.Config,
-#         args=f"--debug_with_logging --dir.full {tmp_path} "
-#         f"--task adversarial_examples --task.path {classifier_path} "
-#         "--detector mahalanobis",
-#         argument_generation_mode=ArgumentGenerationMode.NESTED,
-#     )
-#     run(train_detector.main, cfg)
-#     assert (tmp_path / "config.yaml").is_file()
-#     assert (tmp_path / "detector.ckpt").is_file()
-#     # Eval outputs:
-#     assert (tmp_path / "histogram.pdf").is_file()
-#     assert (tmp_path / "eval.json").is_file()
+@pytest.mark.slow
+def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
+    # This test doesn't need a backdoored classifier, but we already have one
+    # and it doesn't hurt, so reusing it makes execution faster.
+    cfg = parse(
+        train_detector_conf.Config,
+        args=f"--debug_with_logging --dir.full {tmp_path} "
+        f"--task adversarial_examples --task.path {backdoor_classifier_path} "
+        "--detector mahalanobis",
+        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    )
+    run(train_detector.main, cfg)
+    assert (backdoor_classifier_path / "adv_examples.pt").is_file()
+    assert (backdoor_classifier_path / "adv_examples.pdf").is_file()
+    assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "detector.pt").is_file()
+    # Eval outputs:
+    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "eval.json").is_file()
 
 
 @pytest.mark.slow
