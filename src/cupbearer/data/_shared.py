@@ -227,3 +227,21 @@ class TestDataConfig(DatasetConfig):
         if self.transforms:
             raise ValueError("Transforms are not supported for TestDataConfig.")
         return dataset
+
+
+@dataclass
+class NoData(DatasetConfig):
+    """Dummy class for non-existent datasets.
+
+    This is a workaround because simple_parsing doesn't support None as an option
+    when using subgroups, so we can pass this instead when we mean "no dataset".
+
+    It still needs to be instantiable, but otherwise should raise NotImplementedError
+    on any operation.
+    """
+
+    @property
+    def num_classes(self):
+        raise NotImplementedError
+
+    # build already raises NotImplementedError by default

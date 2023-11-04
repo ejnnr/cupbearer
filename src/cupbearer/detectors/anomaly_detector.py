@@ -112,10 +112,11 @@ class AnomalyDetector(ABC):
         labels = []
         if pbar:
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
-        for batch in test_loader:
-            inputs, new_labels = batch
-            scores.append(self.scores(inputs).detach().cpu().numpy())
-            labels.append(new_labels)
+        with torch.inference_mode():
+            for batch in test_loader:
+                inputs, new_labels = batch
+                scores.append(self.scores(inputs).cpu().numpy())
+                labels.append(new_labels)
         scores = np.concatenate(scores)
         labels = np.concatenate(labels)
 
@@ -166,6 +167,11 @@ class AnomalyDetector(ABC):
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
         """Compute anomaly scores for the given inputs for each layer.
 
+        You can just raise a NotImplementedError here for detectors that don't compute
+        layerwise scores. In that case, you need to override `scores`. For detectors
+        that can compute layerwise scores, you should override this method instead
+        of `scores` since allows some additional metrics to be computed.
+
         Args:
             batch: a batch of input data to the model (potentially including labels).
 
@@ -175,6 +181,10 @@ class AnomalyDetector(ABC):
 
     def scores(self, batch) -> torch.Tensor:
         """Compute anomaly scores for the given inputs.
+
+        If you override this, then your implementation of `layerwise_scores()`
+        needs to raise a NotImplementedError. Implementing both this and
+        `layerwise_scores()` is not supported.
 
         Args:
             batch: a batch of input data to the model (potentially including labels).

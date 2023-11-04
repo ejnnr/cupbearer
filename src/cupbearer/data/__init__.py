@@ -1,10 +1,10 @@
 from cupbearer.utils.config_groups import register_config_group, register_config_option
 
-from ._shared import DatasetConfig, ToTensor, TrainDataFromRun, Transform
+from ._shared import DatasetConfig, NoData, ToTensor, TrainDataFromRun, Transform
 from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
 from .adversarial import AdversarialExampleConfig
-from .backdoors import CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
+from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 
@@ -16,10 +16,14 @@ DATASETS = {
     "from_run": TrainDataFromRun,
     "adversarial": AdversarialExampleConfig,
     "toy_features": ToyFeaturesConfig,
+    "none": NoData,
 }
 
-TRANSFORMS = {
+TRANSFORMS: dict[str, type[Transform]] = {
     "to_tensor": ToTensor,
+}
+
+BACKDOORS = {
     "corner": CornerPixelBackdoor,
     "noise": NoiseBackdoor,
     "wanet": WanetBackdoor,
@@ -27,6 +31,7 @@ TRANSFORMS = {
 
 register_config_group(DatasetConfig, DATASETS)
 register_config_group(Transform, TRANSFORMS)
+register_config_group(Backdoor, BACKDOORS)
 
 # Need to import this after datasets and transforms have been registered,
 # since BackdoorData uses them in config groups.
@@ -34,3 +39,8 @@ register_config_group(Transform, TRANSFORMS)
 from .backdoor_data import BackdoorData  # noqa
 
 register_config_option(DatasetConfig, "backdoor", BackdoorData)
+
+# Similarily ValidationConfig uses DatasetConfig and Backdoor
+from .validation_config import ValidationConfig  # noqa
+
+register_config_group(ValidationConfig, {"default": ValidationConfig})

@@ -4,13 +4,14 @@ from dataclasses import dataclass
 
 from cupbearer.data import DatasetConfig
 from cupbearer.data._shared import Transform
+from cupbearer.data.backdoors import Backdoor
 from cupbearer.utils.config_groups import config_group
 
 
 @dataclass
 class BackdoorData(DatasetConfig):
     original: DatasetConfig = config_group(DatasetConfig)
-    backdoor: Transform = config_group(Transform)
+    backdoor: Backdoor = config_group(Backdoor)
 
     @property
     def num_classes(self):
