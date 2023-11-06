@@ -80,7 +80,7 @@ class Classifier(L.LightningModule):
         for i, name in enumerate(self.test_loader_names):
             self.log(f"{name}/acc_epoch", self.test_accuracy[i])
 
-    def on_validation_epoch_end(self, data_loader_idx):
+    def on_validation_epoch_end(self):
         for i, name in enumerate(self.val_loader_names):
             self.log(f"{name}/acc_epoch", self.val_accuracy[i])
 
@@ -135,10 +135,11 @@ def main(cfg: Config):
     #     )
     metrics_logger = None
     if cfg.dir.path is not None:
-        # For some reason flushing logs is really slow, so don't do it quite as often
         metrics_logger = TensorBoardLogger(
             save_dir=cfg.dir.path, name="", version="", sub_dir="tensorboard"
         )
+        for trafo in cfg.train_data.get_transforms():
+            trafo.store(cfg.dir.path)
 
     trainer = L.Trainer(
         max_epochs=cfg.num_epochs,
@@ -149,7 +150,7 @@ def main(cfg: Config):
     trainer.fit(
         model=classifier,
         train_dataloaders=train_loader,
-        val_dataloaders=val_loaders.values(),
+        val_dataloaders=list(val_loaders.values()),
     )
     # TODO: use training set here
     # trainer.test(model=classifier, dataloaders=val_loaders.values())

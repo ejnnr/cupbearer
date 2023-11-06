@@ -2,6 +2,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import pytest
+import torch
 
 # We shouldn't import TestDataMix directly because that will make pytest think
 # it's a test.
@@ -38,18 +39,19 @@ class DummyImageData(Dataset):
     def __init__(self, length: int, num_classes: int, shape: tuple[int, int]):
         self.length = length
         self.num_classes = num_classes
-        self.img = np.array(
+        self.img = torch.tensor(
             [
                 [[i_y % 2, i_x % 2, (i_x + i_y) % 2] for i_x in range(shape[1])]
                 for i_y in range(shape[0])
             ],
-            dtype=np.float32,
-        )
+            dtype=torch.float32,
+            # Move channel dimension to front
+        ).permute(2, 0, 1)
 
     def __len__(self):
         return self.length
 
-    def __getitem__(self, index) -> tuple[np.ndarray, int]:
+    def __getitem__(self, index) -> tuple[torch.Tensor, int]:
         if index >= self.length:
             raise IndexError
         return self.img, np.random.randint(self.num_classes)
@@ -214,17 +216,17 @@ def test_backdoor_img_changes(clean_image_config, BackdoorConfig):
 
         # Check that something has changed
         assert clean_img is not anomalous_config.backdoor(clean_sample)[0]
-        assert np.any(clean_img != anomalous_config.backdoor(clean_sample)[0])
-        assert np.any(clean_img != anomalous_img)
+        assert torch.any(clean_img != anomalous_config.backdoor(clean_sample)[0])
+        assert torch.any(clean_img != anomalous_img)
 
         # Check that pixel values still in valid range
-        assert np.min(clean_img) >= 0
-        assert np.min(anomalous_img) >= 0
-        assert np.max(clean_img) <= 1
-        assert np.max(anomalous_img) <= 1
+        assert torch.min(clean_img) >= 0
+        assert torch.min(anomalous_img) >= 0
+        assert torch.max(clean_img) <= 1
+        assert torch.max(anomalous_img) <= 1
 
         # Check that backdoor overall applies a small change on average
-        assert np.mean(clean_img - anomalous_img) < (
+        assert torch.mean(clean_img - anomalous_img) < (
             1.0 / np.sqrt(np.prod(clean_img.shape))
         )
 
@@ -269,14 +271,14 @@ def test_wanet_backdoor(clean_image_config):
         assert noise_label != target_class
 
         # Check that something has changed
-        assert np.any(clean_img != anoma_img)
-        assert np.any(clean_img != noise_img)
-        assert np.any(anoma_img != noise_img)
+        assert torch.any(clean_img != anoma_img)
+        assert torch.any(clean_img != noise_img)
+        assert torch.any(anoma_img != noise_img)
 
         # Check that pixel values still in valid range
-        assert np.min(clean_img) >= 0
-        assert np.min(anoma_img) >= 0
-        assert np.min(noise_img) >= 0
-        assert np.max(clean_img) <= 1
-        assert np.max(anoma_img) <= 1
-        assert np.max(noise_img) <= 1
+        assert torch.min(clean_img) >= 0
+        assert torch.min(anoma_img) >= 0
+        assert torch.min(noise_img) >= 0
+        assert torch.max(clean_img) <= 1
+        assert torch.max(anoma_img) <= 1
+        assert torch.max(noise_img) <= 1

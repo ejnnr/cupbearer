@@ -158,7 +158,7 @@ class WanetBackdoor(Backdoor):
         xs = torch.linspace(-1, 1, steps=px)
         ys = torch.linspace(-1, 1, steps=py)
         xx, yy = torch.meshgrid(xs, ys)
-        identity_grid = torch.stack((yy, xx), 2)[None, ...]
+        identity_grid = torch.stack((yy, xx), 2)
         field = field + identity_grid
 
         self._warping_field = field
@@ -237,6 +237,6 @@ class WanetBackdoor(Backdoor):
             # Warp image
             img = self._warp(img, warping_field)
 
-        assert img.shape == (py, px, cs)
+        assert img.shape == (cs, py, px)
 
         return img, target

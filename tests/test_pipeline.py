@@ -1,5 +1,5 @@
-import numpy as np
 import pytest
+import torch
 from cupbearer.scripts import (
     eval_classifier,
     train_classifier,
@@ -140,12 +140,12 @@ def test_wanet(tmp_path, capsys):
     run(train_classifier.main, cfg)
 
     assert (tmp_path / "wanet" / "config.yaml").is_file()
-    assert (tmp_path / "wanet" / "model").is_dir()
-    assert (tmp_path / "wanet" / "metrics.json").is_file()
+    assert (tmp_path / "wanet" / "model.ckpt").is_file()
+    assert (tmp_path / "wanet" / "tensorboard").is_dir()
     # Check that NoData is handled correctly
     for name, data_cfg in cfg.val_data.items():
         if name == "backdoor":
-            assert np.allclose(
+            assert torch.allclose(
                 data_cfg.backdoor.warping_field,
                 cfg.train_data.backdoor.warping_field,
             )
@@ -162,7 +162,7 @@ def test_wanet(tmp_path, capsys):
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_detector.main, train_detector_cfg)
-    assert np.allclose(
+    assert torch.allclose(
         train_detector_cfg.task.backdoor.warping_field,
         cfg.train_data.backdoor.warping_field,
     )
