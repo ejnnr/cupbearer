@@ -64,30 +64,6 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
     assert (tmp_path / "eval.json").is_file()
 
 
-# TODO: add back in adversarial abstractions, will need a trained abstraction as fixture
-# probably?
-# @pytest.mark.slow
-# def test_eval_adversarial_abstraction():
-#     cfg = parse(
-#         eval_detector_conf.Config,
-#         args=(
-#             f"--debug_with_logging --dir.full {tmp_path / 'adversarial_abstraction'} "
-#             f"--task backdoor --task.backdoor corner "
-#             f"--task.path {tmp_path / 'base'} "
-#             "--detector adversarial_abstraction "
-#             f"--detector.load_path {tmp_path / 'abstraction'} "
-#             "--save_config true"
-#         ),
-#         argument_generation_mode=ArgumentGenerationMode.NESTED,
-#     )
-#     run(eval_detector.main, cfg)
-#     captured = capsys.readouterr()
-#     assert "Randomly initializing abstraction" not in captured.err
-
-#     for file in {"histogram.pdf", "eval.json", "config.yaml"}:
-#         assert (tmp_path / "adversarial_abstraction" / file).is_file()
-
-
 @pytest.mark.slow
 def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
     # This test doesn't need a backdoored classifier, but we already have one

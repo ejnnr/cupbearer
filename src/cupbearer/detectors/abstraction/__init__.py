@@ -2,10 +2,6 @@ from dataclasses import dataclass, field
 from typing import Optional
 
 from cupbearer.data import DatasetConfig
-
-# from cupbearer.detectors.abstraction.adversarial_detector import (
-#     AdversarialAbstractionDetector,
-# )
 from cupbearer.models import HookedModel
 from cupbearer.utils.config_groups import config_group, register_config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
@@ -35,6 +31,11 @@ class AbstractionTrainConfig(TrainConfig):
             self.max_steps = 1
 
 
+# This is all unnessarily verbose right now, it's a remnant from when we had
+# robust optimization for abstractions and I experimented with some variations.
+# Leaving it like this for now, but ultimately, the way to go is probably to just
+# let users specify a path to a python function that gets called
+# to construct the abstraction. (With get_default_abstraction being the default.)
 @dataclass
 class AbstractionConfig(BaseConfig):
     size_reduction: int = 4
@@ -65,56 +66,3 @@ class AbstractionDetectorConfig(DetectorConfig):
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )
-
-
-# @dataclass
-# class AdversarialAbstractionConfig(AbstractionDetectorConfig):
-#     load_path: Optional[Path] = None
-#     num_train_samples: int = 128
-#     num_steps: int = 1
-#     normal_weight: float = 0.5
-#     clip: bool = True
-#     # This is a bit hacky: this detector doesn't support training,
-#     # so maybe we shouldn't inherit from AbstractionDetectorConfig.
-#     train: None = None
-
-#     def build(self, model, params, rng, save_dir) -> AdversarialAbstractionDetector:
-#         if self.load_path is not None:
-#             helper_cfg = StoredDetector(path=self.load_path)
-#             detector = helper_cfg.build(model, params, rng, save_dir)
-#             assert isinstance(detector, AbstractionDetector)
-#             return AdversarialAbstractionDetector(
-#                 model=model,
-#                 params=params,
-#                 rng=rng,
-#                 abstraction=detector.abstraction,
-#                 abstraction_state=detector.abstraction_state,
-#                 output_loss_fn=detector.output_loss_fn,
-#                 num_train_samples=self.num_train_samples,
-#                 num_steps=self.num_steps,
-#                 normal_weight=self.normal_weight,
-#                 max_batch_size=self.max_batch_size,
-#                 clip=self.clip,
-#                 save_path=save_dir,
-#             )
-
-#         abstraction = self.abstraction.build(model)
-#         return AdversarialAbstractionDetector(
-#             model=model,
-#             params=params,
-#             rng=rng,
-#             abstraction=abstraction,
-#             output_loss_fn=self.abstraction.output_loss_fn,
-#             save_path=save_dir,
-#             num_train_samples=self.num_train_samples,
-#             num_steps=self.num_steps,
-#             normal_weight=self.normal_weight,
-#             max_batch_size=self.max_batch_size,
-#             clip=self.clip,
-#         )
-
-#     def setup_and_validate(self):
-#         super().setup_and_validate()
-#         if self.debug:
-#             self.num_train_samples = 1
-#             self.num_steps = 1

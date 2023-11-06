@@ -7,7 +7,6 @@ from .mahalanobis import MahalanobisConfig
 
 DETECTORS = {
     "abstraction": AbstractionDetectorConfig,
-    # "adversarial_abstraction": AdversarialAbstractionConfig,
     "mahalanobis": MahalanobisConfig,
     "finetuning": FinetuningConfig,
     "from_run": StoredDetector,
