@@ -115,9 +115,7 @@ class WanetBackdoor(Backdoor):
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
             control_grid = 2 * torch.rand(*control_grid_shape) - 1
             control_grid = control_grid / torch.mean(torch.abs(control_grid))
-            # N.B. the 0.5 comes from how the original did their rescaling, see
-            # https://github.com/ejnnr/cupbearer/pull/2#issuecomment-1688338610
-            control_grid = control_grid * 0.5 * self.warping_strength
+            control_grid = control_grid * self.warping_strength
             self.control_grid = control_grid
         else:
             control_grid = torch.tensor(self._control_grid)
