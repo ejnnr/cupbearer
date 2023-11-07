@@ -15,7 +15,7 @@ class MahalanobisDetector(ActivationBasedDetector):
         rcond: float = 1e-5,
         batch_size: int = 4096,
         pbar: bool = True,
-        debug: bool = False,
+        **kwargs,
     ):
         # This entire training method doesn't require gradients, we're just computing
         # averages etc.

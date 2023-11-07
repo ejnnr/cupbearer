@@ -18,7 +18,7 @@ def main(cfg: Config):
 
     # We want to convert the train dataclass to a dict, but *not* recursively.
     train_kwargs = vars(cfg.detector.train)
-    detector.train(reference_data, **train_kwargs)
+    detector.train(reference_data, num_classes=cfg.task.num_classes, **train_kwargs)
     if cfg.dir.path is not None:
         detector.save_weights(cfg.dir.path / "detector")
         eval_cfg = eval_detector_conf.Config(

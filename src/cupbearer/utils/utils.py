@@ -4,15 +4,11 @@ import dataclasses
 import functools
 import importlib
 import pickle
-import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, Optional, TypeVar, Union
 
-import flax
-import jax
 import torch
-from flax.core import FrozenDict
 from simple_parsing.helpers import serialization
 
 SUFFIX = ".pt"
@@ -110,36 +106,21 @@ def product(xs: Iterable):
     return functools.reduce(lambda x, y: x * y, xs, 1)
 
 
-def negative(tree):
-    return jax.tree_map(lambda x: -x, tree)
-
-
-def weighted_sum(tree1, tree2, alpha):
-    return jax.tree_map(lambda x, y: alpha * x + (1 - alpha) * y, tree1, tree2)
-
-
-def merge_dicts(a: dict | FrozenDict, b: dict | FrozenDict) -> dict | FrozenDict:
+def merge_dicts(a: dict, b: dict) -> dict:
     """Merges two dictionaries recursively."""
 
-    if isinstance(a, FrozenDict):
-        frozen = True
-        merged = a.unfreeze()
-    else:
-        frozen = False
-        merged = a.copy()
+    merged = a.copy()
     for key, value in b.items():
-        if key in merged and isinstance(merged[key], (dict, FrozenDict)):
+        if key in merged and isinstance(merged[key], dict):
             # Make sure we don't overwrite a dict with a non-dict
-            assert isinstance(value, (dict, FrozenDict))
+            assert isinstance(value, dict)
             merged[key] = merge_dicts(merged[key], value)
         else:
-            if isinstance(value, (dict, FrozenDict)):
+            if isinstance(value, dict):
                 # Make sure we don't overwrite a non-dict with a dict
                 assert key not in merged
             merged[key] = value
 
-    if frozen:
-        merged = flax.core.freeze(merged)
     return merged
 
 
@@ -156,12 +137,6 @@ def list_field():
 
 def dict_field():
     return dataclasses.field(default_factory=dict)
-
-
-# https://stackoverflow.com/questions/14693701/how-can-i-remove-the-ansi-escape-sequences-from-a-string-in-python
-def escape_ansi(line):
-    ansi_escape = re.compile(r"(?:\x1B[@-_]|[\x80-\x9F])[0-?]*[ -/]*[@-~]")
-    return ansi_escape.sub("", line)
 
 
 @dataclass(kw_only=True)

@@ -32,10 +32,6 @@ class AnomalyDetector(ABC):
 
         self.trained = False
 
-    def _model(self, batch):
-        inputs = utils.inputs_from_batch(batch)
-        return self.model.get_activations(inputs)
-
     @abstractmethod
     def train(self, dataset, debug: bool = False, **kwargs):
         """Train the anomaly detector with the given dataset as "normal" data."""

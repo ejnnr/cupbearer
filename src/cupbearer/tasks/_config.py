@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional
@@ -23,6 +23,10 @@ class TaskConfigBase(BaseConfig, ABC, PathConfigMixin):
 
     @abstractmethod
     def build_test_data(self) -> TestDataMix:
+        pass
+
+    @abstractproperty
+    def num_classes(self) -> int:  # type: ignore
         pass
 
 
@@ -98,3 +102,10 @@ class TaskConfig(TaskConfigBase, ABC):
             max_size=self.max_test_size,
         )
         return self._test_data.build()
+
+    @property
+    def num_classes(self):
+        if not self._train_data:
+            self._init_train_data()
+            assert self._train_data is not None, "init_train_data must set _train_data"
+        return self._train_data.num_classes

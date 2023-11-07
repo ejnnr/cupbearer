@@ -108,7 +108,6 @@ class AbstractionDetector(ActivationBasedDetector):
         num_epochs: int = 10,
         validation_datasets: Optional[dict[str, Dataset]] = None,
         max_steps: Optional[int] = None,
-        debug: bool = False,
         **kwargs,
     ):
         # Possibly we should store this as a submodule to save optimizers and continue
@@ -148,7 +147,7 @@ class AbstractionDetector(ActivationBasedDetector):
             param.requires_grad = required_grad[name]
 
     def layerwise_scores(self, batch):
-        _, activations = self._model(batch)
+        _, activations = self.get_activations(batch)
         return compute_losses(self.abstraction, activations, layerwise=True)
 
     def _get_trained_variables(self, saving: bool = False):

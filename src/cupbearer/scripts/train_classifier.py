@@ -1,6 +1,6 @@
 import lightning as L
 import torch
-from cupbearer.models import ModelConfig
+from cupbearer.models import HookedModel, ModelConfig
 from cupbearer.utils.optimizers import OptimizerConfig
 from cupbearer.utils.scripts import run
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -14,21 +14,36 @@ from .conf.train_classifier_conf import Config
 class Classifier(L.LightningModule):
     def __init__(
         self,
-        model: ModelConfig,
-        input_shape: tuple[int, ...],
+        model: ModelConfig | HookedModel,
         num_classes: int,
         optim_cfg: OptimizerConfig,
+        input_shape: tuple[int, ...] | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
+        save_hparams: bool = True,
     ):
         super().__init__()
-        self.save_hyperparameters()
+        if isinstance(model, HookedModel) and save_hparams:
+            raise ValueError(
+                "Cannot save hyperparameters when model is already instantiated. "
+                "Either pass a ModelConfig or set save_hparams=False."
+            )
+        if save_hparams:
+            self.save_hyperparameters()
         if val_loader_names is None:
             val_loader_names = []
         if test_loader_names is None:
             test_loader_names = []
 
-        self.model = model.build_model(input_shape=input_shape)
+        if isinstance(model, HookedModel):
+            self.model = model
+        elif input_shape is None:
+            raise ValueError(
+                "Must provide input_shape when passing a ModelConfig "
+                "instead of an instantiated model."
+            )
+        else:
+            self.model = model.build_model(input_shape=input_shape)
         self.optim_cfg = optim_cfg
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names
@@ -89,15 +104,6 @@ class Classifier(L.LightningModule):
 
 
 def main(cfg: Config):
-    # if cfg.wandb:
-    #     metrics_logger = WandbLogger(
-    #         project_name="abstractions",
-    #         tags=["base-training-backdoor"],
-    #         config=dataclasses.asdict(cfg),
-    #     )
-    # else:
-    #     metrics_logger = DummyLogger()
-
     dataset = cfg.train_data.build()
     train_loader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
 
@@ -127,12 +133,6 @@ def main(cfg: Config):
         filename="model",
     )
 
-    # csv_logger = None
-    # if cfg.dir.path is not None:
-    #     # For some reason flushing logs is really slow, so don't do it quite as often
-    #     csv_logger = CSVLogger(
-    #         save_dir=cfg.dir.path, name="", version="", flush_logs_every_n_steps=200
-    #     )
     metrics_logger = None
     if cfg.dir.path is not None:
         metrics_logger = TensorBoardLogger(
@@ -154,31 +154,6 @@ def main(cfg: Config):
     )
     # TODO: use training set here
     # trainer.test(model=classifier, dataloaders=val_loaders.values())
-
-    # trainer = ClassificationTrainer(
-    #     num_classes=cfg.num_classes,
-    #     model=model,
-    #     optimizer=cfg.optim.build(),
-    #     example_input=example_input,
-    #     log_dir=cfg.dir.path,
-    #     check_val_every_n_epoch=1,
-    #     loggers=[metrics_logger],
-    #     enable_progress_bar=False,
-    #     rng=jax.random.PRNGKey(cfg.seed),
-    # )
-
-    # trainer.train_model(
-    #     train_loader=train_loader,
-    #     val_loaders=val_loaders,
-    #     test_loaders=None,
-    #     num_epochs=cfg.num_epochs,
-    #     max_steps=cfg.max_steps,
-    # )
-    # if cfg.dir.path:
-    #     trainer.save_model()
-    #     for trafo in cfg.train_data.get_transforms():
-    #         trafo.store(cfg.dir.path)
-    # trainer.close_loggers()
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ class DatasetConfig(BaseConfig, ABC):
     max_size: Optional[int] = None
 
     @abstractproperty
-    def num_classes(self) -> int:
+    def num_classes(self) -> int:  # type: ignore
         pass
 
     def get_transforms(self) -> list[Transform]:

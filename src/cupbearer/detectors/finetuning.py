@@ -1,66 +1,42 @@
+import copy
 from dataclasses import dataclass, field
+from typing import Optional
 
-import jax
-import jax.numpy as jnp
-import optax
-from jax import lax
+import lightning as L
+import torch
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.detectors.config import DetectorConfig, TrainConfig
-from cupbearer.utils import trainer
+from cupbearer.scripts.train_classifier import Classifier
+from cupbearer.utils import utils
 from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
 
 
-class FinetuningTrainer(trainer.TrainerModule):
-    def __init__(self, model, loss_fn, **kwargs):
-        super().__init__(model=model, **kwargs)
-        self.loss_fn = loss_fn
-
-    def create_functions(self):
-        def train_step(state, batch):
-            def loss_fn(params):
-                return self.loss_fn(params, batch)
-
-            loss, grads = jax.value_and_grad(loss_fn)(state.params)
-            state = state.apply_gradients(grads=grads)
-            metrics = {"loss": loss}
-            return state, metrics
-
-        def eval_step(state, batch):
-            loss = self.loss_fn(state.params, batch)
-            metrics = {"loss": loss}
-            return metrics
-
-        return train_step, eval_step
-
-
 class FinetuningAnomalyDetector(AnomalyDetector):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self.finetuned_params = None
+    def __init__(self, model, max_batch_size, save_path):
+        super().__init__(model, max_batch_size, save_path)
+        # We might as well make a copy here already, since whether we'll train this
+        # detector or load weights for inference, we'll need to copy in both cases.
+        self.finetuned_model = copy.deepcopy(self.model)
 
     def train(
         self,
         clean_dataset,
         optimizer: OptimizerConfig,
+        num_classes: int,
         num_epochs: int = 10,
         batch_size: int = 128,
-        # Not used, but will be passed by the detector train script
-        debug: bool = False,
+        max_steps: Optional[int] = None,
+        **kwargs,
     ):
-        trainer_instance = FinetuningTrainer(
-            model=self.model,
-            loss_fn=self.loss_fn,
-            optimizer=optimizer.build(),
-            log_dir=self.save_path,
-            override_variables={
-                "params": self.params
-            },  # Use existing parameters for initialization
-            # clean_dataset[0] is the first element, which is an (image, label) tuple.
-            # The second 0 picks the image, then we add a singleton batch dimension.
-            example_input=clean_dataset[0][0][None, ...],
+        classifier = Classifier(
+            self.model,
+            num_classes=num_classes,
+            optim_cfg=optimizer,
+            save_hparams=False,
         )
 
         # Create a DataLoader for the clean dataset
@@ -70,19 +46,15 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         )
 
         # Finetune the model on the clean dataset
-        trainer_instance.train_model(
-            train_loader=clean_loader,
-            val_loaders={},
-            num_epochs=num_epochs,
+        trainer = L.Trainer(
+            max_epochs=num_epochs,
+            max_steps=max_steps or -1,
+            default_root_dir=self.save_path,
         )
-
-        # Store the finetuned parameters
-        self.finetuned_params = trainer_instance.state.params
-
-    def loss_fn(self, params, batch):
-        inputs, targets = batch
-        logits = self.model.apply({"params": params}, inputs)
-        return optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
+        trainer.fit(
+            model=classifier,
+            train_dataloaders=clean_loader,
+        )
 
     def layerwise_scores(self, batch):
         raise NotImplementedError(
@@ -90,49 +62,38 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         )
 
     def scores(self, batch):
-        original_output, _ = self._model(batch)
+        inputs = utils.inputs_from_batch(batch)
+        original_output = self.model(inputs)
+        finetuned_output = self.finetuned_model(inputs)
 
-        if isinstance(batch, (tuple, list)):
-            inputs = batch[0]
-        else:
-            inputs = batch
-        finetuned_output = self.model.apply({"params": self.finetuned_params}, inputs)
+        # F.kl_div requires log probabilities for the input, normal probabilities
+        # are fine for the target.
+        log_finetuned_p = finetuned_output.log_softmax(dim=-1)
+        original_p = original_output.softmax(dim=-1)
 
-        finetuned_p = jax.nn.softmax(finetuned_output, axis=-1)
-        original_p = jax.nn.softmax(original_output, axis=-1)
-
-        # Check whether we're going to get infinities:
-        if jnp.any(jnp.logical_and(finetuned_p == 0, original_p > 0)):
-            # We'd get an error anyway once we compute eval metrics, better to give
-            # a more specific one here.
-            raise ValueError("Infinite KL divergence")
-
+        # This computes KL(original || finetuned), the argument order for the pytorch
+        # function is swapped compared to the mathematical notation.
+        # See https://pytorch.org/docs/stable/generated/torch.nn.KLDivLoss.html
         # This is the same direction of KL divergence that Redwood used in one of their
         # projects, though I don't know if they had a strong reason for it.
         # Arguably a symmetric metric would make more sense, but might not matter much.
-        p, q = original_p, finetuned_p
-        # Adapted from jax.scipy.special.rel_entr in Jax >= 0.4.16
-        both_gt_zero_mask = lax.bitwise_and((p > 0), (q > 0))
-        one_zero_mask = lax.bitwise_and((p == 0), (q >= 0))
+        #
+        # Also note we don't want pytorch to do any reduction, since we want to
+        # return individual scores for each sample.
+        kl = F.kl_div(log_finetuned_p, original_p, reduction="none").sum(-1)
 
-        safe_p = jnp.where(both_gt_zero_mask, p, 1)
-        safe_q = jnp.where(both_gt_zero_mask, q, 1)
-        log_val = lax.sub(
-            jax.scipy.special.xlogy(safe_p, safe_p),
-            jax.scipy.special.xlogy(safe_p, safe_q),
-        )
-        kl = jnp.where(
-            both_gt_zero_mask, log_val, jnp.where(one_zero_mask, q, jnp.inf)
-        ).sum(-1)
+        if torch.any(torch.isinf(kl)):
+            # We'd get an error anyway once we compute eval metrics, but better to give
+            # a more specific one here.
+            raise ValueError("Infinite KL divergence")
+
         return kl
 
     def _get_trained_variables(self, saving: bool = False):
-        return {
-            "params": self.finetuned_params,
-        }
+        return self.finetuned_model.state_dict()
 
     def _set_trained_variables(self, variables):
-        self.finetuned_params = variables["params"]
+        self.finetuned_model.load_state_dict(variables)
 
 
 @dataclass
@@ -140,10 +101,13 @@ class FinetuningTrainConfig(TrainConfig):
     optimizer: OptimizerConfig = config_group(OptimizerConfig, Adam)
     num_epochs: int = 10
     batch_size: int = 128
+    max_steps: Optional[int] = None
 
     def setup_and_validate(self):
         super().setup_and_validate()
         if self.debug:
+            self.num_epochs = 1
+            self.max_steps = 1
             self.batch_size = 2
 
 
@@ -151,11 +115,9 @@ class FinetuningTrainConfig(TrainConfig):
 class FinetuningConfig(DetectorConfig):
     train: FinetuningTrainConfig = field(default_factory=FinetuningTrainConfig)
 
-    def build(self, model, params, rng, save_dir) -> FinetuningAnomalyDetector:
+    def build(self, model, save_dir) -> FinetuningAnomalyDetector:
         return FinetuningAnomalyDetector(
             model=model,
-            params=params,
-            rng=rng,
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )
