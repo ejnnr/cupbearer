@@ -5,6 +5,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from cupbearer.detectors.anomaly_detector import ActivationBasedDetector
+from cupbearer.detectors.statistical.helpers import update_covariance
 
 
 class StatisticalDetector(ActivationBasedDetector, ABC):
@@ -49,3 +50,49 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
                     break
                 _, activations = self.get_activations(batch)
                 self.batch_update(activations)
+
+
+class ActivationCovarianceBasedDetector(StatisticalDetector):
+    """Generic abstract detector that learns means and covariance matrices
+    during training."""
+
+    def init_variables(self, activation_sizes: dict[str, torch.Size]):
+        self._means = {
+            k: torch.zeros(size.numel()) for k, size in activation_sizes.items()
+        }
+        self._Cs = {
+            k: torch.zeros((size.numel(), size.numel()))
+            for k, size in activation_sizes.items()
+        }
+        self._ns = {k: 0 for k in activation_sizes.keys()}
+
+    def batch_update(self, activations: dict[str, torch.Tensor]):
+        for k, activation in activations.items():
+            # Flatten the activations to (batch, dim)
+            activation = activation.flatten(start_dim=1)
+            self._means[k], self._Cs[k], self._ns[k] = update_covariance(
+                self._means[k], self._Cs[k], self._ns[k], activation
+            )
+
+    @abstractmethod
+    def post_covariance_training(self):
+        pass
+
+    def train(
+        self,
+        dataset,
+        *,
+        max_batches: int = 0,
+        rcond: float = 1e-5,
+        batch_size: int = 4096,
+        pbar: bool = True,
+        **kwargs,
+    ):
+        super().train(
+            dataset, max_batches=max_batches, batch_size=batch_size, pbar=pbar
+        )
+
+        # Post process
+        self.means = self._means
+        self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
+        self.post_covariance_training(rcond=rcond, **kwargs)

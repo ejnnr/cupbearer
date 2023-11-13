@@ -1,30 +1,23 @@
 import torch
 
-from cupbearer.detectors.statistical.helpers import mahalanobis, update_covariance
-from cupbearer.detectors.statistical.statistical import StatisticalDetector
+from cupbearer.detectors.statistical.helpers import mahalanobis
+from cupbearer.detectors.statistical.statistical import (
+    ActivationCovarianceBasedDetector,
+)
 
 
-class MahalanobisDetector(StatisticalDetector):
-    def init_variables(self, activation_sizes: dict[str, torch.Size]):
-        # TODO: could consider computing a separate mean for each class,
-        # I think that's more standard for OOD detection in classification,
-        # but less general and maybe less analogous to the setting I care about.
-        self._means = {
-            k: torch.zeros(size.numel()) for k, size in activation_sizes.items()
+class MahalanobisDetector(ActivationCovarianceBasedDetector):
+    def post_covariance_training(self, rcond, relative: bool = False, **kwargs):
+        self.inv_covariances = {
+            k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
+            for k, C in self.covariances.items()
         }
-        self._Cs = {
-            k: torch.zeros((size.numel(), size.numel()))
-            for k, size in activation_sizes.items()
-        }
-        self._ns = {k: 0 for k in activation_sizes.keys()}
-
-    def batch_update(self, activations: dict[str, torch.Tensor]):
-        for k, activation in activations.items():
-            # Flatten the activations to (batch, dim)
-            activation = activation.reshape(activation.shape[0], -1)
-            self._means[k], self._Cs[k], self._ns[k] = update_covariance(
-                self._means[k], self._Cs[k], self._ns[k], activation
-            )
+        self.inv_diag_covariances = None
+        if relative:
+            self.inv_diag_covariances = {
+                k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
+                for k, C in self.covariances.items()
+            }
 
     def train(
         self,
@@ -38,22 +31,14 @@ class MahalanobisDetector(StatisticalDetector):
         **kwargs,
     ):
         super().train(
-            dataset, max_batches=max_batches, batch_size=batch_size, pbar=pbar
+            dataset,
+            max_batches=max_batches,
+            rcond=rcond,
+            batch_size=batch_size,
+            pbar=pbar,
+            relative=relative,
+            **kwargs,
         )
-
-        # Post process
-        self.means = self._means
-        self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
-        self.inv_covariances = {
-            k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
-            for k, C in self.covariances.items()
-        }
-        self.inv_diag_covariances = None
-        if relative:
-            self.inv_diag_covariances = {
-                k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
-                for k, C in self.covariances.items()
-            }
 
     def layerwise_scores(self, batch):
         _, activations = self.get_activations(batch)

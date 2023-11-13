@@ -5,6 +5,7 @@ from cupbearer.detectors.config import ActivationBasedDetectorConfig
 from cupbearer.utils.utils import BaseConfig
 
 from .mahalanobis_detector import MahalanobisDetector
+from .spectral_detector import SpectralSignatureDetector
 
 
 @dataclass
@@ -29,6 +30,12 @@ class MahalanobisTrainConfig(StatisticalTrainConfig):
 
 
 @dataclass
+class SpectralSignatureTrainConfig(StatisticalTrainConfig):
+    relative: bool = False
+    rcond: float = 1e-5
+
+
+@dataclass
 class MahalanobisConfig(ActivationBasedDetectorConfig):
     train: MahalanobisTrainConfig = field(default_factory=MahalanobisTrainConfig)
 
@@ -37,5 +44,20 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
             model=model,
             activation_name_func=self.resolve_name_func(),
             max_batch_size=self.train.max_batch_size,
+            save_path=save_dir,
+        )
+
+
+@dataclass
+class SpectralSignatureConfig(ActivationBasedDetectorConfig):
+    train: SpectralSignatureTrainConfig = field(
+        default_factory=SpectralSignatureTrainConfig
+    )
+
+    def build(self, model, save_dir) -> SpectralSignatureDetector:
+        return SpectralSignatureDetector(
+            model=model,
+            activation_names=self.get_names(model),
+            max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )

@@ -133,6 +133,23 @@ def test_train_mahalanobis_backdoor(backdoor_classifier_path, tmp_path):
 
 
 @pytest.mark.slow
+def test_train_spectral_backdoor(backdoor_classifier_path, tmp_path):
+    cfg = parse(
+        train_detector_conf.Config,
+        args=f"--debug_with_logging --dir.full {tmp_path} "
+        f"--task backdoor --task.backdoor corner "
+        f"--task.path {backdoor_classifier_path} --detector spectral",
+        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    )
+    run(train_detector.main, cfg)
+    assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "detector.pt").is_file()
+    # Eval outputs:
+    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "eval.json").is_file()
+
+
+@pytest.mark.slow
 def test_finetuning_detector(backdoor_classifier_path, tmp_path):
     cfg = parse(
         train_detector_conf.Config,
