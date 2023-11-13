@@ -1,3 +1,4 @@
+from abc import ABC
 from dataclasses import dataclass, field
 
 from cupbearer.detectors.config import ActivationBasedDetectorConfig
@@ -7,10 +8,8 @@ from .mahalanobis_detector import MahalanobisDetector
 
 
 @dataclass
-class MahalanobisTrainConfig(BaseConfig):
+class StatisticalTrainConfig(BaseConfig, ABC):
     max_batches: int = 0
-    relative: bool = False
-    rcond: float = 1e-5
     batch_size: int = 4096
     max_batch_size: int = 4096
     pbar: bool = True
@@ -21,6 +20,12 @@ class MahalanobisTrainConfig(BaseConfig):
         if self.debug:
             self.batch_size = 2
             self.max_batch_size = 2
+
+
+@dataclass
+class MahalanobisTrainConfig(StatisticalTrainConfig):
+    relative: bool = False
+    rcond: float = 1e-5
 
 
 @dataclass

@@ -2,7 +2,7 @@ import math
 
 import pytest
 import torch
-from cupbearer.detectors.mahalanobis.helpers import batch_covariance
+from cupbearer.detectors.statistical.helpers import batch_covariance
 
 
 @pytest.mark.parametrize("N", [10, 15, 100])

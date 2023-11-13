@@ -3,7 +3,7 @@ from cupbearer.utils.config_groups import register_config_group
 from .abstraction import AbstractionDetectorConfig
 from .config import DetectorConfig, StoredDetector
 from .finetuning import FinetuningConfig
-from .mahalanobis import MahalanobisConfig
+from .statistical import MahalanobisConfig
 
 DETECTORS = {
     "abstraction": AbstractionDetectorConfig,
