@@ -130,7 +130,7 @@ def main(cfg: Config):
     # potentially based on validation loss
     checkpoint_callback = ModelCheckpoint(
         dirpath=cfg.dir.path,
-        filename="model",
+        save_last=True,
     )
 
     metrics_logger = None

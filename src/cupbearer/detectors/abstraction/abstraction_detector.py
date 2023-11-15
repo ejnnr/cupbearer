@@ -67,7 +67,7 @@ class AbstractionModule(L.LightningModule):
         _, activations = self.get_activations(batch)
         losses = compute_losses(self.abstraction, activations)
         assert isinstance(losses, torch.Tensor)
-        assert losses.ndim == 1 and len(losses) == len(batch)
+        assert losses.ndim == 1 and len(losses) == len(batch[0])
         loss = losses.mean(0)
         return loss
 

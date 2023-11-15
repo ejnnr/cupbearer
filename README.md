@@ -41,63 +41,51 @@ CUDA (or CPU only) version.
 You can run any script with the `-h` flag to see a list of options and possible values.
 
 Let's look at an example, where we use a simple Mahalanobis distance-based detection
-methods to detect backdoors. First, we need to train a base model on poisoned data:
+method to detect backdoors. First, we need to train a base model on poisoned data:
 ```bash
 python -m cupbearer.scripts.train_classifier \
-       --train_data backdoor --train_data.backdoor.p_backdoor 0.1 \
-       --train_data.original mnist --train_data.backdoor corner \
-       --model mlp \
-       --dir.full logs/classifier
+       --train_data backdoor --train_data.original mnist \
+       --train_data.backdoor corner --train_data.backdoor.p_backdoor 0.1 \
+       --model mlp --num_epochs 2 \
+       --dir.full logs/demo/classifier
 ```
 This will train an MLP on MNIST, where the backdoor trigger is that the top left pixel
 is set to white (and the model is trained to classify images with this trigger as zeros).
 There are many more options like learning rate etc. you can set, but the defaults should
 work well enough.
 
-This script will have saved the final model to `logs/classifier/model/`. We can now train
-a Mahalanobis-based detector on this model:
+This script will have saved the final model to `logs/demo/classifier/last.ckpt`.
+We can now train a Mahalanobis-based detector on this model:
 ```bash
 python -m cupbearer.scripts.train_detector \
        --detector mahalanobis --task backdoor \
-       --task.backdoor corner --task.run_path logs/classifier \
-       --dir.full logs/detector
+       --task.backdoor corner --task.path logs/demo/classifier \
+       --dir.full logs/demo/mahalanobis
 ```
 (The fact that we need to specify the backdoor trigger again is an artifact of how
 things are currently implemented and will likely be changed---the detector is only actually
-trained on clean images). `train_detector` loads the model from `task.run_path` and
+trained on clean images). `train_detector` loads the model from `task.path` and
 also uses that to figure out which dataset to use (in this case, MNIST again).
 
-Finally, we can evaluate the detector on a mix of clean and poisoned images:
-```bash
-python -m cupbearer.scripts.eval_detector \
-       --detector from_run --detector.path logs/detector \
-       --task backdoor --task.backdoor corner \
-       --task.run_path logs/classifier \
-       --dir.full logs/detector
-```
-Note that we reuse `logs/detector` as the output directory. This will add the evaluation
-results to the directory of the detector training run (it won't overwrite anything).
-
 If everything works, this should print out an AUCROC and AP of >0.99.
+(This detection task is very easy.) Inside the `logs/demo/mahalanobis` directory,
+there should also be a `histogram.pdf` plot that shows the distribution of anomaly
+scores. Backdoored images and clean images should be very well separated.
 
-The reason we need to specify some things, such as the task, multiple times is that
-these scripts also support much more flexible setups. For example, we could evaluate
-the detector on images with a *different* backdoor trigger (as an ablation to check
-that these are *not* flagged as anomalous), in which case we might also want
-to save the results to a different directory:
+We could also evaluate the detector on images with a *different* backdoor trigger
+(as an ablation to check that these are *not* flagged as anomalous). We can use
+the `eval_detector` script for this (which is also what `train_detector` uses
+internally to produce the evaluation results at the end):
 ```bash
 python -m cupbearer.scripts.eval_detector \
-       --detector from_run --detector.path logs/detector \
+       --detector.path logs/demo/mahalanobis \
        --task backdoor --task.backdoor noise --task.backdoor.std 0.1 \
-       --task.run_path logs/classifier \
-       --dir.full logs/detector_ablation
+       --task.path logs/demo/classifier \
+       --dir.full logs/demo/mahalanobis_ablation
 ```
-This will still have an AUCROC and AP slightly greater than 0.5 because the noise is
-somewhat anomalous in terms of Mahalanobis distance, but it should be much closer to 0.5
+This will still have an AUCROC and AP greater than 0.5 because the noise is
+somewhat anomalous in terms of Mahalanobis distance, but it should be closer to 0.5
 than before.
-
-In the future, there might be easier ways of getting "reasonable defaults" for some settings,
-for now you could just write small wrapper scripts for these kinds of pipelines.
 
 ## Whence the name?
 Just like a cupbearer tastes wine to avoid poisoning the king, mechanistic anomaly

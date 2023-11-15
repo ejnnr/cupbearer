@@ -25,8 +25,9 @@ class StoredModel(ModelConfig, PathConfigMixin):
         model = model_cfg.build_model(input_shape)
 
         # Our convention is that LightningModules store the actual pytorch model
-        # as a `model` attribute.
-        state_dict = torch.load(self.get_path() / "model.ckpt")["state_dict"]
+        # as a `model` attribute. We use the last checkpoint (generated via the
+        # save_last=True option to the ModelCheckpoint callback).
+        state_dict = torch.load(self.get_path() / "last.ckpt")["state_dict"]
         # We want the state_dict for the 'model' submodule, so remove
         # the 'model.' prefix from the keys.
         state_dict = {k[6:]: v for k, v in state_dict.items() if k.startswith("model.")}
