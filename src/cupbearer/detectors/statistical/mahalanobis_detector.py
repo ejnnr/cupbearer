@@ -12,12 +12,6 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
             k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
             for k, C in self.covariances.items()
         }
-        self.inv_diag_covariances = None
-        if relative:
-            self.inv_diag_covariances = {
-                k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
-                for k, C in self.covariances.items()
-            }
 
     def train(
         self,
@@ -36,9 +30,15 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
             rcond=rcond,
             batch_size=batch_size,
             pbar=pbar,
-            relative=relative,
             **kwargs,
         )
+        self.inv_diag_covariances = None
+        if relative:
+            with torch.inference_mode():
+                self.inv_diag_covariances = {
+                    k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
+                    for k, C in self.covariances.items()
+                }
 
     def layerwise_scores(self, batch):
         _, activations = self.get_activations(batch)

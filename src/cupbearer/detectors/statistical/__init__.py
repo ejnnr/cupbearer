@@ -6,15 +6,19 @@ from cupbearer.utils.utils import BaseConfig
 
 from .mahalanobis_detector import MahalanobisDetector
 from .spectral_detector import SpectralSignatureDetector
+from .spectre_detector import SpectreDetector
 
 
 @dataclass
-class StatisticalTrainConfig(BaseConfig, ABC):
+class ActivationConvolutionTrainConfig(BaseConfig, ABC):
     max_batches: int = 0
     batch_size: int = 4096
     max_batch_size: int = 4096
     pbar: bool = True
     debug: bool = False
+    rcond: float = 1e-5
+    # robust: bool = False  # TODO spectre uses
+    # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
 
     def setup_and_validate(self):
         super().setup_and_validate()
@@ -24,15 +28,8 @@ class StatisticalTrainConfig(BaseConfig, ABC):
 
 
 @dataclass
-class MahalanobisTrainConfig(StatisticalTrainConfig):
+class MahalanobisTrainConfig(ActivationConvolutionTrainConfig):
     relative: bool = False
-    rcond: float = 1e-5
-
-
-@dataclass
-class SpectralSignatureTrainConfig(StatisticalTrainConfig):
-    relative: bool = False
-    rcond: float = 1e-5
 
 
 @dataclass
@@ -50,12 +47,27 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
 
 @dataclass
 class SpectralSignatureConfig(ActivationBasedDetectorConfig):
-    train: SpectralSignatureTrainConfig = field(
-        default_factory=SpectralSignatureTrainConfig
+    train: ActivationConvolutionTrainConfig = field(
+        default_factory=ActivationConvolutionTrainConfig
     )
 
     def build(self, model, save_dir) -> SpectralSignatureDetector:
         return SpectralSignatureDetector(
+            model=model,
+            activation_names=self.get_names(model),
+            max_batch_size=self.max_batch_size,
+            save_path=save_dir,
+        )
+
+
+@dataclass
+class SpectreConfig(ActivationBasedDetectorConfig):
+    train: ActivationConvolutionTrainConfig = field(
+        default_factory=ActivationConvolutionTrainConfig
+    )
+
+    def build(self, model, save_dir) -> SpectralSignatureDetector:
+        return SpectreDetector(
             model=model,
             activation_names=self.get_names(model),
             max_batch_size=self.max_batch_size,

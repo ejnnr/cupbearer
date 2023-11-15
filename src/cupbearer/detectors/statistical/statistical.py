@@ -75,7 +75,7 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
             )
 
     @abstractmethod
-    def post_covariance_training(self):
+    def post_covariance_training(self, rcond: float):
         pass
 
     def train(
@@ -93,6 +93,11 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         )
 
         # Post process
-        self.means = self._means
-        self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
-        self.post_covariance_training(rcond=rcond, **kwargs)
+        with torch.inference_mode():
+            self.means = self._means
+            self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
+            assert all(
+                torch.linalg.matrix_rank(cov) == cov.size(0)
+                for cov in self.covariances.values()
+            ), "Not all computed covariance matrices has full rank."
+            self.post_covariance_training(rcond=rcond)
