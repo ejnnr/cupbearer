@@ -148,7 +148,7 @@ class WanetBackdoor(Backdoor):
         assert control_grid.ndim == 3
         # upsample expects a batch dimesion, so we add a singleton. We permute after
         # upsampling, since grid_sample expects the length-2 axis to be the last one.
-        field = F.upsample(
+        field = F.interpolate(
             self.control_grid[None], size=(px, py), mode="bicubic", align_corners=True
         )[0].permute(1, 2, 0)
 
