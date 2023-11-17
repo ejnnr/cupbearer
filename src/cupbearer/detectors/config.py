@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
+from collections.abc import Collection
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable, Optional
 
 from loguru import logger
 from simple_parsing.helpers import mutable_field
 
-from cupbearer import models
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.models import HookedModel
 from cupbearer.utils.scripts import load_config
@@ -32,24 +33,15 @@ class DetectorConfig(BaseConfig, ABC):
             self.max_batch_size = 2
 
 
+# TODO: this feels like unnecessary indirection, can maybe integrate this elsewhere
 @dataclass(kw_only=True)
 class ActivationBasedDetectorConfig(DetectorConfig):
-    names: str = "cupbearer.detectors.config.get_default_names"
+    name_func: Optional[str] = None
 
-    def get_names(self, model: HookedModel):
-        name_func = get_object(self.names)
-        return name_func(model)
-
-
-def get_default_names(model: HookedModel):
-    if isinstance(model, models.MLP):
-        return [f"post_linear_{i}" for i in range(len(model.layers))]
-    elif isinstance(model, models.CNN):
-        return [f"post_conv_{i}" for i in range(len(model.conv_layers))] + [
-            f"post_linear_{i}" for i in range(len(model.mlp.layers))
-        ]
-    else:
-        raise ValueError(f"Unknown model type {type(model)}")
+    def resolve_name_func(self) -> Callable[[HookedModel], Collection[str]] | None:
+        if isinstance(self.name_func, str):
+            return get_object(self.name_func)
+        return self.name_func
 
 
 @dataclass(kw_only=True)

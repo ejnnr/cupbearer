@@ -1,4 +1,5 @@
 import contextlib
+from abc import abstractmethod
 from collections.abc import Collection
 
 import torch
@@ -12,6 +13,11 @@ class HookedModel(torch.nn.Module):
         self._capturing = False
         self._activations: dict[str, torch.Tensor] = {}
         self._names = None
+
+    @property
+    @abstractmethod
+    def default_names(self) -> list[str]:
+        """Names of the activations that are returned by default."""
 
     @contextlib.contextmanager
     def capture(self, names: Collection[str] | None = None):

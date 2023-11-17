@@ -41,6 +41,10 @@ class MLP(HookedModel):
         self.store(f"post_linear_{len(self.layers) - 1}", x)
         return x
 
+    @property
+    def default_names(self) -> list[str]:
+        return [f"post_linear_{i}" for i in range(len(self.layers))]
+
 
 class CNN(HookedModel):
     def __init__(
@@ -91,3 +95,9 @@ class CNN(HookedModel):
         self.store("post_global_pool", x)
         x = self.call_submodule("mlp", x)
         return x
+
+    @property
+    def default_names(self) -> list[str]:
+        return [f"conv_post_conv_{i}" for i in range(len(self.channels))] + [
+            "mlp_" + name for name in self.mlp.default_names
+        ]
