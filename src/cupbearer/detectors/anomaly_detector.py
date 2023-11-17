@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
+from typing import Callable
 
 import numpy as np
 import sklearn.metrics
@@ -215,14 +216,19 @@ class ActivationBasedDetector(AnomalyDetector):
     def __init__(
         self,
         model: HookedModel,
-        activation_names: Collection[str],
+        activation_name_func: Callable[[HookedModel], Collection[str]] | None = None,
         max_batch_size: int = 4096,
         save_path: Path | str | None = None,
     ):
         super().__init__(
             model=model, max_batch_size=max_batch_size, save_path=save_path
         )
-        self.activation_names = activation_names
+        if activation_name_func is None:
+
+            def activation_name_func(model):
+                return model.default_names
+
+        self.activation_names = activation_name_func(model)
 
     def get_activations(self, batch):
         inputs = utils.inputs_from_batch(batch)

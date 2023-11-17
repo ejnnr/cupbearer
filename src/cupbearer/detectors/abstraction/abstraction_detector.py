@@ -135,7 +135,7 @@ class AbstractionDetector(ActivationBasedDetector):
         names = list(abstraction.tau_maps.keys())
         super().__init__(
             model,
-            activation_names=names,
+            activation_name_func=lambda _: names,
             max_batch_size=max_batch_size,
             save_path=save_path,
         )

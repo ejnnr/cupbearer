@@ -1,7 +1,7 @@
 import json
 
 import lightning as L
-from cupbearer.scripts.train_classifier import Classifier
+from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import run
 from loguru import logger
 from torch.utils.data import DataLoader
@@ -23,7 +23,7 @@ def main(cfg: Config):
 
     assert cfg.dir.path is not None
     classifier = Classifier.load_from_checkpoint(
-        cfg.dir.path / "last.ckpt", test_loader_names=["test"]
+        cfg.dir.path / "checkpoints" / "last.ckpt", test_loader_names=["test"]
     )
     trainer = L.Trainer(
         logger=False,

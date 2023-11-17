@@ -28,7 +28,7 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
     def build(self, model, save_dir) -> MahalanobisDetector:
         return MahalanobisDetector(
             model=model,
-            activation_names=self.get_names(model),
+            activation_name_func=self.resolve_name_func(),
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )

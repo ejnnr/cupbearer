@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.detectors.config import DetectorConfig, TrainConfig
-from cupbearer.scripts.train_classifier import Classifier
+from cupbearer.scripts._shared import Classifier
 from cupbearer.utils import utils
 from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
