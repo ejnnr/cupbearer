@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 
-from cupbearer.detectors.config import DetectorConfig, TrainConfig
+from cupbearer.detectors.config import ActivationBasedDetectorConfig, TrainConfig
 
 from .mahalanobis_detector import MahalanobisDetector
 
@@ -22,14 +22,13 @@ class MahalanobisTrainConfig(TrainConfig):
 
 
 @dataclass
-class MahalanobisConfig(DetectorConfig):
+class MahalanobisConfig(ActivationBasedDetectorConfig):
     train: MahalanobisTrainConfig = field(default_factory=MahalanobisTrainConfig)
 
-    def build(self, model, params, rng, save_dir) -> MahalanobisDetector:
+    def build(self, model, save_dir) -> MahalanobisDetector:
         return MahalanobisDetector(
             model=model,
-            params=params,
-            rng=rng,
+            activation_name_func=self.resolve_name_func(),
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )

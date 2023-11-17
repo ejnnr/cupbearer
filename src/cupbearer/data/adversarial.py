@@ -1,12 +1,8 @@
 import subprocess
 from dataclasses import dataclass
-from functools import partial
 from pathlib import Path
 from typing import Optional
 
-import jax
-import jax.numpy as jnp
-import optax
 from loguru import logger
 from torch.utils.data import Dataset
 
@@ -19,6 +15,7 @@ from . import DatasetConfig, TrainDataFromRun
 class AdversarialExampleConfig(DatasetConfig, utils.PathConfigMixin):
     attack_batch_size: Optional[int] = None
     success_threshold: float = 0.1
+    steps: int = 40
 
     def _build(self) -> Dataset:
         return AdversarialExampleDataset(
@@ -26,6 +23,7 @@ class AdversarialExampleConfig(DatasetConfig, utils.PathConfigMixin):
             num_examples=self.max_size,
             attack_batch_size=self.attack_batch_size,
             success_threshold=self.success_threshold,
+            steps=self.steps,
         )
 
     @property
@@ -47,6 +45,7 @@ class AdversarialExampleDataset(Dataset):
         num_examples=None,
         attack_batch_size: Optional[int] = None,
         success_threshold: float = 0.1,
+        steps: int = 40,
     ):
         base_run = Path(base_run)
         self.base_run = base_run
@@ -62,6 +61,8 @@ class AdversarialExampleDataset(Dataset):
                 str(base_run),
                 "--success_threshold",
                 str(success_threshold),
+                "--steps",
+                str(steps),
             ]
             if num_examples is not None:
                 command += ["--max_examples", str(num_examples)]
@@ -82,7 +83,8 @@ class AdversarialExampleDataset(Dataset):
                 print(result.stderr)
 
         data = utils.load(base_run / "adv_examples")
-        self.examples = data["adv_examples"]
+        assert isinstance(data, dict)
+        self.examples = data["adv_inputs"]
         self.labels = data["labels"]
 
         if num_examples is None:
@@ -106,16 +108,4 @@ class AdversarialExampleDataset(Dataset):
         # TODO: Probably detectors should just never have access to labels during evals
         # (none of the current ones make use of them anyway). If a detector needs them,
         # it should use the model-generated labels, not ground truth ones.
-        return self.examples[idx], self.labels[idx]
-
-
-@partial(jax.jit, static_argnames=("forward_fn", "eps"))
-def fgsm(forward_fn, inputs, labels, eps=8 / 255):
-    def loss(x):
-        logits = forward_fn(x)
-        one_hot = jax.nn.one_hot(labels, logits.shape[-1])
-        losses = optax.softmax_cross_entropy(logits=logits, labels=one_hot)
-        return jnp.mean(losses)
-
-    loss, grad = jax.value_and_grad(loss)(inputs)
-    return inputs + eps * jnp.sign(grad), loss
+        return self.examples[idx], int(self.labels[idx])

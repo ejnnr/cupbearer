@@ -1,4 +1,4 @@
-from abc import ABC, abstractmethod
+from abc import ABC, abstractmethod, abstractproperty
 from copy import deepcopy
 from dataclasses import dataclass
 from typing import Optional
@@ -7,7 +7,7 @@ from torch.utils.data import Dataset
 
 from cupbearer.data import DatasetConfig, TestDataConfig, TestDataMix
 from cupbearer.models import ModelConfig
-from cupbearer.models.computations import Model
+from cupbearer.models.models import HookedModel
 from cupbearer.utils.utils import BaseConfig, PathConfigMixin
 
 
@@ -18,14 +18,15 @@ class TaskConfigBase(BaseConfig, ABC, PathConfigMixin):
         pass
 
     @abstractmethod
-    def build_model(self) -> Model:
+    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
         pass
-
-    def build_params(self):
-        return None
 
     @abstractmethod
     def build_test_data(self) -> TestDataMix:
+        pass
+
+    @abstractproperty
+    def num_classes(self) -> int:  # type: ignore
         pass
 
 
@@ -85,17 +86,11 @@ class TaskConfig(TaskConfigBase, ABC):
             self._train_data.max_size = self.max_train_size
         return self._train_data.build()
 
-    def build_model(self) -> Model:
+    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
         if not self._model:
             self._init_model()
             assert self._model is not None, "init_model must set _model"
-        return self._model.build_model()
-
-    def build_params(self):
-        if not self._model:
-            self._init_model()
-            assert self._model is not None, "init_model must set _model"
-        return self._model.build_params()
+        return self._model.build_model(input_shape)
 
     def build_test_data(self) -> TestDataMix:
         normal = self._get_normal_test_data()
@@ -107,3 +102,10 @@ class TaskConfig(TaskConfigBase, ABC):
             max_size=self.max_test_size,
         )
         return self._test_data.build()
+
+    @property
+    def num_classes(self):
+        if not self._train_data:
+            self._init_train_data()
+            assert self._train_data is not None, "init_train_data must set _train_data"
+        return self._train_data.num_classes

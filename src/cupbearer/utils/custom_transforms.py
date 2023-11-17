@@ -24,7 +24,7 @@ class AddInfoDict:
 class GaussianNoise:
     """Adds Gaussian noise to the image.
 
-    Note that this expects to_numpy to have been applied already.
+    Note that this expects to_tensor to have been applied already.
 
     Args:
         std: Standard deviation of the Gaussian noise.

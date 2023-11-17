@@ -14,26 +14,27 @@ classifiers = [
     "Operating System :: OS Independent",
 ]
 
-requires-python = ">=3.10"
 dependencies = [
-    "flax~=0.7.0",
-    "jax~=0.4.11",
-    "optax~=0.1.7",
-    "orbax-checkpoint~=0.2.7",
     "numpy~=1.24.2",
     "scikit-learn~=1.2.2",
     "Pillow~=9.4.0",
     "torch~=2.0.0",
     "torchvision~=0.15.1",
+    "torchattacks~=3.5.1",
     "simple_parsing~=0.1.3",
+    "lightning~=2.1.0",
+    "torchmetrics~=1.2.0",
+    "tensorboard",
+    "datasets",
     "tqdm",
     "loguru",
     "matplotlib",
 ]
 
+requires-python = ">=3.10"
+
 [project.optional-dependencies]
 dev = ["pytest", "pre-commit"]
-plots = ["iceberg-dsl==0.0.6"]
 wandb = ["wandb"]
 
 [project.urls]

@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 from cupbearer.data import BackdoorData, DatasetConfig, ValidationConfig, WanetBackdoor
-from cupbearer.models import CNN, MLP, ModelConfig
+from cupbearer.models import CNNConfig, MLPConfig, ModelConfig
 from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.optimizers import Adam, OptimizerConfig
 from cupbearer.utils.scripts import DirConfig, ScriptConfig
@@ -19,6 +19,7 @@ class Config(ScriptConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
+    num_workers: int = 0
     max_steps: Optional[int] = None
     wandb: bool = False
     dir: DirConfig = mutable_field(
@@ -32,7 +33,7 @@ class Config(ScriptConfig):
     def __post_init__(self):
         super().__post_init__()
         # HACK: Need to add new architectures here as they get implemented.
-        if isinstance(self.model, (MLP, CNN)):
+        if isinstance(self.model, (MLPConfig, CNNConfig)):
             self.model.output_dim = self.num_classes
 
         # For datasets that are not necessarily deterministic based only on
@@ -41,6 +42,9 @@ class Config(ScriptConfig):
             for name, val_config in self.val_data.items():
                 # WanetBackdoor
                 if isinstance(self.train_data.backdoor, WanetBackdoor):
+                    assert isinstance(val_config, BackdoorData) and isinstance(
+                        val_config.backdoor, WanetBackdoor
+                    )
                     str_factor = (
                         val_config.backdoor.warping_strength
                         / self.train_data.backdoor.warping_strength
@@ -57,3 +61,4 @@ class Config(ScriptConfig):
             self.max_batch_size = 2
             self.wandb = False
             self.batch_size = 2
+            self.num_workers = 0

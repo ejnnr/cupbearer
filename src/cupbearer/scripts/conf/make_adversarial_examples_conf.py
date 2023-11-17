@@ -13,12 +13,14 @@ class Config(ScriptConfig):
     max_examples: Optional[int] = None
     success_threshold: float = 0.1
     save_config: bool = False
+    steps: int = 40
 
     def setup_and_validate(self):
         super().setup_and_validate()
         if self.debug:
             self.max_examples = 2
             self.batch_size = 2
+            self.steps = 1
             # Can't reliably expect the attack to succeed with toy debug settings:
             self.success_threshold = 1.0
 
