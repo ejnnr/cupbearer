@@ -1,7 +1,7 @@
 import json
 
 import lightning as L
-from cupbearer.scripts.train_classifier import Classifier
+from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import run
 from loguru import logger
 from torch.utils.data import DataLoader
