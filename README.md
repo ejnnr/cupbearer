@@ -25,17 +25,9 @@ Alternatively, if you're going to do development work on the library itself:
 2. Create a virtual environment with Python 3.10 and activate it
 3. Run `pip install -e .` inside the git repo to install the package in editable mode
 
-### Notes on CUDA
-On Linux, installing `cupbearer` will install pytorch with CUDA support even though this isn't necessary
-(we're only using pytorch for its dataloader and datasets).  If you want to avoid that, run
-```bash
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cpu
-```
-*before* installing `cupbearer`.
-
-Similarly, you may want to [install](https://github.com/google/jax#installation) `jax`
-and `jaxlib` manually before installing `cupbearer` to make sure you get the right
-CUDA (or CPU only) version.
+### Notes on Pytorch
+Depending on what platform you're on, you may need to install Pytorch separately *before*
+installing `cupbearer`, in particular if you want to control CUDA version etc.
 
 ## Running scripts
 You can run any script with the `-h` flag to see a list of options and possible values.
