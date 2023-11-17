@@ -19,6 +19,7 @@ class Config(ScriptConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
+    num_workers: int = 0
     max_steps: Optional[int] = None
     wandb: bool = False
     dir: DirConfig = mutable_field(
@@ -60,3 +61,4 @@ class Config(ScriptConfig):
             self.max_batch_size = 2
             self.wandb = False
             self.batch_size = 2
+            self.num_workers = 0

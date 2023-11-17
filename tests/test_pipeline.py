@@ -27,7 +27,7 @@ def backdoor_classifier_path(module_tmp_path):
     run(train_classifier.main, cfg)
 
     assert (module_tmp_path / "config.yaml").is_file()
-    assert (module_tmp_path / "last.ckpt").is_file()
+    assert (module_tmp_path / "checkpoints" / "last.ckpt").is_file()
     assert (module_tmp_path / "tensorboard").is_dir()
 
     return module_tmp_path
@@ -132,7 +132,7 @@ def test_wanet(tmp_path):
     run(train_classifier.main, cfg)
 
     assert (tmp_path / "wanet" / "config.yaml").is_file()
-    assert (tmp_path / "wanet" / "last.ckpt").is_file()
+    assert (tmp_path / "wanet" / "checkpoints" / "last.ckpt").is_file()
     assert (tmp_path / "wanet" / "tensorboard").is_dir()
     # Check that NoData is handled correctly
     for name, data_cfg in cfg.val_data.items():

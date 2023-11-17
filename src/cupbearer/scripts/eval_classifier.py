@@ -23,7 +23,7 @@ def main(cfg: Config):
 
     assert cfg.dir.path is not None
     classifier = Classifier.load_from_checkpoint(
-        cfg.dir.path / "last.ckpt", test_loader_names=["test"]
+        cfg.dir.path / "checkpoints" / "last.ckpt", test_loader_names=["test"]
     )
     trainer = L.Trainer(
         logger=False,

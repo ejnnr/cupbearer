@@ -1,4 +1,8 @@
+import warnings
+
 import lightning as L
+from cupbearer.data.backdoor_data import BackdoorData
+from cupbearer.data.backdoors import WanetBackdoor
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import run
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -9,8 +13,25 @@ from .conf.train_classifier_conf import Config
 
 
 def main(cfg: Config):
+    if (
+        cfg.num_workers > 0
+        and isinstance(cfg.train_data, BackdoorData)
+        and isinstance(cfg.train_data.backdoor, WanetBackdoor)
+    ):
+        # TODO: actually fix this bug (warping field not being shared among workers)
+        raise NotImplementedError(
+            "WanetBackdoor is not compatible with num_workers > 0 right now."
+        )
+
     dataset = cfg.train_data.build()
-    train_loader = DataLoader(dataset, batch_size=cfg.batch_size, shuffle=True)
+
+    train_loader = DataLoader(
+        dataset,
+        batch_size=cfg.batch_size,
+        shuffle=True,
+        num_workers=cfg.num_workers,
+        persistent_workers=cfg.num_workers > 0,
+    )
 
     val_loaders = {}
     for k, v in cfg.val_data.items():
@@ -31,34 +52,46 @@ def main(cfg: Config):
         val_loader_names=list(val_loaders.keys()),
     )
 
-    # TODO: once we do longer training runs we'll want to have multiple check points,
-    # potentially based on validation loss
-    checkpoint_callback = ModelCheckpoint(
-        dirpath=cfg.dir.path,
-        save_last=True,
-    )
-
+    callbacks = []
     metrics_logger = None
+
     if cfg.dir.path is not None:
         metrics_logger = TensorBoardLogger(
             save_dir=cfg.dir.path, name="", version="", sub_dir="tensorboard"
         )
+
         for trafo in cfg.train_data.get_transforms():
             trafo.store(cfg.dir.path)
 
+        # TODO: once we do longer training runs we'll want to have multiple
+        # check points, potentially based on validation loss
+        callbacks.append(
+            ModelCheckpoint(
+                dirpath=cfg.dir.path / "checkpoints",
+                save_last=True,
+            )
+        )
+
     trainer = L.Trainer(
         max_epochs=cfg.num_epochs,
-        callbacks=[checkpoint_callback],
+        max_steps=cfg.max_steps or -1,
+        callbacks=callbacks,
         logger=metrics_logger,
         default_root_dir=cfg.dir.path,
     )
+    if not val_loaders:
+        warnings.filterwarnings(
+            "ignore",
+            message="You defined a `validation_step` but have no `val_dataloader`. "
+            "Skipping val loop.",
+        )
     trainer.fit(
         model=classifier,
         train_dataloaders=train_loader,
-        val_dataloaders=list(val_loaders.values()),
+        # If val_loaders is empty, we want to avoid passing an empty list,
+        # since pytorch lightning would interpret that as an empty dataloader!
+        val_dataloaders=list(val_loaders.values()) or None,
     )
-    # TODO: use training set here
-    # trainer.test(model=classifier, dataloaders=val_loaders.values())
 
 
 if __name__ == "__main__":

@@ -54,7 +54,7 @@ is set to white (and the model is trained to classify images with this trigger a
 There are many more options like learning rate etc. you can set, but the defaults should
 work well enough.
 
-This script will have saved the final model to `logs/demo/classifier/last.ckpt`.
+This script will have saved the final model to `logs/demo/classifier/checkpoints/last.ckpt`.
 We can now train a Mahalanobis-based detector on this model:
 ```bash
 python -m cupbearer.scripts.train_detector \
