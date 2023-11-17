@@ -12,7 +12,7 @@ class SpectralSignatureDetector(ActivationCovarianceBasedDetector):
     Neural Information Processing Systems (2018).
     """
 
-    def post_covariance_training(self, _):
+    def post_covariance_training(self, rcond: None = None):
         # Calculate top right singular vectors from covariance matrices
         self.top_singular_vectors = {
             k: torch.linalg.eigh(cov).eigenvectors[:, -1]

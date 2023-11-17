@@ -1,3 +1,4 @@
+import warnings
 from abc import ABC, abstractmethod
 
 import torch
@@ -96,8 +97,13 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         with torch.inference_mode():
             self.means = self._means
             self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
-            assert all(
-                torch.linalg.matrix_rank(cov) == cov.size(0)
-                for cov in self.covariances.values()
-            ), "Not all computed covariance matrices has full rank."
+            has_full_rank = {
+                k: torch.linalg.matrix_rank(cov) == cov.size(0)
+                for k, cov in self.covariances.items()
+            }
+            if not all(has_full_rank.items()):
+                warnings.warn(
+                    "Only {sum(has_full_rank.values()) / len(has_full_rank)} layers "
+                    "have full rank covariance matrices."
+                )
             self.post_covariance_training(rcond=rcond)

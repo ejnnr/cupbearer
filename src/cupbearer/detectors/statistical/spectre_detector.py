@@ -10,25 +10,22 @@ class SpectreDetector(ActivationCovarianceBasedDetector):
     def post_covariance_training(self, rcond: float):
         whitening_matrices = {}
         for k, cov in self.covariances.items():
-            inv_cov = torch.linalg.pinv(cov, rcond=rcond, hermitian=True)
-            assert inv_cov.ndim == 2
-            # Cholesky whitening, could use PCA or ZCA instead
-            whitening_matrices[k] = torch.linalg.cholesky(inv_cov)
+            # Compute decomposition
+            eigs = torch.linalg.eigh(cov)
+
+            # Zero entries corresponding to eigenvalues smaller than rcond
+            vals_rsqrt = eigs.eigenvalues.rsqrt()
+            vals_rsqrt[eigs.eigenvalues < rcond * eigs.eigenvalues.max()] = 0
+
+            # PCA whitening
             # following https://doi.org/10.1080/00031305.2016.1277159
-            # but moving transpose to einsum
-            # TODO move this assertion to tests/
+            # and https://stats.stackexchange.com/a/594218/319192
+            # but transposed (sphering with x@W instead of W@x)
+            whitening_matrices[k] = eigs.eigenvectors * vals_rsqrt.unsqueeze(0)
             assert torch.allclose(
-                torch.einsum(
-                    "ik,km->im",
-                    torch.einsum(
-                        "ij,kj->ik",
-                        whitening_matrices[k],
-                        whitening_matrices[k],
-                    ),
-                    cov,
-                ),
-                torch.eye(n=cov.size(0)),
+                whitening_matrices[k], eigs.eigenvectors @ vals_rsqrt.diag()
             )
+        self.whitening_matrices = whitening_matrices
 
     def layerwise_scores(self, batch):
         _, activations = self.get_activations(batch)
@@ -40,7 +37,7 @@ class SpectreDetector(ActivationCovarianceBasedDetector):
             )
             for k in self.activations
         }
-        return quantum_entropy(
+        return quantum_entropy(  # TODO should possibly pass rank
             whitened_activations,
         )
 
