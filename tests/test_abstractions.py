@@ -1,14 +1,17 @@
 import pytest
 import torch
 from cupbearer import models
-from cupbearer.detectors.abstraction import AcyclicAbstraction, AutoencoderAbstraction
+from cupbearer.detectors.abstraction import (
+    AutoencoderAbstraction,
+    LocallyConsistentAbstraction,
+)
 from torch import nn
 
 
 @pytest.mark.parametrize(
     "get_default_abstraction",
     [
-        AcyclicAbstraction.get_default,
+        LocallyConsistentAbstraction.get_default,
         AutoencoderAbstraction.get_default,
     ],
 )
@@ -32,7 +35,7 @@ def test_default_mlp_abstraction_shapes(get_default_abstraction):
 
 @pytest.mark.parametrize(
     "get_default_abstraction",
-    [AcyclicAbstraction.get_default],
+    [LocallyConsistentAbstraction.get_default],
 )
 def test_default_mlp_predicted_abstraction_shapes(get_default_abstraction):
     full_dims = [2, 3, 4, 5, 6]
@@ -76,7 +79,7 @@ def test_default_mlp_reconstructed_activation_shapes(get_default_abstraction):
 @pytest.mark.parametrize(
     "get_default_abstraction",
     [
-        AcyclicAbstraction.get_default,
+        LocallyConsistentAbstraction.get_default,
         AutoencoderAbstraction.get_default,
     ],
 )
@@ -109,7 +112,7 @@ def test_default_mlp_abstraction_forward_pass(get_default_abstraction):
 
 @pytest.mark.parametrize(
     "get_default_abstraction",
-    [AcyclicAbstraction.get_default],
+    [LocallyConsistentAbstraction.get_default],
 )
 def test_default_mlp_acyclic_abstraction_forward_pass(get_default_abstraction):
     full_dims = [2, 3, 4, 5, 6]
@@ -152,7 +155,7 @@ def test_default_mlp_autoencoder_abstraction_forward_pass(get_default_abstractio
 @pytest.mark.parametrize(
     "get_default_abstraction",
     [
-        AcyclicAbstraction.get_default,
+        LocallyConsistentAbstraction.get_default,
         AutoencoderAbstraction.get_default,
     ],
 )
@@ -179,7 +182,7 @@ def test_default_cnn_abstraction_shapes(get_default_abstraction):
 @pytest.mark.parametrize(
     "get_default_abstraction",
     [
-        AcyclicAbstraction.get_default,
+        LocallyConsistentAbstraction.get_default,
     ],
 )
 def test_default_cnn_predicted_abstraction_shapes(get_default_abstraction):
@@ -238,7 +241,7 @@ def test_default_cnn_reconstructed_activations_shapes(get_default_abstraction):
 @pytest.mark.parametrize(
     "get_default_abstraction",
     [
-        AcyclicAbstraction.get_default,
+        LocallyConsistentAbstraction.get_default,
         AutoencoderAbstraction.get_default,
     ],
 )
@@ -288,7 +291,7 @@ def test_default_cnn_abstraction_forward_pass(get_default_abstraction):
 @pytest.mark.parametrize(
     "get_default_abstraction",
     [
-        AcyclicAbstraction.get_default,
+        LocallyConsistentAbstraction.get_default,
     ],
 )
 def test_default_cnn_acyclic_abstraction_forward_pass(get_default_abstraction):

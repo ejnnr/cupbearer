@@ -9,8 +9,8 @@ from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.detectors.abstraction.abstraction import (
     Abstraction,
-    AcyclicAbstraction,
     AutoencoderAbstraction,
+    LocallyConsistentAbstraction,
 )
 from cupbearer.detectors.anomaly_detector import (
     ActivationBasedDetector,
@@ -76,7 +76,7 @@ def compute_losses(
     layerwise: bool = False,
 ):
     # TODO this is a bit rigid, possibly this should be configurable
-    if isinstance(abstraction, AcyclicAbstraction):
+    if isinstance(abstraction, LocallyConsistentAbstraction):
         abstractions, predicted_abstractions = abstraction(activations)
         losses = compute_cosine_losses(
             predicted_abstractions, abstractions, layerwise=layerwise

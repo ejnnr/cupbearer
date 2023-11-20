@@ -60,7 +60,7 @@ class Abstraction(nn.Module):
         pass
 
 
-class AcyclicAbstraction(Abstraction):
+class LocallyConsistentAbstraction(Abstraction):
     def __init__(
         self,
         tau_maps: dict[str, nn.Module],
@@ -103,7 +103,7 @@ class AcyclicAbstraction(Abstraction):
         cls,
         model: HookedModel,
         size_reduction: int,
-    ) -> AcyclicAbstraction:
+    ) -> LocallyConsistentAbstraction:
         def get_mlp_abstraction(
             model: models.MLP, size_reduction: int
         ) -> tuple[dict[str, nn.Module], dict[str, nn.Module]]:

@@ -9,7 +9,11 @@ from cupbearer.utils.optimizers import Adam, OptimizerConfig
 from cupbearer.utils.utils import BaseConfig
 
 from ..config import DetectorConfig, TrainConfig
-from .abstraction import Abstraction, AcyclicAbstraction, AutoencoderAbstraction
+from .abstraction import (
+    Abstraction,
+    AutoencoderAbstraction,
+    LocallyConsistentAbstraction,
+)
 from .abstraction_detector import AbstractionDetector
 
 
@@ -46,9 +50,9 @@ class AbstractionConfig(BaseConfig, ABC):
         pass
 
 
-class AcyclicAbstractionConfig(AbstractionConfig):
-    def build(self, model: HookedModel) -> AcyclicAbstraction:
-        return AcyclicAbstraction.get_default(
+class LocallyConsistentAbstractionConfig(AbstractionConfig):
+    def build(self, model: HookedModel) -> LocallyConsistentAbstraction:
+        return LocallyConsistentAbstraction.get_default(
             model,
             self.size_reduction,
         )
@@ -63,7 +67,7 @@ class AutoencoderAbstractionConfig(AbstractionConfig):
 
 
 ABSTRACTIONS = {
-    "simple": AcyclicAbstractionConfig,
+    "lca": LocallyConsistentAbstractionConfig,
     "autoencoder": AutoencoderAbstractionConfig,
 }
 register_config_group(AbstractionConfig, ABSTRACTIONS)
@@ -72,7 +76,7 @@ register_config_group(AbstractionConfig, ABSTRACTIONS)
 @dataclass
 class AbstractionDetectorConfig(DetectorConfig):
     abstraction: AbstractionConfig = config_group(
-        AbstractionConfig, AcyclicAbstractionConfig
+        AbstractionConfig, LocallyConsistentAbstractionConfig
     )
     train: AbstractionTrainConfig = field(default_factory=AbstractionTrainConfig)
 
