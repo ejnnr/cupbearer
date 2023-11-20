@@ -54,9 +54,10 @@ class ABCTestAbstraction(ABC):
         assert len(activations) == len(self.mlp_expected_dims)
         for name, activation in activations.items():
             assert name.startswith("post_linear_")
+            assert name.split("_")[-1].isdigit()
             assert activation.ndim == 2
             assert activation.shape[0] == 1
-            assert activation.shape[1] == self.mlp_full_dims[-1]
+            assert activation.shape[1] == self.mlp_full_dims[int(name.split("_")[-1])]
 
         abstractions, _ = abstraction(activations)
         assert abstractions.keys() == _.keys()
@@ -130,6 +131,7 @@ class TestLCA(ABCTestAbstraction):
         assert "post_linear_0" not in abstraction.steps
 
     def test_default_mlp_abstraction_forward_pass(self):
+        super().test_default_mlp_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.mlp, size_reduction=2)
         inputs = torch.randn(1, 28, 28)
         names = [f"post_linear_{i}" for i in range(len(self.mlp_full_dims))]
@@ -159,7 +161,8 @@ class TestLCA(ABCTestAbstraction):
         # Should be a sequential with pooling + Linear
         assert isinstance(abstraction.steps["mlp_post_linear_0"], nn.Sequential)
 
-    def test_default_cnn_acyclic_abstraction_forward_pass(self):
+    def test_default_cnn_abstraction_forward_pass(self):
+        super().test_default_cnn_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.cnn, size_reduction=2)
         inputs = torch.randn(1, 1, 28, 28)
         names = [f"conv_post_conv_{i}" for i in range(len(self.cnn_full_dims))] + [
@@ -195,6 +198,7 @@ class TestAutoencoderAbstraction(ABCTestAbstraction):
         assert isinstance(abstraction.decoders[f"post_linear_{i + 1}"], nn.Identity)
 
     def test_default_mlp_abstraction_forward_pass(self):
+        super().test_default_mlp_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.mlp, size_reduction=2)
         inputs = torch.randn(1, 28, 28)
         names = [f"post_linear_{i}" for i in range(len(self.mlp_full_dims))]
@@ -219,7 +223,8 @@ class TestAutoencoderAbstraction(ABCTestAbstraction):
         # Should be a sequential with pooling + Linear
         assert isinstance(abstraction.decoders["mlp_post_linear_0"], nn.Identity)
 
-    def test_default_cnn_autoencoder_abstraction_forward_pass(self):
+    def test_default_cnn_abstraction_forward_pass(self):
+        super().test_default_cnn_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.cnn, size_reduction=2)
         inputs = torch.randn(1, 1, 28, 28)
         names = [f"conv_post_conv_{i}" for i in range(len(self.cnn_full_dims))] + [
