@@ -186,6 +186,7 @@ class LocallyConsistentAbstraction(Abstraction):
         else:
             raise ValueError(f"Unknown model type: {type(model)}")
 
+        assert all(n1 == n2 for n1, n2 in zip(tau_maps.keys(), model.default_names))
         return cls(tau_maps, steps)
 
 
@@ -274,4 +275,5 @@ class AutoencoderAbstraction(nn.Module):
         else:
             raise ValueError(f"Unknown model type: {type(model)}")
 
+        assert all(n1 == n2 for n1, n2 in zip(tau_maps.keys(), model.default_names))
         return cls(tau_maps, decoders)
