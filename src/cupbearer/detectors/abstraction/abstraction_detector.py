@@ -1,3 +1,4 @@
+import functools
 from pathlib import Path
 from typing import Any, Callable, Optional
 
@@ -6,7 +7,11 @@ import torch
 import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset
 
-from cupbearer.detectors.abstraction.abstraction import Abstraction
+from cupbearer.detectors.abstraction.abstraction import (
+    Abstraction,
+    AutoencoderAbstraction,
+    LocallyConsistentAbstraction,
+)
 from cupbearer.detectors.anomaly_detector import (
     ActivationBasedDetector,
 )
@@ -14,39 +19,74 @@ from cupbearer.models import HookedModel
 from cupbearer.utils.optimizers import OptimizerConfig
 
 
+def per_layer(func: Callable):
+    @functools.wraps(func)
+    def wrapper(
+        inputs: dict[str, torch.Tensor | None],
+        targets: dict[str, torch.Tensor],
+        layerwise: bool,
+        *args,
+        **kwargs,
+    ):
+        layer_losses: dict[str, torch.Tensor] = {}
+        assert inputs.keys() == targets.keys()
+        for k in inputs.keys():
+            if inputs[k] is None:
+                # No prediction was made for this layer
+                continue
+            input = inputs[k].flatten(start_dim=1)
+            target = targets[k].flatten(start_dim=1)
+
+            losses = func(input, target, *args, **kwargs)
+            assert losses.ndim == 1
+            layer_losses[k] = losses
+
+        if layerwise:
+            return layer_losses
+
+        n = len(layer_losses)
+        assert n > 0
+        return sum(x for x in layer_losses.values()) / n
+
+    return wrapper
+
+
+@per_layer
+def compute_cosine_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    # Cosine distance can be NaN if one of the inputs is exactly zero
+    # which is why we need the eps (which sets cosine distance to 1 in that case).
+    # This doesn't happen in realistic scenarios, but in tests with very small
+    # hidden dimensions and ReLUs, it's possible.
+    return 1 - F.cosine_similarity(input, target, eps=1e-6)
+
+
+@per_layer
+def compute_kl_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+    return F.kl_div(
+        input,
+        target,
+        reduction="none",
+        log_target=True,
+    ).sum(dim=1)
+
+
 def compute_losses(
-    abstraction_model: Abstraction,
+    abstraction: Abstraction,
     activations: dict[str, torch.Tensor],
-    layerwise=False,
-) -> dict[str, torch.Tensor] | torch.Tensor:
-    abstractions, predicted_abstractions = abstraction_model(activations)
-
-    # Consistency loss:
-    layer_losses: dict[str, torch.Tensor] = {}
-    for k in abstractions:
-        predicted_abstraction = predicted_abstractions[k]
-        if predicted_abstraction is None:
-            # We didn't make a prediction for this one
-            continue
-        actual_abstraction = abstractions[k]
-        batch_size = actual_abstraction.shape[0]
-        actual_abstraction = actual_abstraction.view(batch_size, -1)
-        predicted_abstraction = predicted_abstraction.view(batch_size, -1)
-        # Cosine distance can be NaN if one of the inputs is exactly zero
-        # which is why we need the eps (which sets cosine distance to 1 in that case).
-        # This doesn't happen in realistic scenarios, but in tests with very small
-        # hidden dimensions and ReLUs, it's possible.
-        predicted_abstraction = F.normalize(predicted_abstraction, dim=1, eps=1e-6)
-        actual_abstraction = F.normalize(actual_abstraction, dim=1, eps=1e-6)
-        losses = 1 - (predicted_abstraction * actual_abstraction).sum(dim=1)
-        layer_losses[k] = losses
-
-    if layerwise:
-        return layer_losses
-
-    n = len(layer_losses)
-    assert n > 0
-    return sum(x for x in layer_losses.values()) / n  # type: ignore
+    layerwise: bool = False,
+):
+    # TODO this is a bit rigid, possibly this should be configurable
+    if isinstance(abstraction, LocallyConsistentAbstraction):
+        abstractions, predicted_abstractions = abstraction(activations)
+        losses = compute_cosine_losses(
+            predicted_abstractions, abstractions, layerwise=layerwise
+        )
+    elif isinstance(abstraction, AutoencoderAbstraction):
+        abstractions, reconstructed_activations = abstraction(activations)
+        losses = compute_kl_losses(
+            reconstructed_activations, activations, layerwise=layerwise
+        )
+    return losses
 
 
 class AbstractionModule(L.LightningModule):

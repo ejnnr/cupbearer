@@ -1,6 +1,5 @@
 import math
 
-import torch.nn.functional as F
 from torch import nn
 
 from .hooked_model import HookedModel
@@ -18,32 +17,29 @@ class MLP(HookedModel):
         self.output_dim = output_dim
         self.hidden_dims = hidden_dims
         in_features = math.prod(input_shape)
-        self.layers = nn.ModuleList(
-            [
-                nn.Linear(
-                    in_features=in_features,
-                    out_features=out_features,
-                )
-                for in_features, out_features in zip(
-                    [in_features] + hidden_dims, hidden_dims + [output_dim]
-                )
-            ]
-        )
+        self.layers = nn.ModuleDict()
+        for i_layer, (in_features, out_features) in enumerate(
+            zip([in_features] + hidden_dims, hidden_dims + [output_dim])
+        ):
+            self.layers[f"linear_{i_layer}"] = nn.Linear(
+                in_features=in_features,
+                out_features=out_features,
+            )
+            self.layers[f"relu_{i_layer}"] = nn.ReLU()
+        self.layers.pop(next(reversed(self.layers.keys())))  # rm last relu
 
     def forward(self, x):
         x = x.view(x.shape[0], -1)
-        for i, layer in enumerate(self.layers[:-1]):
+        for name, layer in self.layers.items():
             x = layer(x)
-            self.store(f"post_linear_{i}", x)
-            x = F.relu(x)
-            self.store(f"post_relu_{i}", x)
-        x = self.layers[-1](x)
-        self.store(f"post_linear_{len(self.layers) - 1}", x)
+            self.store(f"post_{name}", x)
         return x
 
     @property
     def default_names(self) -> list[str]:
-        return [f"post_linear_{i}" for i in range(len(self.layers))]
+        return [
+            f"post_{name}" for name in self.layers.keys() if name.startswith("linear")
+        ]
 
 
 class CNN(HookedModel):
@@ -63,41 +59,42 @@ class CNN(HookedModel):
         self.dense_dims = dense_dims
         self.kernel_sizes = kernel_sizes if kernel_sizes else [3] * len(channels)
         self.strides = strides if strides else [1] * len(channels)
-        self.conv_layers = nn.ModuleList()
+        self.conv_layers = nn.ModuleDict()
 
-        for in_channels, out_channels, kernel_size, stride in zip(
-            [input_shape[0]] + channels[:-1],
-            channels,
-            self.kernel_sizes,
-            self.strides,
-        ):
-            self.conv_layers.append(
-                nn.Conv2d(
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=kernel_size,
-                    stride=stride,
-                    padding="same",
-                )
+        for i_layer, (in_channels, out_channels, kernel_size, stride) in enumerate(
+            zip(
+                [input_shape[0]] + channels[:-1],
+                channels,
+                self.kernel_sizes,
+                self.strides,
             )
+        ):
+            self.conv_layers[f"conv_{i_layer}"] = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding="same",
+            )
+            self.conv_layers[f"relu_{i_layer}"] = nn.ReLU()
+            self.conv_layers[f"pool_{i_layer}"] = nn.MaxPool2d(2)
+        self.global_pool = nn.AdaptiveMaxPool2d((1, 1))
 
         self.mlp = MLP((self.channels[-1],), self.output_dim, self.dense_dims)
 
     def forward(self, x):
-        for i, layer in enumerate(self.conv_layers):
+        for name, layer in self.conv_layers.items():
             x = layer(x)
-            self.store(f"conv_post_conv_{i}", x)
-            x = F.relu(x)
-            self.store(f"conv_post_relu_{i}", x)
-            x = F.max_pool2d(x, 2)
-            self.store(f"conv_post_pool_{i}", x)
-        x = F.adaptive_max_pool2d(x, (1, 1))
+            self.store(f"conv_post_{name}", x)
+        x = self.global_pool(x)
         self.store("post_global_pool", x)
         x = self.call_submodule("mlp", x)
         return x
 
     @property
     def default_names(self) -> list[str]:
-        return [f"conv_post_conv_{i}" for i in range(len(self.channels))] + [
-            "mlp_" + name for name in self.mlp.default_names
-        ]
+        return [
+            f"conv_post_{name}"
+            for name in self.conv_layers.keys()
+            if name.startswith("conv")
+        ] + ["mlp_" + name for name in self.mlp.default_names]

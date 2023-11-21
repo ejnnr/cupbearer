@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -8,7 +9,11 @@ from cupbearer.utils.optimizers import Adam, OptimizerConfig
 from cupbearer.utils.utils import BaseConfig
 
 from ..config import DetectorConfig, TrainConfig
-from .abstraction import Abstraction, get_default_abstraction
+from .abstraction import (
+    Abstraction,
+    AutoencoderAbstraction,
+    LocallyConsistentAbstraction,
+)
 from .abstraction_detector import AbstractionDetector
 
 
@@ -37,25 +42,42 @@ class AbstractionTrainConfig(TrainConfig):
 # let users specify a path to a python function that gets called
 # to construct the abstraction. (With get_default_abstraction being the default.)
 @dataclass
-class AbstractionConfig(BaseConfig):
+class AbstractionConfig(BaseConfig, ABC):
     size_reduction: int = 4
 
+    @abstractmethod
     def build(self, model: HookedModel) -> Abstraction:
-        return get_default_abstraction(
+        pass
+
+
+class LocallyConsistentAbstractionConfig(AbstractionConfig):
+    def build(self, model: HookedModel) -> LocallyConsistentAbstraction:
+        return LocallyConsistentAbstraction.get_default(
+            model,
+            self.size_reduction,
+        )
+
+
+class AutoencoderAbstractionConfig(AbstractionConfig):
+    def build(self, model: HookedModel) -> AutoencoderAbstraction:
+        return AutoencoderAbstraction.get_default(
             model,
             self.size_reduction,
         )
 
 
 ABSTRACTIONS = {
-    "simple": AbstractionConfig,
+    "lca": LocallyConsistentAbstractionConfig,
+    "autoencoder": AutoencoderAbstractionConfig,
 }
 register_config_group(AbstractionConfig, ABSTRACTIONS)
 
 
 @dataclass
 class AbstractionDetectorConfig(DetectorConfig):
-    abstraction: AbstractionConfig = config_group(AbstractionConfig, AbstractionConfig)
+    abstraction: AbstractionConfig = config_group(
+        AbstractionConfig, LocallyConsistentAbstractionConfig
+    )
     train: AbstractionTrainConfig = field(default_factory=AbstractionTrainConfig)
 
     def build(self, model, save_dir) -> AbstractionDetector:

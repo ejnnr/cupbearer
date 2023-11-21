@@ -64,6 +64,25 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
 
 
 @pytest.mark.slow
+def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
+    cfg = parse(
+        train_detector_conf.Config,
+        args=f"--debug_with_logging --dir.full {tmp_path} "
+        f"--task backdoor --task.backdoor corner "
+        f"--task.path {backdoor_classifier_path} --detector abstraction "
+        f"--detector.abstraction autoencoder",
+        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    )
+    run(train_detector.main, cfg)
+    assert (tmp_path / "config.yaml").is_file()
+    assert (tmp_path / "detector.pt").is_file()
+
+    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "eval.json").is_file()
+
+
+# N.B. this test is flaky, sometimes no adversarial examples are found
+@pytest.mark.slow
 def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
     # This test doesn't need a backdoored classifier, but we already have one
     # and it doesn't hurt, so reusing it makes execution faster.
