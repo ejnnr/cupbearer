@@ -103,9 +103,9 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
                 k: torch.linalg.matrix_rank(cov) == cov.size(0)
                 for k, cov in self.covariances.items()
             }
-            if not all(has_full_rank.items()):
+            if not all(has_full_rank.values()):
                 warnings.warn(
-                    "Only {sum(has_full_rank.values()) / len(has_full_rank)} layers "
+                    f"Only {sum(has_full_rank.values())}/{len(has_full_rank)} layers "
                     "have full rank covariance matrices."
                 )
             self.post_covariance_training(rcond=rcond)
