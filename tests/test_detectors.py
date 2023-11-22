@@ -42,10 +42,7 @@ class TestTrainedDetectors:
     def train_detector(dataset, Model, Detector, **kwargs):
         example_input, _ = next(iter(dataset))
         model = Model(input_shape=example_input.shape, output_dim=7)
-        detector = Detector(
-            model=model,
-            activation_names=model._names,
-        )
+        detector = Detector(model=model)
 
         detector.train(
             dataset=dataset,

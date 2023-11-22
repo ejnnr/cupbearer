@@ -97,6 +97,8 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         with torch.inference_mode():
             self.means = self._means
             self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
+            assert all(torch.count_nonzero(C) > 0 for C in self.covariances.values())
+
             has_full_rank = {
                 k: torch.linalg.matrix_rank(cov) == cov.size(0)
                 for k, cov in self.covariances.items()

@@ -23,8 +23,8 @@ class ActivationConvolutionTrainConfig(BaseConfig, ABC):
     def setup_and_validate(self):
         super().setup_and_validate()
         if self.debug:
-            self.batch_size = 2
-            self.max_batch_size = 2
+            self.max_batches = 3
+            self.batch_size = 5
 
 
 @dataclass
@@ -54,7 +54,7 @@ class SpectralSignatureConfig(ActivationBasedDetectorConfig):
     def build(self, model, save_dir) -> SpectralSignatureDetector:
         return SpectralSignatureDetector(
             model=model,
-            activation_names=self.get_names(model),
+            activation_name_func=self.resolve_name_func(),
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )
@@ -69,7 +69,7 @@ class SpectreConfig(ActivationBasedDetectorConfig):
     def build(self, model, save_dir) -> SpectralSignatureDetector:
         return SpectreDetector(
             model=model,
-            activation_names=self.get_names(model),
+            activation_name_func=self.resolve_name_func(),
             max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )

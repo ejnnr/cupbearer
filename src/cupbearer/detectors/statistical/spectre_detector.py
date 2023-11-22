@@ -35,7 +35,7 @@ class SpectreDetector(ActivationCovarianceBasedDetector):
                 activations[k].flatten(start_dim=1) - self.means[k],
                 self.whitening_matrices[k],
             )
-            for k in self.activations
+            for k in activations.keys()
         }
         return quantum_entropy(  # TODO should possibly pass rank
             whitened_activations,

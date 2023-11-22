@@ -90,7 +90,7 @@ def quantum_entropy(
     # simplified it based on the second assumption.
     assert all(a.ndim == 2 for a in whitened_activations.values())
     return {
-        whitened_activations[k].square().sum(dim=-1)
+        k: whitened_activations[k].square().sum(dim=-1)
         / alpha ** (whitened_activations[k].size(-1))
         for k in whitened_activations
     }
