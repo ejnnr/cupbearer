@@ -145,7 +145,8 @@ def test_wanet(tmp_path):
         "--train_data backdoor --train_data.original gtsrb "
         "--train_data.backdoor wanet --model mlp "
         "--val_data.backdoor backdoor --val_data.backdoor.original gtsrb "
-        "--val_data.backdoor.backdoor wanet",
+        "--val_data.backdoor.backdoor wanet "
+        "--num_workers=1",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_classifier.main, cfg)
@@ -157,8 +158,8 @@ def test_wanet(tmp_path):
     for name, data_cfg in cfg.val_data.items():
         if name == "backdoor":
             assert torch.allclose(
-                data_cfg.backdoor.warping_field,
-                cfg.train_data.backdoor.warping_field,
+                data_cfg.backdoor.control_grid,
+                cfg.train_data.backdoor.control_grid,
             )
         else:
             with pytest.raises(NotImplementedError):
@@ -174,6 +175,6 @@ def test_wanet(tmp_path):
     )
     run(train_detector.main, train_detector_cfg)
     assert torch.allclose(
-        train_detector_cfg.task.backdoor.warping_field,
-        cfg.train_data.backdoor.warping_field,
+        train_detector_cfg.task.backdoor.control_grid,
+        cfg.train_data.backdoor.control_grid,
     )

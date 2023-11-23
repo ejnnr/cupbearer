@@ -61,4 +61,3 @@ class Config(ScriptConfig):
             self.max_batch_size = 2
             self.wandb = False
             self.batch_size = 2
-            self.num_workers = 0
