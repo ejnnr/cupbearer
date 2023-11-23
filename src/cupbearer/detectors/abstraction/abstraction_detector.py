@@ -148,6 +148,7 @@ class AbstractionDetector(ActivationBasedDetector):
         num_epochs: int = 10,
         validation_datasets: Optional[dict[str, Dataset]] = None,
         max_steps: Optional[int] = None,
+        log_every_n_steps: Optional[int] = None,
         **kwargs,
     ):
         # Possibly we should store this as a submodule to save optimizers and continue
@@ -169,6 +170,7 @@ class AbstractionDetector(ActivationBasedDetector):
             enable_checkpointing=False,
             logger=None,
             default_root_dir=self.save_path,
+            log_every_n_steps=log_every_n_steps,
         )
         self.model.eval()
         # We don't need gradients for base model parameters:

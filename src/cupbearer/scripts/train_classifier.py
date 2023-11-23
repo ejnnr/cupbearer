@@ -66,6 +66,7 @@ def main(cfg: Config):
         callbacks=callbacks,
         logger=metrics_logger,
         default_root_dir=cfg.dir.path,
+        log_every_n_steps=cfg.log_every_n_steps,
     )
     if not val_loaders:
         warnings.filterwarnings(

@@ -13,6 +13,15 @@ from cupbearer.scripts.conf import (
 from cupbearer.utils.scripts import run
 from simple_parsing import ArgumentGenerationMode, parse
 
+# Ignore warnings about num_workers
+pytestmark = pytest.mark.filterwarnings(
+    "ignore"
+    ":The '[a-z]*_dataloader' does not have many workers which may be a bottleneck. "
+    "Consider increasing the value of the `num_workers` argument` to "
+    "`num_workers=[0-9]*` in the `DataLoader` to improve performance."
+    ":UserWarning"
+)
+
 
 @pytest.fixture(scope="module")
 def backdoor_classifier_path(module_tmp_path):
