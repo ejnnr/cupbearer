@@ -82,11 +82,10 @@ def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
 
 
 def filter_advex_failure(err, *args):
-    err_type, err = err
     flaky_error_msg = (
         "RuntimeError(\nRuntimeError: Attack failed, new accuracy is 100.0 > 1.0.\n"
     )
-    return err.stderr.endswith(flaky_error_msg)
+    return err[1].stderr.endswith(flaky_error_msg)
 
 
 @pytest.mark.flaky(max_runs=3, rerun_filter=filter_advex_failure)
