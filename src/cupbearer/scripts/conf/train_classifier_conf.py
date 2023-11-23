@@ -48,3 +48,13 @@ class Config(ScriptConfig):
                     val_config.backdoor.control_grid = (
                         str_factor * self.train_data.backdoor.control_grid
                     )
+
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.num_epochs = 1
+            self.max_steps = 3
+            self.max_batch_size = 32
+            self.wandb = False
+            self.batch_size = 11
+            self.log_every_n_steps = self.max_steps
