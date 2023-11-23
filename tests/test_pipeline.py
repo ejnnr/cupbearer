@@ -81,7 +81,15 @@ def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
     assert (tmp_path / "eval.json").is_file()
 
 
-# N.B. this test is flaky, sometimes no adversarial examples are found
+def filter_advex_failure(err, *args):
+    err_type, err = err
+    flaky_error_msg = (
+        "RuntimeError(\nRuntimeError: Attack failed, new accuracy is 100.0 > 1.0.\n"
+    )
+    return err.stderr.endswith(flaky_error_msg)
+
+
+@pytest.mark.flaky(max_runs=3, rerun_filter=filter_advex_failure)
 @pytest.mark.slow
 def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
     # This test doesn't need a backdoored classifier, but we already have one
