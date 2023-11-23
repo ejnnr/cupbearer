@@ -81,16 +81,22 @@ def quantum_entropy(
     whitened_activations: dict[str, torch.Tensor],
     alpha: float = 4,
 ) -> dict[str, torch.Tensor]:
-    """Quantum ENtropy score per layer."""
-    # TODO confusion:
-    # In paper they whiten the matrix and then compute mean and covariance
-    # matrix of whitened data, this means that either scores are not
-    # independent between samples (score depends on other samples in batch) or
-    # that mean is 0 and covariance matrix is identity matrix. Here I've
-    # simplified it based on the second assumption.
-    assert all(a.ndim == 2 for a in whitened_activations.values())
-    return {
-        k: whitened_activations[k].square().sum(dim=-1)
-        / alpha ** (whitened_activations[k].size(-1))
-        for k in whitened_activations
-    }
+    """Quantum Entropy score per layer."""
+    distances: dict[str, torch.Tensor] = {}
+    for k, activation in whitened_activations.items():
+        activation = activation.flatten(start_dim=1)
+
+        # Compute QUE-score
+        centered_batch = activation - activation.mean(dim=0, keepdim=True)
+        batch_cov = centered_batch.mT @ centered_batch
+
+        batch_cov_norm = torch.linalg.eigvalsh(batch_cov).max()
+        exp_factor = torch.matrix_exp(alpha * batch_cov / batch_cov_norm)
+
+        distances[k] = torch.einsum(
+            "bi,ij,jb->b",
+            activation,
+            exp_factor,
+            activation.mT,
+        )
+    return distances
