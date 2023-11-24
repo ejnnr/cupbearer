@@ -149,13 +149,13 @@ class WanetBackdoor(Backdoor):
         # upsample expects a batch dimesion, so we add a singleton. We permute after
         # upsampling, since grid_sample expects the length-2 axis to be the last one.
         field = F.interpolate(
-            self.control_grid[None], size=(px, py), mode="bicubic", align_corners=True
+            self.control_grid[None], size=(py, px), mode="bicubic", align_corners=True
         )[0].permute(1, 2, 0)
 
         # Create coordinates by adding to identity field
         xs = torch.linspace(-1, 1, steps=px)
         ys = torch.linspace(-1, 1, steps=py)
-        xx, yy = torch.meshgrid(xs, ys)
+        yy, xx = torch.meshgrid(ys, xs, indexing="ij")
         identity_grid = torch.stack((yy, xx), 2)
         field = field + identity_grid
 

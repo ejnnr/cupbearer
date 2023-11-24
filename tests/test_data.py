@@ -61,7 +61,7 @@ class DummyImageData(Dataset):
 class DummyImageConfig(data.DatasetConfig):
     length: int
     num_classes: int = 10
-    shape: tuple[int, int] = (8, 8)
+    shape: tuple[int, int] = (8, 12)
 
     def _build(self) -> Dataset:
         return DummyImageData(self.length, self.num_classes, self.shape)
