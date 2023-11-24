@@ -1,8 +1,11 @@
 import warnings
 
 import lightning as L
+import torch
+from cupbearer.data import TensorDataFormat
 from cupbearer.data.backdoor_data import BackdoorData
 from cupbearer.data.backdoors import WanetBackdoor
+from cupbearer.data.data_format import TextDataFormat
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import run
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -40,13 +43,19 @@ def main(cfg: Config):
             dataset, batch_size=cfg.max_batch_size, shuffle=False
         )
 
-    # Dataloader returns images and labels, only images get passed to model
-    images, _ = next(iter(train_loader))
-    example_input = images[0]
+    # Dataloader returns inputs and labels, only inputs get passed to model
+    inputs, _ = next(iter(train_loader))
+    example_input = inputs[0]
+    if isinstance(example_input, torch.Tensor):
+        input_format = TensorDataFormat(example_input.shape)
+    elif isinstance(example_input, str):
+        input_format = TextDataFormat()
+    else:
+        raise ValueError(f"Unknown input type {type(example_input)}")
 
     classifier = Classifier(
         model=cfg.model,
-        input_shape=example_input.shape,
+        input_format=input_format,
         num_classes=cfg.num_classes,
         optim_cfg=cfg.optim,
         val_loader_names=list(val_loaders.keys()),

@@ -5,6 +5,8 @@ from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
 from .adversarial import AdversarialExampleConfig
 from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
+from .data_format import DataFormat, TensorDataFormat, TextDataFormat  # noqa
+from .huggingface import IMDBDatasetConfig
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 
@@ -15,6 +17,7 @@ DATASETS = {
     "gtsrb": GTSRB,
     "from_run": TrainDataFromRun,
     "adversarial": AdversarialExampleConfig,
+    "imdb": IMDBDatasetConfig,
     "toy_features": ToyFeaturesConfig,
     "none": NoData,
 }

@@ -3,26 +3,28 @@ from dataclasses import dataclass
 
 import torch
 
+from cupbearer.data import DataFormat, TensorDataFormat, TextDataFormat
 from cupbearer.utils.config_groups import register_config_group
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig, PathConfigMixin, mutable_field
 
 from .hooked_model import HookedModel
 from .models import CNN, MLP
+from .transformers import ClassifierTransformer
 
 
 @dataclass(kw_only=True)
 class ModelConfig(BaseConfig, ABC):
     @abstractmethod
-    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
+    def build_model(self, input_format: DataFormat) -> HookedModel:
         pass
 
 
 @dataclass
 class StoredModel(ModelConfig, PathConfigMixin):
-    def build_model(self, input_shape) -> HookedModel:
+    def build_model(self, input_format) -> HookedModel:
         model_cfg = load_config(self.get_path(), "model", ModelConfig)
-        model = model_cfg.build_model(input_shape)
+        model = model_cfg.build_model(input_format)
 
         # Our convention is that LightningModules store the actual pytorch model
         # as a `model` attribute. We use the last checkpoint (generated via the
@@ -43,9 +45,11 @@ class MLPConfig(ModelConfig):
     output_dim: int = 10
     hidden_dims: list[int] = mutable_field([256, 256])
 
-    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
+    def build_model(self, input_format: DataFormat) -> HookedModel:
+        if not isinstance(input_format, TensorDataFormat):
+            raise ValueError(f"MLP only supports tensor input, got {input_format}")
         return MLP(
-            input_shape=input_shape,
+            input_shape=input_format.shape,
             output_dim=self.output_dim,
             hidden_dims=self.hidden_dims,
         )
@@ -64,9 +68,11 @@ class CNNConfig(ModelConfig):
     channels: list[int] = mutable_field([32, 64])
     dense_dims: list[int] = mutable_field([256, 256])
 
-    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
+    def build_model(self, input_format: DataFormat) -> HookedModel:
+        if not isinstance(input_format, TensorDataFormat):
+            raise ValueError(f"CNN only supports tensor input, got {input_format}")
         return CNN(
-            input_shape=input_shape,
+            input_shape=input_format.shape,
             output_dim=self.output_dim,
             channels=self.channels,
             dense_dims=self.dense_dims,
@@ -79,9 +85,23 @@ class CNNConfig(ModelConfig):
             self.dense_dims = [2]
 
 
+@dataclass
+class TransformerConfig(ModelConfig):
+    model: str = "pythia-14m"
+    num_classes: int = 2
+
+    def build_model(self, input_format: DataFormat):
+        if not isinstance(input_format, TextDataFormat):
+            raise ValueError(
+                f"Transformers only support text input, got {type(input_format)}"
+            )
+        return ClassifierTransformer(self.model, self.num_classes)
+
+
 MODELS = {
     "mlp": MLPConfig,
     "cnn": CNNConfig,
+    "transformer": TransformerConfig,
     "from_run": StoredModel,
 }
 

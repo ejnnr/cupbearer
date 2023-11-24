@@ -1,5 +1,6 @@
 import lightning as L
 import torch
+from cupbearer.data import DataFormat
 from cupbearer.models import HookedModel, ModelConfig
 from cupbearer.utils.optimizers import OptimizerConfig
 from torchmetrics.classification import Accuracy
@@ -11,7 +12,7 @@ class Classifier(L.LightningModule):
         model: ModelConfig | HookedModel,
         num_classes: int,
         optim_cfg: OptimizerConfig,
-        input_shape: tuple[int, ...] | None = None,
+        input_format: DataFormat | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
@@ -31,13 +32,13 @@ class Classifier(L.LightningModule):
 
         if isinstance(model, HookedModel):
             self.model = model
-        elif input_shape is None:
+        elif input_format is None:
             raise ValueError(
-                "Must provide input_shape when passing a ModelConfig "
+                "Must provide input_format when passing a ModelConfig "
                 "instead of an instantiated model."
             )
         else:
-            self.model = model.build_model(input_shape=input_shape)
+            self.model = model.build_model(input_format=input_format)
         self.optim_cfg = optim_cfg
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names

@@ -23,7 +23,7 @@ def main(cfg: Config):
     if cfg.max_examples:
         dataset = Subset(dataset, range(cfg.max_examples))
     image, _ = dataset[0]
-    model = cfg.model.build_model(input_shape=image.shape)
+    model = cfg.model.build_model(input_format=image.shape)
     dataloader = DataLoader(
         dataset,
         batch_size=cfg.batch_size,
