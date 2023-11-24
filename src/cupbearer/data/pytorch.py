@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from cupbearer.utils.utils import get_object, mutable_field
 
 from . import DatasetConfig
-from ._shared import Resize, ToTensor, Transform
+from .transforms import Resize, ToTensor, Transform
 
 
 @dataclass(kw_only=True)
@@ -15,11 +15,11 @@ class PytorchConfig(DatasetConfig):
     # convenient to just make it a field here.
     num_classes: int
     train: bool = True
-    transforms: dict[str, Transform] = mutable_field(
+    transforms: dict[str, Transform] = mutable_field({"to_tensor": ToTensor()})
+    augmentations: dict[str, Transform] = mutable_field(
         {
-            "to_tensor": ToTensor(),
-            "random_crop": None,  # TODO
-            "random_rotation": None,  # TODO
+            # "random_crop":  # TODO
+            # "random_rotation":  # TODO
         }
     )
 
@@ -48,11 +48,12 @@ class MNIST(PytorchConfig):
 class CIFAR10(PytorchConfig):
     name: str = "torchvision.datasets.CIFAR10"
     num_classes: int = 10
-    transforms: dict[str, Transform] = mutable_field(
-        dict(
-            PytorchConfig.transforms,
-            **{"random_horizontal_flip": None},  # TODO
-        )
+    augmentations: dict[str, Transform] = mutable_field(
+        {
+            # "random_crop":  # TODO
+            # "random_rotation":  # TODO
+            # **{"random_horizontal_flip": None},  # TODO
+        }
     )
 
 
@@ -61,10 +62,10 @@ class GTSRB(PytorchConfig):
     name: str = "torchvision.datasets.GTSRB"
     num_classes: int = 43
     transforms: dict[str, Transform] = mutable_field(
-        dict(
-            {"resize": Resize(32, 32)},
-            **PytorchConfig.transforms,
-        )
+        {
+            "resize": Resize(size=(32, 32)),
+            "to_tensor": ToTensor(),
+        }
     )
 
     @property

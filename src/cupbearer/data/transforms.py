@@ -2,9 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Optional
 
-import jax.numpy as jnp
-import numpy as np
-from torchvision.transforms.functional import InterpolationMode, resize
+from torchvision.transforms.functional import InterpolationMode, resize, to_tensor
 
 from cupbearer.utils.utils import BaseConfig
 
@@ -54,13 +52,12 @@ class AdaptedTransform(Transform, ABC):
 
 # Needs to be a dataclass to make simple_parsing's serialization work correctly.
 @dataclass
-class ToNumpy(AdaptedTransform):
+class ToTensor(AdaptedTransform):
     def __img_call__(self, img):
-        out = np.array(img, dtype=jnp.float32) / 255.0
+        out = to_tensor(img)
         if out.ndim == 2:
-            # Add a channel dimension. Note that flax.linen.Conv expects
-            # the channel dimension to be the last one.
-            out = np.expand_dims(out, axis=-1)
+            # Add a channel dimension. (Using pytorch's CHW convention)
+            out = out.unsqueeze(0)
         return out
 
 

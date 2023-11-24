@@ -1,12 +1,11 @@
 from abc import ABC, abstractproperty
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional
 
-import numpy as np
+from simple_parsing import field
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
-from torchvision.transforms.functional import InterpolationMode, resize, to_tensor
 
 from cupbearer.data.transforms import Transform
 from cupbearer.utils.scripts import load_config
@@ -19,7 +18,9 @@ class DatasetConfig(BaseConfig, ABC):
     # support lists of dataclasses, which is why we use a dict. One advantage
     # of this is also that it's easier to override specific transforms.
     transforms: dict[str, Transform] = field(default_factory=dict)
+    augmentations: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
+    no_augmentation: Optional[bool] = field(action="store_true")
 
     @abstractproperty
     def num_classes(self) -> int:  # type: ignore
@@ -33,7 +34,9 @@ class DatasetConfig(BaseConfig, ABC):
         processing to this that can't be handled in __post_init__ (see BackdoorData
         for an example).
         """
-        return list(self.transforms.values())
+        if self.no_augmentation:
+            return list(self.transforms.values())
+        return list(self.transforms.values()) + list(self.augmentations.values())
 
     def build(self) -> Dataset:
         """Create an instance of the Dataset described by this config."""
@@ -53,34 +56,7 @@ class DatasetConfig(BaseConfig, ABC):
         super().setup_and_validate()
         if self.debug:
             self.max_size = 2
-
-
-# Needs to be a dataclass to make simple_parsing's serialization work correctly.
-@dataclass
-class ToTensor(AdaptedTransform):
-    def __img_call__(self, img):
-        out = to_tensor(img)
-        if out.ndim == 2:
-            # Add a channel dimension. (Using pytorch's CHW convention)
-            out = np.expand_dims(out, axis=0)
-        return out
-
-
-@dataclass
-class Resize(AdaptedTransform):
-    size: tuple[int, ...]
-    interpolation: InterpolationMode = InterpolationMode.BILINEAR
-    max_size: Optional[int] = None
-    antialias: Optional[Union[str, bool]] = "warn"
-
-    def __img_call__(self, img):
-        return resize(
-            img,
-            size=self.size,
-            interpolation=self.interpolation,
-            max_size=self.max_size,
-            antialias=self.antialias,
-        )
+            self.no_augmentation = True
 
 
 class TransformDataset(Dataset):
@@ -182,7 +158,7 @@ class TestDataConfig(DatasetConfig):
         dataset = TestDataMix(normal, anomalous, self.normal_weight)
         # We don't want to return a TransformDataset here. Transforms should be applied
         # directly to the normal and anomalous data.
-        if self.transforms:
+        if self.transforms or self.augmentations:
             raise ValueError("Transforms are not supported for TestDataConfig.")
         return dataset
 
