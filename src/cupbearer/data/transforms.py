@@ -1,14 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, fields
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torchvision
 import torchvision.transforms.functional as F
 
 from cupbearer.utils.utils import BaseConfig
-
-Number = Union[int, float]
 
 
 @dataclass
@@ -88,24 +86,34 @@ class Augmentation(AdaptedTransform, ABC):
 
     def __post_init__(self):
         assert 0 <= self.p_augment <= 1.0, "Probability `p_augment` not in [0, 1]"
-        self._init_augmentation()
-        assert hasattr(
-            self, "_augmentation"
-        ), "_init_augmentation must initialize _augmentation"
 
     def __setattr__(self, name: str, value: any):
-        super().__setattr__(name, value)
-        field_names = (f.name for f in fields(self))
-        if name in field_names and name != "p_augment":
+        if (
+            getattr(self, "_augmentation", None) is not None
+            and name in (f.name for f in fields(self))
+            and name != "p_augment"
+        ):
             assert name != "_augmentation"
-            # Reinitialize _augmentation with the new value
-            self._init_augmentation()
+            raise AttributeError(
+                "Can't update field values after `_augmentation` has been initialized."
+            )
+        super().__setattr__(name, value)
 
     @abstractmethod
-    def _init_augmentation(self, img):
+    def _init_augmentation(self, example_img: torch.Tensor):
         pass
 
     def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+        # Init augmentation if first call
+        # This isn't done in post_init because we don't necessarily know all
+        # arguments without an example image, see RandomCrop
+        if getattr(self, "_augmentation", None) is None:
+            self._init_augmentation(example_img=img)
+            assert (
+                getattr(self, "_augmentation", None) is not None
+            ), "_init_augmentation must initialize _augmentation"
+
+        # Use augmentation with probability p_augment
         if self.p_augment >= torch.rand(1):
             return self._augmentation(img)
         return img
@@ -116,23 +124,34 @@ class RandomCrop(Augmentation):
     size: Optional[tuple[int, ...] | int] = None
     padding: Optional[int | tuple[int, ...]] = None
     pad_if_needed: bool = False
-    fill: Number | tuple[Number, Number, Number] = 0
+    fill: float | tuple[float, float, float] = 0
     padding_mode: str = "constant"
 
-    def _init_augmentation(self):
+    def _init_augmentation(self, example_img: torch.Tensor):
         if self.size is None:
-            # We don't know pixel size at initialization
-            self._augmentation = None
-        else:
-            self._augmentation = torchvision.transforms.RandomCrop(
-                size=self.size,
-                padding=self.padding,
-                pad_if_needed=self.pad_if_needed,
-                fill=self.fill,
-                padding_mode=self.padding_mode,
-            )
+            self.size = example_img.size()[-2:]
+        self._augmentation = torchvision.transforms.RandomCrop(
+            size=self.size,
+            padding=self.padding,
+            pad_if_needed=self.pad_if_needed,
+            fill=self.fill,
+            padding_mode=self.padding_mode,
+        )
 
-    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
-        if self.size is None:
-            self.size = img.size()[-2:]
-        return super().__img_call__(img)
+
+@dataclass(kw_only=True)
+class RandomRotation(Augmentation):
+    degrees: int | tuple[int, int]
+    interpolation: F.InterpolationMode = F.InterpolationMode.NEAREST
+    expand: bool = False
+    center: Optional[tuple[int, int]] = None
+    fill: float | tuple[float, float, float] = 0
+
+    def _init_augmentation(self, example_img: torch.Tensor):
+        self._augmentation = torchvision.transforms.RandomRotation(
+            degrees=self.degrees,
+            interpolation=self.interpolation,
+            expand=self.expand,
+            center=self.center,
+            fill=self.fill,
+        )

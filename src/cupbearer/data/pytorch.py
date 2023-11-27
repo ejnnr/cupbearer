@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from cupbearer.utils.utils import get_object, mutable_field
 
 from . import DatasetConfig
-from .transforms import RandomCrop, Resize, ToTensor, Transform
+from .transforms import RandomCrop, RandomRotation, Resize, ToTensor, Transform
 
 
 @dataclass(kw_only=True)
@@ -19,7 +19,7 @@ class PytorchConfig(DatasetConfig):
     augmentations: dict[str, Transform] = mutable_field(
         {  # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
             "random_crop": RandomCrop(p_augment=0.8, padding=5),
-            # "random_rotation":  # TODO
+            "random_rotation": RandomRotation(p_augment=0.5, degrees=10),
         }
     )
 
@@ -51,7 +51,7 @@ class CIFAR10(PytorchConfig):
     augmentations: dict[str, Transform] = mutable_field(
         {  # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
             "random_crop": RandomCrop(p_augment=0.8, padding=5),
-            # "random_rotation":  # TODO
+            "random_rotation": RandomRotation(p_augment=0.5, degrees=10)
             # "random_horizontal_flip":  # TODO
         }
     )

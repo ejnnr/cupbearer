@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from functools import partial
 
 import numpy as np
 import pytest
@@ -9,6 +8,7 @@ import torch
 # it's a test.
 from cupbearer import data
 from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms.functional import InterpolationMode
 
 
 class DummyDataset(Dataset):
@@ -317,30 +317,19 @@ def test_wanet_backdoor_on_multiple_workers(
 
 @pytest.fixture(
     params=[
-        partial(data.RandomCrop, padding=100),
+        data.RandomCrop(padding=100),
+        data.RandomRotation(degrees=10, interpolation=InterpolationMode.BILINEAR),
     ],
 )
 def augmentation(request):
-    return request.param(p_augment=1.0)
+    return request.param
 
 
-@pytest.fixture(
-    params=[
-        partial(data.RandomCrop, padding=100),
-    ],
-)
-def dud_augmentation(request):
-    return request.param(p_augment=0.0)
-
-
-def test_augmentation(clean_image_config, augmentation, dud_augmentation):
+def test_augmentation(clean_image_config, augmentation):
     # See that augmentation does something unless dud
     for img, label in clean_image_config.build():
         aug_img, aug_label = augmentation((img, label))
-        dud_img, dud_label = dud_augmentation((img, label))
         assert label == aug_label
-        assert label == dud_label
-        assert torch.all(img == dud_img)
         assert not torch.allclose(aug_img, img)
 
     # Try with multiple workers and batches
@@ -352,16 +341,18 @@ def test_augmentation(clean_image_config, augmentation, dud_augmentation):
     )
     for img, label in data_loader:
         aug_img, aug_label = augmentation((img, label))
-        dud_img, dud_label = dud_augmentation((img, label))
         assert torch.all(label == aug_label)
-        assert torch.all(label == dud_label)
-        assert torch.all(img == dud_img)
         assert not torch.allclose(aug_img, img)
 
     # Test that updating p_augment doesn't change _augmentation state
+    # but does change augmentation probability
     old_aug = augmentation._augmentation
-    augmentation.p_augment = 0.5
+    augmentation.p_augment = 0.0
     assert augmentation._augmentation is old_aug
+    for img, label in data_loader:
+        aug_img, aug_label = augmentation((img, label))
+        assert torch.all(label == aug_label)
+        assert torch.all(aug_img == img)
 
 
 def test_random_crop(clean_image_config):
@@ -373,8 +364,6 @@ def test_random_crop(clean_image_config):
         aug_img, aug_label = augmentation((img, label))
         assert torch.any(aug_img == fill_val)
 
-    # See that updating parameter updates transform
-    augmentation.padding = 0
-    for img, label in clean_image_config.build():
-        aug_img, aug_label = augmentation((img, label))
-        assert torch.all(aug_img == img)
+    # See that updating parameter raises error
+    with pytest.raises(AttributeError):
+        augmentation.padding = 0
