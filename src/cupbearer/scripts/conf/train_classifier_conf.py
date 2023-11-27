@@ -25,7 +25,7 @@ class Config(ScriptConfig):
     dir: DirConfig = mutable_field(
         DirConfig, base=os.path.join("logs", "train_classifier")
     )
-    log_every_n_steps: Optional[int] = (None,)
+    log_every_n_steps: Optional[int] = None
 
     @property
     def num_classes(self):

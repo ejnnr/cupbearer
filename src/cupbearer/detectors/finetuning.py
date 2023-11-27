@@ -113,7 +113,7 @@ class FinetuningTrainConfig(TrainConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_steps: Optional[int] = None
-    log_every_n_steps: Optional[int] = (None,)
+    log_every_n_steps: Optional[int] = None
 
     def setup_and_validate(self):
         super().setup_and_validate()
