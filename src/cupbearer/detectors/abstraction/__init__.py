@@ -26,6 +26,7 @@ class AbstractionTrainConfig(TrainConfig):
     check_val_every_n_epoch: int = 1
     enable_progress_bar: bool = False
     max_steps: Optional[int] = None
+    log_every_n_steps: Optional[int] = None
     # TODO: should be possible to configure loggers (e.g. wandb)
 
     def setup_and_validate(self):
@@ -34,6 +35,7 @@ class AbstractionTrainConfig(TrainConfig):
             self.batch_size = 2
             self.num_epochs = 1
             self.max_steps = 1
+            self.log_every_n_steps = self.max_steps
 
 
 # This is all unnessarily verbose right now, it's a remnant from when we had

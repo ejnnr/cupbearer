@@ -7,7 +7,7 @@ import torch
 # We shouldn't import TestDataMix directly because that will make pytest think
 # it's a test.
 from cupbearer import data
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
 
 
 class DummyDataset(Dataset):
@@ -41,7 +41,7 @@ class DummyImageData(Dataset):
         self.num_classes = num_classes
         self.img = torch.tensor(
             [
-                [[i_y % 2, i_x % 2, (i_x + i_y) % 2] for i_x in range(shape[1])]
+                [[i_y % 2, i_x % 2, (i_x + i_y + 1) % 2] for i_x in range(shape[1])]
                 for i_y in range(shape[0])
             ],
             dtype=torch.float32,
@@ -61,7 +61,7 @@ class DummyImageData(Dataset):
 class DummyImageConfig(data.DatasetConfig):
     length: int
     num_classes: int = 10
-    shape: tuple[int, int] = (8, 8)
+    shape: tuple[int, int] = (8, 12)
 
     def _build(self) -> Dataset:
         return DummyImageData(self.length, self.num_classes, self.shape)
@@ -282,3 +282,28 @@ def test_wanet_backdoor(clean_image_config):
         assert torch.max(clean_img) <= 1
         assert torch.max(anoma_img) <= 1
         assert torch.max(noise_img) <= 1
+
+
+def test_wanet_backdoor_on_multiple_workers(
+    clean_image_config,
+):
+    clean_image_config.num_classes = 1
+    target_class = 1
+    anomalous_config = data.BackdoorData(
+        original=clean_image_config,
+        backdoor=data.backdoors.WanetBackdoor(
+            p_backdoor=1.0,
+            p_noise=0.0,
+            target_class=target_class,
+        ),
+    )
+    data_loader = DataLoader(
+        dataset=anomalous_config.build(),
+        num_workers=2,
+        batch_size=1,
+    )
+    imgs = [img for img_batch, label_batch in data_loader for img in img_batch]
+    assert all(torch.allclose(imgs[0], img) for img in imgs)
+
+    clean_image = clean_image_config.build().dataset.img
+    assert not any(torch.allclose(clean_image, img) for img in imgs)

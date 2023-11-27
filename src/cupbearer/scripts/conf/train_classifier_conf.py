@@ -25,6 +25,7 @@ class Config(ScriptConfig):
     dir: DirConfig = mutable_field(
         DirConfig, base=os.path.join("logs", "train_classifier")
     )
+    log_every_n_steps: Optional[int] = None
 
     @property
     def num_classes(self):
@@ -61,4 +62,4 @@ class Config(ScriptConfig):
             self.max_batch_size = 2
             self.wandb = False
             self.batch_size = 2
-            self.num_workers = 0
+            self.log_every_n_steps = self.max_steps

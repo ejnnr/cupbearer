@@ -1,4 +1,5 @@
 import copy
+import warnings
 from dataclasses import dataclass, field
 from typing import Optional
 
@@ -30,6 +31,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         num_epochs: int = 10,
         batch_size: int = 128,
         max_steps: Optional[int] = None,
+        log_every_n_steps: Optional[int] = None,
         **kwargs,
     ):
         classifier = Classifier(
@@ -50,11 +52,20 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             max_epochs=num_epochs,
             max_steps=max_steps or -1,
             default_root_dir=self.save_path,
+            log_every_n_steps=log_every_n_steps,
         )
-        trainer.fit(
-            model=classifier,
-            train_dataloaders=clean_loader,
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message=(
+                    "You defined a `validation_step` but have no `val_dataloader`."
+                    " Skipping val loop."
+                ),
+            )
+            trainer.fit(
+                model=classifier,
+                train_dataloaders=clean_loader,
+            )
 
     def layerwise_scores(self, batch):
         raise NotImplementedError(
@@ -102,6 +113,7 @@ class FinetuningTrainConfig(TrainConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_steps: Optional[int] = None
+    log_every_n_steps: Optional[int] = None
 
     def setup_and_validate(self):
         super().setup_and_validate()
@@ -109,6 +121,7 @@ class FinetuningTrainConfig(TrainConfig):
             self.num_epochs = 1
             self.max_steps = 1
             self.batch_size = 2
+            self.log_every_n_steps = self.max_steps
 
 
 @dataclass

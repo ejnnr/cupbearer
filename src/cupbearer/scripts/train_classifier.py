@@ -1,8 +1,6 @@
 import warnings
 
 import lightning as L
-from cupbearer.data.backdoor_data import BackdoorData
-from cupbearer.data.backdoors import WanetBackdoor
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import run
 from lightning.pytorch.callbacks import ModelCheckpoint
@@ -13,16 +11,6 @@ from .conf.train_classifier_conf import Config
 
 
 def main(cfg: Config):
-    if (
-        cfg.num_workers > 0
-        and isinstance(cfg.train_data, BackdoorData)
-        and isinstance(cfg.train_data.backdoor, WanetBackdoor)
-    ):
-        # TODO: actually fix this bug (warping field not being shared among workers)
-        raise NotImplementedError(
-            "WanetBackdoor is not compatible with num_workers > 0 right now."
-        )
-
     dataset = cfg.train_data.build()
 
     train_loader = DataLoader(
@@ -78,6 +66,7 @@ def main(cfg: Config):
         callbacks=callbacks,
         logger=metrics_logger,
         default_root_dir=cfg.dir.path,
+        log_every_n_steps=cfg.log_every_n_steps,
     )
     if not val_loaders:
         warnings.filterwarnings(

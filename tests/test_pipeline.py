@@ -13,6 +13,15 @@ from cupbearer.scripts.conf import (
 from cupbearer.utils.scripts import run
 from simple_parsing import ArgumentGenerationMode, parse
 
+# Ignore warnings about num_workers
+pytestmark = pytest.mark.filterwarnings(
+    "ignore"
+    ":The '[a-z]*_dataloader' does not have many workers which may be a bottleneck. "
+    "Consider increasing the value of the `num_workers` argument` to "
+    "`num_workers=[0-9]*` in the `DataLoader` to improve performance."
+    ":UserWarning"
+)
+
 
 @pytest.fixture(scope="module")
 def backdoor_classifier_path(module_tmp_path):
@@ -81,7 +90,6 @@ def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
     assert (tmp_path / "eval.json").is_file()
 
 
-# N.B. this test is flaky, sometimes no adversarial examples are found
 @pytest.mark.slow
 def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
     # This test doesn't need a backdoored classifier, but we already have one
@@ -145,7 +153,8 @@ def test_wanet(tmp_path):
         "--train_data backdoor --train_data.original gtsrb "
         "--train_data.backdoor wanet --model mlp "
         "--val_data.backdoor backdoor --val_data.backdoor.original gtsrb "
-        "--val_data.backdoor.backdoor wanet",
+        "--val_data.backdoor.backdoor wanet "
+        "--num_workers=1",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_classifier.main, cfg)
@@ -157,8 +166,8 @@ def test_wanet(tmp_path):
     for name, data_cfg in cfg.val_data.items():
         if name == "backdoor":
             assert torch.allclose(
-                data_cfg.backdoor.warping_field,
-                cfg.train_data.backdoor.warping_field,
+                data_cfg.backdoor.control_grid,
+                cfg.train_data.backdoor.control_grid,
             )
         else:
             with pytest.raises(NotImplementedError):
@@ -174,6 +183,6 @@ def test_wanet(tmp_path):
     )
     run(train_detector.main, train_detector_cfg)
     assert torch.allclose(
-        train_detector_cfg.task.backdoor.warping_field,
-        cfg.train_data.backdoor.warping_field,
+        train_detector_cfg.task.backdoor.control_grid,
+        cfg.train_data.backdoor.control_grid,
     )
