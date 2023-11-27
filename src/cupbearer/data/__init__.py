@@ -7,7 +7,12 @@ from .adversarial import AdversarialExampleConfig
 from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
-from .transforms import Resize, ToTensor, Transform
+from .transforms import (
+    RandomCrop,
+    Resize,
+    ToTensor,
+    Transform,
+)
 
 DATASETS = {
     "pytorch": PytorchConfig,
@@ -23,6 +28,7 @@ DATASETS = {
 TRANSFORMS: dict[str, type[Transform]] = {
     "to_tensor": ToTensor,
     "resize": Resize,
+    "random_crop": RandomCrop,
 }
 
 BACKDOORS = {

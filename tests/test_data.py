@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from functools import partial
 
 import numpy as np
 import pytest
@@ -307,3 +308,73 @@ def test_wanet_backdoor_on_multiple_workers(
 
     clean_image = clean_image_config.build().dataset.img
     assert not any(torch.allclose(clean_image, img) for img in imgs)
+
+
+#######################
+# Tests for Augmentations
+#######################
+
+
+@pytest.fixture(
+    params=[
+        partial(data.RandomCrop, padding=100),
+    ],
+)
+def augmentation(request):
+    return request.param(p_augment=1.0)
+
+
+@pytest.fixture(
+    params=[
+        partial(data.RandomCrop, padding=100),
+    ],
+)
+def dud_augmentation(request):
+    return request.param(p_augment=0.0)
+
+
+def test_augmentation(clean_image_config, augmentation, dud_augmentation):
+    # See that augmentation does something unless dud
+    for img, label in clean_image_config.build():
+        aug_img, aug_label = augmentation((img, label))
+        dud_img, dud_label = dud_augmentation((img, label))
+        assert label == aug_label
+        assert label == dud_label
+        assert torch.all(img == dud_img)
+        assert not torch.allclose(aug_img, img)
+
+    # Try with multiple workers and batches
+    data_loader = DataLoader(
+        dataset=clean_image_config.build(),
+        num_workers=2,
+        batch_size=3,
+        drop_last=False,
+    )
+    for img, label in data_loader:
+        aug_img, aug_label = augmentation((img, label))
+        dud_img, dud_label = dud_augmentation((img, label))
+        assert torch.all(label == aug_label)
+        assert torch.all(label == dud_label)
+        assert torch.all(img == dud_img)
+        assert not torch.allclose(aug_img, img)
+
+    # Test that updating p_augment doesn't change _augmentation state
+    old_aug = augmentation._augmentation
+    augmentation.p_augment = 0.5
+    assert augmentation._augmentation is old_aug
+
+
+def test_random_crop(clean_image_config):
+    fill_val = 2.75
+    augmentation = data.RandomCrop(
+        size=clean_image_config.shape, padding=100, fill=fill_val
+    )
+    for img, label in clean_image_config.build():
+        aug_img, aug_label = augmentation((img, label))
+        assert torch.any(aug_img == fill_val)
+
+    # See that updating parameter updates transform
+    augmentation.padding = 0
+    for img, label in clean_image_config.build():
+        aug_img, aug_label = augmentation((img, label))
+        assert torch.all(aug_img == img)

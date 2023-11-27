@@ -159,7 +159,9 @@ class TestDataConfig(DatasetConfig):
         # We don't want to return a TransformDataset here. Transforms should be applied
         # directly to the normal and anomalous data.
         if self.transforms or self.augmentations:
-            raise ValueError("Transforms are not supported for TestDataConfig.")
+            raise ValueError(
+                "Transforms and augmentations are not supported for TestDataConfig."
+            )
         return dataset
 
 
