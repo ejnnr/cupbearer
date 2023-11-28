@@ -13,6 +13,16 @@ class BackdoorData(DatasetConfig):
     original: DatasetConfig = config_group(DatasetConfig)
     backdoor: Backdoor = config_group(Backdoor)
 
+    def __post_init__(self):
+        # Pass no_augmentation arg down to original if possible
+        if hasattr(super(), "__post_init__"):
+            super().__post_init__()
+        if self.no_augmentation:
+            try:
+                self.original.no_augmentation = self.no_augmentation
+            except AttributeError:
+                pass
+
     @property
     def num_classes(self):
         return self.original.num_classes
