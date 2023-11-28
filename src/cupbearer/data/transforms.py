@@ -155,3 +155,13 @@ class RandomRotation(Augmentation):
             center=self.center,
             fill=self.fill,
         )
+
+
+@dataclass(kw_only=True)
+class RandomHorizontalFlip(Augmentation):
+    p_augment: float = 0.5
+
+    def _init_augmentation(self, example_img: torch.Tensor):
+        self._augmentation = torchvision.transforms.RandomHorizontalFlip(
+            p=self.p_augment
+        )

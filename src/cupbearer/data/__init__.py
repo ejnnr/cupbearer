@@ -9,6 +9,7 @@ from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 from .transforms import (
     RandomCrop,
+    RandomHorizontalFlip,
     RandomRotation,
     Resize,
     ToTensor,
@@ -31,6 +32,7 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "resize": Resize,
     "random_crop": RandomCrop,
     "random_rotation": RandomRotation,
+    "random_horizontal_flip": RandomHorizontalFlip,
 }
 
 BACKDOORS = {

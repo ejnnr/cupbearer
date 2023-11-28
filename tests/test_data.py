@@ -318,6 +318,7 @@ def test_wanet_backdoor_on_multiple_workers(
 @pytest.fixture(
     params=[
         data.RandomCrop(padding=100),
+        data.RandomHorizontalFlip(p_augment=1.0),
         data.RandomRotation(degrees=10, interpolation=InterpolationMode.BILINEAR),
     ],
 )
@@ -358,7 +359,9 @@ def test_augmentation(clean_image_config, augmentation):
 def test_random_crop(clean_image_config):
     fill_val = 2.75
     augmentation = data.RandomCrop(
-        size=clean_image_config.shape, padding=100, fill=fill_val
+        size=clean_image_config.shape,
+        padding=100,
+        fill=fill_val,
     )
     for img, label in clean_image_config.build():
         aug_img, aug_label = augmentation((img, label))
