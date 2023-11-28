@@ -24,8 +24,6 @@ class BackdoorData(DatasetConfig):
         transforms = []
         transforms += self.original.get_transforms()
         transforms += super().get_transforms()
-        if not self.no_augmentation:
-            transforms += self.original.augmentations.values()
         transforms += [self.backdoor]
         return transforms
 

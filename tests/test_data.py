@@ -48,6 +48,7 @@ class DummyImageData(Dataset):
             dtype=torch.float32,
             # Move channel dimension to front
         ).permute(2, 0, 1)
+        self._rng = np.random.default_rng(seed=5965)
 
     def __len__(self):
         return self.length
@@ -55,7 +56,7 @@ class DummyImageData(Dataset):
     def __getitem__(self, index) -> tuple[torch.Tensor, int]:
         if index >= self.length:
             raise IndexError
-        return self.img, np.random.randint(self.num_classes)
+        return self.img, self._rng.integers(self.num_classes)
 
 
 @dataclass
@@ -370,3 +371,76 @@ def test_random_crop(clean_image_config):
     # See that updating parameter raises error
     with pytest.raises(AttributeError):
         augmentation.padding = 0
+
+
+@dataclass
+class DummyPytorchImageConfig(data.PytorchConfig):
+    name: str = "dummy"
+    length: int = 32
+    num_classes: int = 10
+    shape: tuple[int, int] = (8, 12)
+
+    def get_transforms(self):
+        transforms = super().get_transforms()
+        assert isinstance(transforms[0], data.transforms.ToTensor)
+        return transforms[1:]
+
+    def _build(self) -> Dataset:
+        return DummyImageData(self.length, self.num_classes, self.shape)
+
+
+@pytest.fixture
+def pytorch_data_config():
+    return DummyPytorchImageConfig()
+
+
+def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
+    for (_img, _label), (img, label) in zip(
+        pytorch_data_config._build(), pytorch_data_config.build()
+    ):
+        assert _label == label
+        assert _img.size() == img.size()
+        assert _img is not img, "Transforms does not seem to have been applied"
+
+    transforms = pytorch_data_config.get_transforms()
+    transform_typereps = [repr(type(t)) for t in transforms]
+    augmentation_used = False
+    for trafo in pytorch_data_config.get_transforms():
+        # Check that transform is unique in list
+        assert transforms.count(trafo) == 1
+        assert transform_typereps.count(repr(type(trafo))) == 1
+
+        # Check transform types
+        assert isinstance(trafo, data.transforms.Transform)
+        if isinstance(trafo, data.transforms.Augmentation):
+            augmentation_used = True
+        else:
+            # Augmentations should come after all base transforms
+            assert not augmentation_used, "Transform applied after augmentation"
+    assert augmentation_used
+
+    # Test for BackdoorData
+    data_config = data.BackdoorData(
+        original=pytorch_data_config,
+        backdoor=BackdoorConfig(),
+    )
+    transforms = data_config.get_transforms()
+    transform_typereps = [repr(type(t)) for t in transforms]
+    augmentation_used = False
+    backdoor_used = False
+    for trafo in data_config.get_transforms():
+        # Check that transform is unique in list
+        assert transforms.count(trafo) == 1
+        assert transform_typereps.count(repr(type(trafo))) == 1
+
+        # Check transform types
+        assert not backdoor_used, "Multiple backdoors in transforms"
+        assert isinstance(trafo, data.transforms.Transform)
+        if isinstance(trafo, data.transforms.Augmentation):
+            augmentation_used = True
+        elif isinstance(trafo, data.backdoors.Backdoor):
+            backdoor_used = True
+        else:
+            assert not augmentation_used, "Transform applied after augmentation"
+    assert augmentation_used
+    assert backdoor_used
