@@ -444,3 +444,12 @@ def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
             assert not augmentation_used, "Transform applied after augmentation"
     assert augmentation_used
     assert backdoor_used
+
+    # Test that no_augmentation works
+    data_config = data.BackdoorData(
+        original=pytorch_data_config,
+        backdoor=BackdoorConfig(),
+        no_augmentation=True,
+    )
+    for trafo in data_config.get_transforms():
+        assert not isinstance(trafo, data.transforms.Augmentation)
