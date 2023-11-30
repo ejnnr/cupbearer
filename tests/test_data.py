@@ -48,6 +48,7 @@ class DummyImageData(Dataset):
             dtype=torch.float32,
             # Move channel dimension to front
         ).permute(2, 0, 1)
+        # Need any seed so that labels are (somewhat) consitent over instances
         self._rng = np.random.default_rng(seed=5965)
 
     def __len__(self):
