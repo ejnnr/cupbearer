@@ -319,7 +319,7 @@ def test_wanet_backdoor_on_multiple_workers(
 @pytest.fixture(
     params=[
         data.RandomCrop(padding=100),
-        data.RandomHorizontalFlip(p_augment=1.0),
+        data.RandomHorizontalFlip(p=1.0),
         data.RandomRotation(degrees=10, interpolation=InterpolationMode.BILINEAR),
     ],
 )
@@ -346,11 +346,8 @@ def test_augmentation(clean_image_config, augmentation):
         assert torch.all(label == aug_label)
         assert not torch.allclose(aug_img, img)
 
-    # Test that updating p_augment doesn't change _augmentation state
-    # but does change augmentation probability
-    old_aug = augmentation._augmentation
-    augmentation.p_augment = 0.0
-    assert augmentation._augmentation is old_aug
+    # Test that updating p does change augmentation probability
+    augmentation.p = 0.0
     for img, label in data_loader:
         aug_img, aug_label = augmentation((img, label))
         assert torch.all(label == aug_label)
@@ -360,17 +357,12 @@ def test_augmentation(clean_image_config, augmentation):
 def test_random_crop(clean_image_config):
     fill_val = 2.75
     augmentation = data.RandomCrop(
-        size=clean_image_config.shape,
-        padding=100,
+        padding=100,  # huge padding so that chance of no change is small
         fill=fill_val,
     )
     for img, label in clean_image_config.build():
         aug_img, aug_label = augmentation((img, label))
         assert torch.any(aug_img == fill_val)
-
-    # See that updating parameter raises error
-    with pytest.raises(AttributeError):
-        augmentation.padding = 0
 
 
 @dataclass
@@ -412,10 +404,10 @@ def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
 
         # Check transform types
         assert isinstance(trafo, data.transforms.Transform)
-        if isinstance(trafo, data.transforms.Augmentation):
+        if isinstance(trafo, data.transforms.ProbabilisticTransform):
             augmentation_used = True
         else:
-            # Augmentations should come after all base transforms
+            # Augmentations should by default come after all base transforms
             assert not augmentation_used, "Transform applied after augmentation"
     assert augmentation_used
 
@@ -436,7 +428,7 @@ def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
         # Check transform types
         assert not backdoor_used, "Multiple backdoors in transforms"
         assert isinstance(trafo, data.transforms.Transform)
-        if isinstance(trafo, data.transforms.Augmentation):
+        if isinstance(trafo, data.transforms.ProbabilisticTransform):
             augmentation_used = True
         elif isinstance(trafo, data.backdoors.Backdoor):
             backdoor_used = True
@@ -452,4 +444,4 @@ def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
         no_augmentation=True,
     )
     for trafo in data_config.get_transforms():
-        assert not isinstance(trafo, data.transforms.Augmentation)
+        assert not isinstance(trafo, data.transforms.ProbabilisticTransform)

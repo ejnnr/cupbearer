@@ -25,8 +25,8 @@ class PytorchConfig(DatasetConfig):
     transforms: dict[str, Transform] = mutable_field({"to_tensor": ToTensor()})
     augmentations: dict[str, Transform] = mutable_field(
         {  # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
-            "random_crop": RandomCrop(p_augment=0.8, padding=5),
-            "random_rotation": RandomRotation(p_augment=0.5, degrees=10),
+            "random_crop": RandomCrop(p=0.8, padding=5),
+            "random_rotation": RandomRotation(p=0.5, degrees=10),
         }
     )
 
@@ -57,9 +57,9 @@ class CIFAR10(PytorchConfig):
     num_classes: int = 10
     augmentations: dict[str, Transform] = mutable_field(
         {  # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
-            "random_crop": RandomCrop(p_augment=0.8, padding=5),
-            "random_rotation": RandomRotation(p_augment=0.5, degrees=10),
-            "random_horizontal_flip": RandomHorizontalFlip(p_augment=0.5),
+            "random_crop": RandomCrop(p=0.8, padding=5),
+            "random_rotation": RandomRotation(p=0.5, degrees=10),
+            "random_horizontal_flip": RandomHorizontalFlip(p=0.5),
         }
     )
 

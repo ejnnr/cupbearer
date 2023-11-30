@@ -1,9 +1,8 @@
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 from typing import Optional
 
 import torch
-import torchvision
 import torchvision.transforms.functional as F
 
 from cupbearer.utils.utils import BaseConfig
@@ -81,75 +80,57 @@ class Resize(AdaptedTransform):
 
 
 @dataclass(kw_only=True)
-class Augmentation(AdaptedTransform, ABC):
-    p_augment: float = 1.0
+class ProbabilisticTransform(AdaptedTransform, ABC):
+    p: float = 1.0
 
     def __post_init__(self):
-        assert 0 <= self.p_augment <= 1.0, "Probability `p_augment` not in [0, 1]"
+        assert 0 <= self.p <= 1.0, "Probability `p` not in [0, 1]"
 
-    def __setattr__(self, name: str, value: any):
-        if (
-            getattr(self, "_augmentation", None) is not None
-            and name in (f.name for f in fields(self))
-            and name != "p_augment"
-        ):
-            assert name != "_augmentation"
-            raise AttributeError(
-                "Can't update field values after `_augmentation` has been initialized."
-            )
-        super().__setattr__(name, value)
+    def __call__(self, sample) -> torch.Tensor:
+        if torch.rand(()) <= self.p:
+            return super().__call__(sample)
+        return sample
 
-    @abstractmethod
-    def _init_augmentation(self, example_img: torch.Tensor):
-        pass
+
+@dataclass(kw_only=True)
+class RandomCrop(ProbabilisticTransform):
+    padding: int
+    fill: float | tuple[float, float, float] = 0
+    padding_mode: str = "constant"
 
     def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
-        # Init augmentation if first call
-        # This isn't done in post_init because we don't necessarily know all
-        # arguments without an example image, see RandomCrop
-        if getattr(self, "_augmentation", None) is None:
-            self._init_augmentation(example_img=img)
-            assert (
-                getattr(self, "_augmentation", None) is not None
-            ), "_init_augmentation must initialize _augmentation"
-
-        # Use augmentation with probability p_augment
-        if self.p_augment >= torch.rand(1):
-            return self._augmentation(img)
+        size = img.size()
+        # Pad image first
+        img = F.pad(
+            img,
+            padding=self.padding,
+            fill=self.fill,
+            padding_mode=self.padding_mode,
+        )
+        # Do random crop
+        img = F.crop(
+            img,
+            top=torch.randint(0, self.padding, ()),
+            left=torch.randint(0, self.padding, ()),
+            height=size[-2],
+            width=size[-1],
+        )
         return img
 
 
 @dataclass(kw_only=True)
-class RandomCrop(Augmentation):
-    size: Optional[tuple[int, ...] | int] = None
-    padding: Optional[int | tuple[int, ...]] = None
-    pad_if_needed: bool = False
-    fill: float | tuple[float, float, float] = 0
-    padding_mode: str = "constant"
-
-    def _init_augmentation(self, example_img: torch.Tensor):
-        if self.size is None:
-            self.size = example_img.size()[-2:]
-        self._augmentation = torchvision.transforms.RandomCrop(
-            size=self.size,
-            padding=self.padding,
-            pad_if_needed=self.pad_if_needed,
-            fill=self.fill,
-            padding_mode=self.padding_mode,
-        )
-
-
-@dataclass(kw_only=True)
-class RandomRotation(Augmentation):
-    degrees: int | tuple[int, int]
+class RandomRotation(ProbabilisticTransform):
+    degrees: float
     interpolation: F.InterpolationMode = F.InterpolationMode.NEAREST
     expand: bool = False
     center: Optional[tuple[int, int]] = None
     fill: float | tuple[float, float, float] = 0
 
-    def _init_augmentation(self, example_img: torch.Tensor):
-        self._augmentation = torchvision.transforms.RandomRotation(
-            degrees=self.degrees,
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+        angle = 2 * self.degrees * torch.rand(()).item() - self.degrees
+        return F.rotate(
+            img,
+            angle=angle,
             interpolation=self.interpolation,
             expand=self.expand,
             center=self.center,
@@ -158,10 +139,8 @@ class RandomRotation(Augmentation):
 
 
 @dataclass(kw_only=True)
-class RandomHorizontalFlip(Augmentation):
-    p_augment: float = 0.5
+class RandomHorizontalFlip(ProbabilisticTransform):
+    p: float = 0.5
 
-    def _init_augmentation(self, example_img: torch.Tensor):
-        self._augmentation = torchvision.transforms.RandomHorizontalFlip(
-            p=self.p_augment
-        )
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+        return F.hflip(img)
