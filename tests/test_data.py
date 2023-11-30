@@ -437,11 +437,12 @@ def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
     assert augmentation_used
     assert backdoor_used
 
-    # Test that no_augmentation works
+
+def test_no_augmentations(BackdoorConfig):
+    pytorch_data_config = DummyPytorchImageConfig(default_augmentations=False)
     data_config = data.BackdoorData(
         original=pytorch_data_config,
         backdoor=BackdoorConfig(),
-        no_augmentation=True,
     )
     for trafo in data_config.get_transforms():
         assert not isinstance(trafo, data.transforms.ProbabilisticTransform)

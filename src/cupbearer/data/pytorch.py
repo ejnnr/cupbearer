@@ -23,12 +23,14 @@ class PytorchConfig(DatasetConfig):
     num_classes: int
     train: bool = True
     transforms: dict[str, Transform] = mutable_field({"to_tensor": ToTensor()})
-    augmentations: dict[str, Transform] = mutable_field(
-        {  # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
-            "random_crop": RandomCrop(p=0.8, padding=5),
-            "random_rotation": RandomRotation(p=0.5, degrees=10),
-        }
-    )
+    default_augmentations: bool = True
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.default_augmentations:
+            # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
+            self.transforms["random_crop"] = RandomCrop(p=0.8, padding=5)
+            self.transforms["random_rotation"] = RandomRotation(p=0.5, degrees=10)
 
     @property
     def _dataset_kws(self):
@@ -50,18 +52,20 @@ class MNIST(PytorchConfig):
     name: str = "torchvision.datasets.MNIST"
     num_classes: int = 10
 
+    def __post_init__(self):
+        super().__post_init__()
+        assert isinstance(list(self.transforms.values())[0], ToTensor)
+
 
 @dataclass
 class CIFAR10(PytorchConfig):
     name: str = "torchvision.datasets.CIFAR10"
     num_classes: int = 10
-    augmentations: dict[str, Transform] = mutable_field(
-        {  # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
-            "random_crop": RandomCrop(p=0.8, padding=5),
-            "random_rotation": RandomRotation(p=0.5, degrees=10),
-            "random_horizontal_flip": RandomHorizontalFlip(p=0.5),
-        }
-    )
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.default_augmentations:
+            self.transforms["random_horizontal_flip"] = RandomHorizontalFlip(p=0.5)
 
 
 @dataclass

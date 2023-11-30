@@ -18,9 +18,7 @@ class DatasetConfig(BaseConfig, ABC):
     # support lists of dataclasses, which is why we use a dict. One advantage
     # of this is also that it's easier to override specific transforms.
     transforms: dict[str, Transform] = field(default_factory=dict)
-    augmentations: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
-    no_augmentation: Optional[bool] = field(action="store_true")
 
     @abstractproperty
     def num_classes(self) -> int:  # type: ignore
@@ -34,9 +32,7 @@ class DatasetConfig(BaseConfig, ABC):
         processing to this that can't be handled in __post_init__ (see BackdoorData
         for an example).
         """
-        if self.no_augmentation:
-            return list(self.transforms.values())
-        return list(self.transforms.values()) + list(self.augmentations.values())
+        return list(self.transforms.values())
 
     def build(self) -> Dataset:
         """Create an instance of the Dataset described by this config."""
@@ -56,7 +52,6 @@ class DatasetConfig(BaseConfig, ABC):
         super().setup_and_validate()
         if self.debug:
             self.max_size = 2
-            self.no_augmentation = True
 
 
 class TransformDataset(Dataset):
@@ -158,10 +153,8 @@ class TestDataConfig(DatasetConfig):
         dataset = TestDataMix(normal, anomalous, self.normal_weight)
         # We don't want to return a TransformDataset here. Transforms should be applied
         # directly to the normal and anomalous data.
-        if self.transforms or self.augmentations:
-            raise ValueError(
-                "Transforms and augmentations are not supported for TestDataConfig."
-            )
+        if self.transforms:
+            raise ValueError("Transforms are not supported for TestDataConfig.")
         return dataset
 
 

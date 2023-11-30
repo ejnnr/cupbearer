@@ -143,6 +143,9 @@ def dict_field():
 class BaseConfig(serialization.serializable.Serializable):
     debug: bool = False
 
+    def __post_init__(self):
+        pass
+
     def to_dict(
         self,
         dict_factory: type[dict] = dict,
