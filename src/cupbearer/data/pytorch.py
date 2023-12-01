@@ -52,10 +52,6 @@ class MNIST(PytorchConfig):
     name: str = "torchvision.datasets.MNIST"
     num_classes: int = 10
 
-    def __post_init__(self):
-        super().__post_init__()
-        assert isinstance(list(self.transforms.values())[0], ToTensor)
-
 
 @dataclass
 class CIFAR10(PytorchConfig):

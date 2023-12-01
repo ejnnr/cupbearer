@@ -13,9 +13,6 @@ class BackdoorData(DatasetConfig):
     original: DatasetConfig = config_group(DatasetConfig)
     backdoor: Backdoor = config_group(Backdoor)
 
-    def __post_init__(self):
-        super().__post_init__()
-
     @property
     def num_classes(self):
         return self.original.num_classes
