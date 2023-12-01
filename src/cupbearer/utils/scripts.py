@@ -76,7 +76,10 @@ def save_cfg(cfg: ScriptConfig, save_config: bool = True):
             # Note that we need save_dc_types here even though `BaseConfig` already
             # enables that, since `save` calls `to_dict` directly, not `obj.to_dict`.
             simple_parsing.helpers.serialization.serializable.save(
-                cfg, cfg.dir.path / "config.yaml", save_dc_types=True
+                cfg,
+                cfg.dir.path / "config.yaml",
+                save_dc_types=True,
+                sort_keys=False,
             )
 
 
