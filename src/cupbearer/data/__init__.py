@@ -1,12 +1,20 @@
 from cupbearer.utils.config_groups import register_config_group, register_config_option
 
-from ._shared import DatasetConfig, NoData, ToTensor, TrainDataFromRun, Transform
+from ._shared import DatasetConfig, NoData, TrainDataFromRun
 from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
 from .adversarial import AdversarialExampleConfig
 from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
+from .transforms import (
+    RandomCrop,
+    RandomHorizontalFlip,
+    RandomRotation,
+    Resize,
+    ToTensor,
+    Transform,
+)
 
 DATASETS = {
     "pytorch": PytorchConfig,
@@ -21,6 +29,10 @@ DATASETS = {
 
 TRANSFORMS: dict[str, type[Transform]] = {
     "to_tensor": ToTensor,
+    "resize": Resize,
+    "random_crop": RandomCrop,
+    "random_rotation": RandomRotation,
+    "random_horizontal_flip": RandomHorizontalFlip,
 }
 
 BACKDOORS = {
