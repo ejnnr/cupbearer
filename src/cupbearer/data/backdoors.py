@@ -112,6 +112,7 @@ class WanetBackdoor(Backdoor):
     @property
     def control_grid(self) -> torch.Tensor:
         if self._control_grid is None:
+            logger.debug("Generating new control grid for warping field.")
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
             control_grid = 2 * torch.rand(*control_grid_shape) - 1
             control_grid = control_grid / torch.mean(torch.abs(control_grid))
@@ -127,6 +128,7 @@ class WanetBackdoor(Backdoor):
 
     @control_grid.setter
     def control_grid(self, control_grid: torch.Tensor):
+        logger.debug("Setting new control grid for warping field.")
         control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
         if control_grid.shape != control_grid_shape:
             raise ValueError("Control grid shape is incompatible.")
@@ -143,7 +145,6 @@ class WanetBackdoor(Backdoor):
         return self._warping_field
 
     def init_warping_field(self, px: int, py: int):
-        logger.debug("Generating new warping field")
         control_grid = self.control_grid
         assert control_grid.ndim == 3
         # upsample expects a batch dimesion, so we add a singleton. We permute after

@@ -179,7 +179,10 @@ class LocallyConsistentAbstraction(Abstraction):
                         # Need to create a Linear layer here since from the perspective
                         # of the MLP abstraction, this is the step from input to first
                         # activation, which isn't represented.
-                        nn.Linear(abstract_dims[-1], next_mlp_dim),
+                        nn.Linear(
+                            abstract_dims[-1],
+                            reduce_size(next_mlp_dim, size_reduction),
+                        ),
                     )
                 else:
                     steps[f"mlp_{k}"] = mlp_steps[k]
