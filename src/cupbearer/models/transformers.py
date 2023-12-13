@@ -1,4 +1,6 @@
 import torch
+import transformer_lens
+from loguru import logger
 from torch import nn
 from transformer_lens import HookedTransformer
 
@@ -21,6 +23,7 @@ class TransformerBase(HookedModel):
             )
         self.model: HookedTransformer = model
         self.max_length = max_length
+        self._already_gave_mps_warning = False
 
     @property
     def default_names(self) -> list[str]:
@@ -35,8 +38,72 @@ class TransformerBase(HookedModel):
         else:
             raise ValueError(f"Expected str or list/tuple of str, got {type(x)}")
 
-        tokens = self.model.to_tokens(x, padding_side="right")
+        # The type annotation for HookedTransformerConfig.device is wrong, it can
+        # actually also be a device instance instead of a string (when it's set
+        # automatically).
+        if self.model.cfg.device in (torch.device("mps"), "mps"):
+            # On MPS there's a memory leak bug if batch sizes change over training,
+            # so we need to pad all inputs to the same length.
+            # HookedTransformer.to_tokens doesn't support setting the padding size,
+            # so we do it manually.
+            # TODO: ideally we'd pad to the maximumx size in the dataset, not the
+            # truncation length. This would need to happen elsewhere.
+
+            if not self._already_gave_mps_warning:
+                self._already_gave_mps_warning = True
+                logger.info(
+                    "To circumvent a memory leak bug on MPS, we're padding every batch "
+                    "to the maximum sequence length. This may cause some slow-down or "
+                    "additional memory usage compared to CPU."
+                )
+
+            # Adapted from HookedTransformer.to_tokens
+            assert (
+                self.model.tokenizer is not None
+            ), "Cannot use to_tokens without a tokenizer"
+            assert (
+                self.model.cfg.tokenizer_prepends_bos is not None
+            ), "Set the tokenizer for the model by calling set_tokenizer"
+
+            if (
+                self.model.cfg.default_prepend_bos
+                and not self.model.cfg.tokenizer_prepends_bos
+            ):
+                # We want to prepend bos but the tokenizer doesn't automatically do it,
+                # so we add it manually
+                x = transformer_lens.utils.get_input_with_manually_prepended_bos(
+                    self.model.tokenizer, x
+                )
+
+            tokens = self.model.tokenizer(
+                x,
+                return_tensors="pt",
+                padding="max_length",
+                truncation=True,
+                # TODO: we could truncate to self.max_length right away but would also
+                # have to do that in the main branch, so would need to overwrite
+                # n_ctx. Does that have any unintended side effects?
+                max_length=self.model.cfg.n_ctx,
+            )["input_ids"]
+
+            if (
+                not self.model.cfg.default_prepend_bos
+                and self.model.cfg.tokenizer_prepends_bos
+            ):
+                # We don't want to prepend bos but the tokenizer does it automatically,
+                # so we remove it manually
+                tokens = transformer_lens.utils.get_tokens_with_bos_removed(
+                    self.model.tokenizer, tokens
+                )
+
+            tokens = tokens.to(self.model.cfg.device)
+        else:
+            tokens = self.model.to_tokens(x, padding_side="right", truncate=True)
+
         tokens = tokens[:, : self.max_length]
+
+        if self.model.cfg.device in (torch.device("mps"), "mps"):
+            assert tokens.shape[1] == self.max_length, tokens.shape
         return tokens
 
     def get_embeddings(self, tokens: torch.Tensor) -> torch.Tensor:
