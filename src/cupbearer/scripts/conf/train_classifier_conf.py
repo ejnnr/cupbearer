@@ -10,7 +10,7 @@ from simple_parsing.helpers import mutable_field
 
 
 @dataclass(kw_only=True)
-class Config(ScriptConfig, TrainConfig):
+class Config(ScriptConfig):
     model: ModelConfig = config_group(ModelConfig)
     train_config: TrainConfig = mutable_field(TrainConfig, TrainConfig())
     train_data: DatasetConfig = config_group(DatasetConfig)

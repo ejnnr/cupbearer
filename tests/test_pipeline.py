@@ -160,7 +160,7 @@ def test_wanet(tmp_path):
         "--train_data.backdoor wanet --model mlp "
         "--val_data.backdoor backdoor --val_data.backdoor.original gtsrb "
         "--val_data.backdoor.backdoor wanet "
-        "--num_workers=1",
+        "--train_config.num_workers=1",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_classifier.main, cfg)
