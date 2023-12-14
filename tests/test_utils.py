@@ -3,7 +3,6 @@ import math
 import pytest
 import torch
 from cupbearer.detectors.mahalanobis.helpers import batch_covariance
-from cupbearer.utils.utils import lru_cached_property
 
 
 @pytest.mark.parametrize("N", [10, 15, 100])
@@ -35,33 +34,3 @@ def test_batch_covariance(N: int):
     assert torch.allclose(
         cov_est, cov_direct, atol=1e-6
     ), "Covariance estimates do not match"
-
-
-def test_lru_cached_property():
-    n_calls = 0
-
-    class MyClass:
-        def __init__(self, a: int, b: int, c: int):
-            self.a = a
-            self.b = b
-            self.c = c
-
-        @property
-        @lru_cached_property("a", "b")
-        def sum(self):
-            nonlocal n_calls
-            n_calls += 1
-            return self.a + self.b
-
-    my_class = MyClass(3, 4, 5)
-    assert n_calls == 0
-    assert my_class.sum == 7  # not cached
-    assert n_calls == 1
-    assert my_class.sum == 7  # cached
-    assert n_calls == 1
-    my_class.a = 6
-    assert my_class.sum == 10  # not cached
-    assert n_calls == 2
-    my_class.c = 7
-    assert my_class.sum == 10  # cached
-    assert n_calls == 2
