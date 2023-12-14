@@ -1,4 +1,5 @@
 import codecs
+import collections
 import copy
 import dataclasses
 import functools
@@ -221,3 +222,31 @@ def inputs_from_batch(batch):
         return batch[0]
     else:
         return batch
+
+
+def lru_cached_property(
+    *dependencies: tuple,
+    maxsize=1,
+    typed=True,
+):
+    "LRU cache decorator. Updated if self.<dependency> has changed."
+
+    def wrapper(func):
+        Dependencies = collections.namedtuple(
+            "Dependencies",
+            field_names=dependencies,
+        )
+
+        @functools.lru_cache(maxsize=maxsize, typed=typed)
+        def _func(_self):
+            return func(_self)
+
+        @functools.wraps(func)
+        def inner(self):
+            return _func(
+                Dependencies(**{dep: getattr(self, dep) for dep in dependencies})
+            )
+
+        return inner
+
+    return wrapper
