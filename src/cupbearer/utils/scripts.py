@@ -43,9 +43,16 @@ class ScriptConfig(BaseConfig):
 
     def setup_and_validate(self):
         super().setup_and_validate()
-        for cfg in self.subconfigs():
-            if isinstance(cfg, PathConfigMixin):
-                cfg.set_path(self.dir.path)
+
+        def set_paths_of_children(cfg):
+            for subcfg in cfg.subconfigs():
+                if isinstance(subcfg, PathConfigMixin):
+                    subcfg.set_path(self.dir.path)
+            for subcfg in cfg.subconfigs():
+                # Breadth first (though shouldn't matter)
+                set_paths_of_children(subcfg)
+
+        set_paths_of_children(self)
 
 
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)

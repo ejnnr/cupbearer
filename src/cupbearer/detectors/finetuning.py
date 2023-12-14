@@ -1,19 +1,14 @@
 import copy
 import warnings
 from dataclasses import dataclass, field
-from typing import Optional
 
-import lightning as L
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.detectors.config import DetectorConfig, TrainConfig
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils import utils
-from cupbearer.utils.config_groups import config_group
-from cupbearer.utils.optimizers import Adam, OptimizerConfig
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
@@ -26,34 +21,22 @@ class FinetuningAnomalyDetector(AnomalyDetector):
     def train(
         self,
         clean_dataset,
-        optimizer: OptimizerConfig,
-        num_classes: int,
-        num_epochs: int = 10,
-        batch_size: int = 128,
-        max_steps: Optional[int] = None,
-        log_every_n_steps: Optional[int] = None,
-        **kwargs,
+        *,
+        num_classes,
+        train_config,
     ):
         classifier = Classifier(
             self.model,
             num_classes=num_classes,
-            optim_cfg=optimizer,
+            optim_cfg=train_config.optim,
             save_hparams=False,
         )
 
         # Create a DataLoader for the clean dataset
-        clean_loader = DataLoader(
-            dataset=clean_dataset,
-            batch_size=batch_size,
-        )
+        clean_loader = train_config.get_dataloader(clean_dataset)
 
         # Finetune the model on the clean dataset
-        trainer = L.Trainer(
-            max_epochs=num_epochs,
-            max_steps=max_steps or -1,
-            default_root_dir=self.save_path,
-            log_every_n_steps=log_every_n_steps,
-        )
+        trainer = train_config.get_trainer()
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -109,19 +92,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
 
 @dataclass
 class FinetuningTrainConfig(TrainConfig):
-    optimizer: OptimizerConfig = config_group(OptimizerConfig, Adam)
-    num_epochs: int = 10
-    batch_size: int = 128
-    max_steps: Optional[int] = None
-    log_every_n_steps: Optional[int] = None
-
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.num_epochs = 1
-            self.max_steps = 1
-            self.batch_size = 2
-            self.log_every_n_steps = self.max_steps
+    pass
 
 
 @dataclass
@@ -131,6 +102,6 @@ class FinetuningConfig(DetectorConfig):
     def build(self, model, save_dir) -> FinetuningAnomalyDetector:
         return FinetuningAnomalyDetector(
             model=model,
-            max_batch_size=self.max_batch_size,
+            max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
