@@ -55,7 +55,7 @@ class SpectralSignatureConfig(ActivationBasedDetectorConfig):
         return SpectralSignatureDetector(
             model=model,
             activation_name_func=self.resolve_name_func(),
-            max_batch_size=self.max_batch_size,
+            max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
 
@@ -70,6 +70,6 @@ class SpectreConfig(ActivationBasedDetectorConfig):
         return SpectreDetector(
             model=model,
             activation_name_func=self.resolve_name_func(),
-            max_batch_size=self.max_batch_size,
+            max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
