@@ -4,6 +4,7 @@ import pytest
 import torch
 from cupbearer.detectors.statistical import (
     MahalanobisDetector,
+    MahalanobisTrainConfig,
     SpectralSignatureDetector,
     SpectreDetector,
 )
@@ -37,16 +38,22 @@ from cupbearer.models import CNN, MLP
         ),
     ],
 )
-class TestTrainedDetectors:
-    @staticmethod
-    def train_detector(dataset, Model, Detector, **kwargs):
+class TestTrainedStatisticalDetectors:
+    # Currently MahalanobisTrainConfig works for all statistical detectors
+    train_config = MahalanobisTrainConfig(
+        batch_size=16,
+        rcond=1e-5,
+    )
+
+    def train_detector(self, dataset, Model, Detector, **kwargs):
         example_input, _ = next(iter(dataset))
         model = Model(input_shape=example_input.shape, output_dim=7)
         detector = Detector(model=model)
 
         detector.train(
             dataset=dataset,
-            **kwargs,
+            num_classes=7,
+            train_config=self.train_config,
         )
         return detector
 
@@ -71,16 +78,17 @@ class TestTrainedDetectors:
             assert not torch.allclose(cov, torch.zeros_like(cov))
 
     def test_inverse_covariance_matrices(self, dataset, Model):
-        rcond = 1e-5
-        detector = self.train_detector(dataset, Model, MahalanobisDetector, rcond=rcond)
+        detector = self.train_detector(dataset, Model, MahalanobisDetector)
         assert detector.covariances.keys() == detector.inv_covariances.keys()
         for layer_name, cov in detector.covariances.items():
             inv_cov = detector.inv_covariances[layer_name]
             assert inv_cov.size() == cov.size()
 
             # Check that inverse is (pseudo) inverse
-            rank = torch.linalg.matrix_rank(cov, rtol=rcond)
-            assert torch.linalg.matrix_rank(inv_cov, rtol=rcond) == rank
+            rank = torch.linalg.matrix_rank(cov, rtol=self.train_config.rcond)
+            assert (
+                torch.linalg.matrix_rank(inv_cov, rtol=self.train_config.rcond) == rank
+            )
 
             # TODO I'm uncertain which tolerances to use here, this is a
             # guesstimate based on some of the computations that are done and
@@ -94,18 +102,19 @@ class TestTrainedDetectors:
             )
 
     def test_whitening_matrices(self, dataset, Model):
-        rcond = 1e-5
-        detector = self.train_detector(dataset, Model, SpectreDetector, rcond=rcond)
+        detector = self.train_detector(dataset, Model, SpectreDetector)
         assert detector.covariances.keys() == detector.whitening_matrices.keys()
         for layer_name, cov in detector.covariances.items():
             W = detector.whitening_matrices[layer_name]
             assert W.size() == cov.size()
 
             # Check that Whitening matrix computes (pseudo) inverse
-            rank = torch.linalg.matrix_rank(cov, rtol=rcond)
-            assert torch.linalg.matrix_rank(W, rtol=rcond) == rank
+            rank = torch.linalg.matrix_rank(cov, rtol=self.train_config.rcond)
+            assert torch.linalg.matrix_rank(W, rtol=self.train_config.rcond) == rank
             inv_cov = W @ W.mT
-            assert torch.linalg.matrix_rank(inv_cov, rtol=rcond) == rank
+            assert (
+                torch.linalg.matrix_rank(inv_cov, rtol=self.train_config.rcond) == rank
+            )
 
             # TODO I'm uncertain which tolerances to use here, this is a
             # guesstimate based on some of the computations that are done and

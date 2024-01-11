@@ -3,11 +3,12 @@ import torch
 from cupbearer.detectors.statistical.helpers import mahalanobis
 from cupbearer.detectors.statistical.statistical import (
     ActivationCovarianceBasedDetector,
+    MahalanobisTrainConfig,
 )
 
 
 class MahalanobisDetector(ActivationCovarianceBasedDetector):
-    def post_covariance_training(self, rcond, relative: bool = False, **kwargs):
+    def post_covariance_training(self, rcond: float):
         self.inv_covariances = {
             k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
             for k, C in self.covariances.items()
@@ -17,26 +18,22 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
         self,
         dataset,
         *,
-        max_batches: int = 0,
-        relative: bool = False,
-        rcond: float = 1e-5,
-        batch_size: int = 4096,
-        pbar: bool = True,
+        num_classes: int,
+        train_config: MahalanobisTrainConfig,
         **kwargs,
     ):
         super().train(
             dataset,
-            max_batches=max_batches,
-            rcond=rcond,
-            batch_size=batch_size,
-            pbar=pbar,
-            **kwargs,
+            num_classes=num_classes,
+            train_config=train_config,
         )
         self.inv_diag_covariances = None
-        if relative:
+        if train_config.relative:
             with torch.inference_mode():
                 self.inv_diag_covariances = {
-                    k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
+                    k: torch.where(
+                        torch.diag(C) > train_config.rcond, 1 / torch.diag(C), 0
+                    )
                     for k, C in self.covariances.items()
                 }
 

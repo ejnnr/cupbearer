@@ -1,5 +1,6 @@
 import warnings
 from abc import ABC, abstractmethod
+from dataclasses import dataclass
 
 import torch
 from torch.utils.data import DataLoader
@@ -7,6 +8,53 @@ from tqdm import tqdm
 
 from cupbearer.detectors.anomaly_detector import ActivationBasedDetector
 from cupbearer.detectors.statistical.helpers import update_covariance
+from cupbearer.utils.utils import BaseConfig
+
+
+@dataclass
+class StatisticalTrainConfig(BaseConfig, ABC):
+    max_batches: int = 0
+    batch_size: int = 4096
+    max_batch_size: int = 4096
+    pbar: bool = True
+    num_workers = 0
+    debug: bool = False
+    # robust: bool = False  # TODO spectre uses
+    # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
+
+    def get_dataloader(self, dataset, train=True):
+        if train:
+            return DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=True,
+                num_workers=self.num_workers,
+                persistent_workers=self.num_workers > 0,
+            )
+        else:
+            return DataLoader(
+                dataset,
+                batch_size=self.batch_size,
+                shuffle=False,
+            )
+
+    def setup_and_validate(self):
+        super().setup_and_validate()
+        if self.debug:
+            self.max_batches = 3
+            self.batch_size = 5
+
+
+@dataclass
+class ActivationCovarianceTrainConfig(StatisticalTrainConfig):
+    rcond: float = 1e-5
+    # robust: bool = False  # TODO spectre uses
+    # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
+
+
+@dataclass
+class MahalanobisTrainConfig(ActivationCovarianceTrainConfig):
+    relative: bool = False
 
 
 class StatisticalDetector(ActivationBasedDetector, ABC):
@@ -22,20 +70,15 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         self,
         dataset,
         *,
-        max_batches: int = 0,
-        batch_size: int = 4096,
-        pbar: bool = True,
+        num_classes: int,
+        train_config: StatisticalTrainConfig,
         **kwargs,
     ):
         # Common for statistical methods is that the training does not require
         # gradients, but instead computes makes use of summary statistics or
         # similar
         with torch.inference_mode():
-            data_loader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                shuffle=False,
-            )
+            data_loader = train_config.get_dataloader(dataset)
             example_batch = next(iter(data_loader))
             _, example_activations = self.get_activations(example_batch)
 
@@ -43,11 +86,11 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
             activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
             self.init_variables(activation_sizes)
 
-            if pbar:
+            if train_config.pbar:
                 data_loader = tqdm(data_loader)
 
             for i, batch in enumerate(data_loader):
-                if max_batches and i >= max_batches:
+                if train_config.max_batches and i >= train_config.max_batches:
                     break
                 _, activations = self.get_activations(batch)
                 self.batch_update(activations)
@@ -83,14 +126,13 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         self,
         dataset,
         *,
-        max_batches: int = 0,
-        rcond: float = 1e-5,
-        batch_size: int = 4096,
-        pbar: bool = True,
-        **kwargs,
+        num_classes: int,
+        train_config: ActivationCovarianceTrainConfig,
     ):
         super().train(
-            dataset, max_batches=max_batches, batch_size=batch_size, pbar=pbar
+            dataset,
+            num_classes=num_classes,
+            train_config=train_config,
         )
 
         # Post process
@@ -109,4 +151,4 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
                     f"Only {sum(has_full_rank.values())}/{len(has_full_rank)} layers "
                     "have full rank covariance matrices."
                 )
-            self.post_covariance_training(rcond=rcond)
+            self.post_covariance_training(rcond=train_config.rcond)
