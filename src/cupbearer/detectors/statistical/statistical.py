@@ -17,7 +17,7 @@ class StatisticalTrainConfig(BaseConfig, ABC):
     batch_size: int = 4096
     max_batch_size: int = 4096
     pbar: bool = True
-    num_workers = 0
+    num_workers: int = 0
     debug: bool = False
     # robust: bool = False  # TODO spectre uses
     # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
