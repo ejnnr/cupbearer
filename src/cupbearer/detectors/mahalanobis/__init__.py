@@ -8,7 +8,7 @@ from .mahalanobis_detector import MahalanobisDetector
 
 @dataclass
 class MahalanobisTrainConfig(BaseConfig):
-    max_batches = 0
+    max_batches: int = 0
     relative: bool = False
     rcond: float = 1e-5
     batch_size: int = 4096

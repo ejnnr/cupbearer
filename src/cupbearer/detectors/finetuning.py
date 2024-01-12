@@ -6,9 +6,10 @@ import torch
 import torch.nn.functional as F
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
-from cupbearer.detectors.config import DetectorConfig, TrainConfig
+from cupbearer.detectors.config import DetectorConfig
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils import utils
+from cupbearer.utils.train import TrainConfig
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
@@ -22,8 +23,8 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         self,
         clean_dataset,
         *,
-        num_classes,
-        train_config,
+        num_classes: int,
+        train_config: TrainConfig,
     ):
         classifier = Classifier(
             self.finetuned_model,
@@ -91,13 +92,8 @@ class FinetuningAnomalyDetector(AnomalyDetector):
 
 
 @dataclass
-class FinetuningTrainConfig(TrainConfig):
-    pass
-
-
-@dataclass
 class FinetuningConfig(DetectorConfig):
-    train: FinetuningTrainConfig = field(default_factory=FinetuningTrainConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
 
     def build(self, model, save_dir) -> FinetuningAnomalyDetector:
         return FinetuningAnomalyDetector(

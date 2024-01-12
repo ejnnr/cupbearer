@@ -1,7 +1,6 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
-from cupbearer.data import DatasetConfig
 from cupbearer.models import HookedModel
 from cupbearer.utils.config_groups import config_group, register_config_group
 from cupbearer.utils.train import TrainConfig
@@ -14,11 +13,6 @@ from .abstraction import (
     LocallyConsistentAbstraction,
 )
 from .abstraction_detector import AbstractionDetector
-
-
-@dataclass
-class AbstractionTrainConfig(TrainConfig):
-    validation_datasets: dict[str, DatasetConfig] = field(default_factory=dict)
 
 
 # This is all unnessarily verbose right now, it's a remnant from when we had
@@ -63,7 +57,7 @@ class AbstractionDetectorConfig(DetectorConfig):
     abstraction: AbstractionConfig = config_group(
         AbstractionConfig, LocallyConsistentAbstractionConfig
     )
-    train: AbstractionTrainConfig = field(default_factory=AbstractionTrainConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
 
     def build(self, model, save_dir) -> AbstractionDetector:
         abstraction = self.abstraction.build(model)

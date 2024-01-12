@@ -16,6 +16,7 @@ from cupbearer.detectors.anomaly_detector import (
 )
 from cupbearer.models import HookedModel
 from cupbearer.utils.optimizers import OptimizerConfig
+from cupbearer.utils.train import TrainConfig
 
 
 def per_layer(func: Callable):
@@ -143,9 +144,8 @@ class AbstractionDetector(ActivationBasedDetector):
         self,
         dataset,
         *,
-        num_classes,
-        train_config,
-        debug=False,  # not used
+        num_classes: int,
+        train_config: TrainConfig,
     ):
         # Possibly we should store this as a submodule to save optimizers and continue
         # training later. But as long as we don't actually make use of that,
