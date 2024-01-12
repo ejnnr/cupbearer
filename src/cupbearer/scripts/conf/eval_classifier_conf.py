@@ -18,6 +18,8 @@ class Config(ScriptConfig):
     )
     save_config: bool = False
     pbar: bool = True
+    wandb: bool = False
+    log_every_n_steps: Optional[int] = None
 
     @property
     def num_classes(self):
@@ -28,3 +30,5 @@ class Config(ScriptConfig):
         if self.debug:
             self.max_steps = 1
             self.max_batch_size = 2
+            self.wandb = False
+            self.log_every_n_steps = self.max_steps

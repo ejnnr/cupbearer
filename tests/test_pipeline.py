@@ -71,6 +71,8 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
     assert (tmp_path / "histogram.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
 
+    assert (tmp_path / "tensorboard").is_dir()
+
 
 @pytest.mark.slow
 def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
@@ -88,6 +90,8 @@ def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
 
     assert (tmp_path / "histogram.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
+
+    assert (tmp_path / "tensorboard").is_dir()
 
 
 @pytest.mark.slow
@@ -144,6 +148,8 @@ def test_finetuning_detector(backdoor_classifier_path, tmp_path):
     assert (tmp_path / "histogram.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
 
+    assert (tmp_path / "tensorboard").is_dir()
+
 
 @pytest.mark.slow
 def test_wanet(tmp_path):
@@ -154,7 +160,7 @@ def test_wanet(tmp_path):
         "--train_data.backdoor wanet --model mlp "
         "--val_data.backdoor backdoor --val_data.backdoor.original gtsrb "
         "--val_data.backdoor.backdoor wanet "
-        "--num_workers=1",
+        "--train_config.num_workers=1",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
     run(train_classifier.main, cfg)
@@ -162,6 +168,7 @@ def test_wanet(tmp_path):
     assert (tmp_path / "wanet" / "config.yaml").is_file()
     assert (tmp_path / "wanet" / "checkpoints" / "last.ckpt").is_file()
     assert (tmp_path / "wanet" / "tensorboard").is_dir()
+
     # Check that NoData is handled correctly
     for name, data_cfg in cfg.val_data.items():
         if name == "backdoor":

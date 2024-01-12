@@ -1,41 +1,18 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Optional
 
-from cupbearer.data import DatasetConfig
 from cupbearer.models import HookedModel
 from cupbearer.utils.config_groups import config_group, register_config_group
-from cupbearer.utils.optimizers import Adam, OptimizerConfig
+from cupbearer.utils.train import TrainConfig
 from cupbearer.utils.utils import BaseConfig
 
-from ..config import DetectorConfig, TrainConfig
+from ..config import DetectorConfig
 from .abstraction import (
     Abstraction,
     AutoencoderAbstraction,
     LocallyConsistentAbstraction,
 )
 from .abstraction_detector import AbstractionDetector
-
-
-@dataclass
-class AbstractionTrainConfig(TrainConfig):
-    batch_size: int = 128
-    num_epochs: int = 10
-    validation_datasets: dict[str, DatasetConfig] = field(default_factory=dict)
-    optimizer: OptimizerConfig = config_group(OptimizerConfig, Adam)
-    check_val_every_n_epoch: int = 1
-    enable_progress_bar: bool = False
-    max_steps: Optional[int] = None
-    log_every_n_steps: Optional[int] = None
-    # TODO: should be possible to configure loggers (e.g. wandb)
-
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.batch_size = 2
-            self.num_epochs = 1
-            self.max_steps = 1
-            self.log_every_n_steps = self.max_steps
 
 
 # This is all unnessarily verbose right now, it's a remnant from when we had
@@ -80,13 +57,13 @@ class AbstractionDetectorConfig(DetectorConfig):
     abstraction: AbstractionConfig = config_group(
         AbstractionConfig, LocallyConsistentAbstractionConfig
     )
-    train: AbstractionTrainConfig = field(default_factory=AbstractionTrainConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
 
     def build(self, model, save_dir) -> AbstractionDetector:
         abstraction = self.abstraction.build(model)
         return AbstractionDetector(
             model=model,
             abstraction=abstraction,
-            max_batch_size=self.max_batch_size,
+            max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
