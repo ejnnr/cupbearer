@@ -1,4 +1,3 @@
-import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
@@ -72,7 +71,6 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         *,
         num_classes: int,
         train_config: StatisticalTrainConfig,
-        **kwargs,
     ):
         # Common for statistical methods is that the training does not require
         # gradients, but instead computes makes use of summary statistics or
@@ -142,13 +140,4 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
             if any(torch.count_nonzero(C) == 0 for C in self.covariances.values()):
                 raise RuntimeError("All zero covariance matrix detected.")
 
-            has_full_rank = {
-                k: torch.linalg.matrix_rank(cov) == cov.size(0)
-                for k, cov in self.covariances.items()
-            }
-            if not all(has_full_rank.values()):
-                warnings.warn(
-                    f"Only {sum(has_full_rank.values())}/{len(has_full_rank)} layers "
-                    "have full rank covariance matrices."
-                )
             self.post_covariance_training(rcond=train_config.rcond)
