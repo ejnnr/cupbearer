@@ -1,24 +1,26 @@
 from dataclasses import dataclass, field
 
-from cupbearer.detectors.config import ActivationBasedDetectorConfig, TrainConfig
+from cupbearer.detectors.config import ActivationBasedDetectorConfig
+from cupbearer.utils.utils import BaseConfig
 
 from .mahalanobis_detector import MahalanobisDetector
 
 
 @dataclass
-class MahalanobisTrainConfig(TrainConfig):
+class MahalanobisTrainConfig(BaseConfig):
     max_batches: int = 0
     relative: bool = False
     rcond: float = 1e-5
     batch_size: int = 4096
+    max_batch_size: int = 4096
     pbar: bool = True
     debug: bool = False
 
     def setup_and_validate(self):
         super().setup_and_validate()
         if self.debug:
-            self.max_batches = 2
             self.batch_size = 2
+            self.max_batch_size = 2
 
 
 @dataclass
@@ -29,6 +31,6 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
         return MahalanobisDetector(
             model=model,
             activation_name_func=self.resolve_name_func(),
-            max_batch_size=self.max_batch_size,
+            max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )

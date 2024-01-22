@@ -43,9 +43,16 @@ class ScriptConfig(BaseConfig):
 
     def setup_and_validate(self):
         super().setup_and_validate()
-        for cfg in self.subconfigs():
-            if isinstance(cfg, PathConfigMixin):
-                cfg.set_path(self.dir.path)
+
+        def set_paths_of_children(cfg):
+            for subcfg in cfg.subconfigs():
+                if isinstance(subcfg, PathConfigMixin):
+                    subcfg.set_path(self.dir.path)
+            for subcfg in cfg.subconfigs():
+                # Breadth first (though shouldn't matter)
+                set_paths_of_children(subcfg)
+
+        set_paths_of_children(self)
 
 
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
@@ -76,7 +83,10 @@ def save_cfg(cfg: ScriptConfig, save_config: bool = True):
             # Note that we need save_dc_types here even though `BaseConfig` already
             # enables that, since `save` calls `to_dict` directly, not `obj.to_dict`.
             simple_parsing.helpers.serialization.serializable.save(
-                cfg, cfg.dir.path / "config.yaml", save_dc_types=True
+                cfg,
+                cfg.dir.path / "config.yaml",
+                save_dc_types=True,
+                sort_keys=False,
             )
 
 

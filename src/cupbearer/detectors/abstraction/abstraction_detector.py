@@ -1,11 +1,10 @@
 import functools
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 import lightning as L
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.detectors.abstraction.abstraction import (
     Abstraction,
@@ -17,6 +16,7 @@ from cupbearer.detectors.anomaly_detector import (
 )
 from cupbearer.models import HookedModel
 from cupbearer.utils.optimizers import OptimizerConfig
+from cupbearer.utils.train import TrainConfig
 
 
 def per_layer(func: Callable):
@@ -143,33 +143,31 @@ class AbstractionDetector(ActivationBasedDetector):
     def train(
         self,
         dataset,
-        optimizer: OptimizerConfig,
-        batch_size: int = 128,
-        num_epochs: int = 10,
-        validation_datasets: Optional[dict[str, Dataset]] = None,
-        max_steps: Optional[int] = None,
-        **kwargs,
+        *,
+        num_classes: int,
+        train_config: TrainConfig,
     ):
         # Possibly we should store this as a submodule to save optimizers and continue
         # training later. But as long as we don't actually make use of that,
         # this is easiest.
-        module = AbstractionModule(self.get_activations, self.abstraction, optimizer)
+        module = AbstractionModule(
+            self.get_activations,
+            self.abstraction,
+            train_config.optim,
+        )
 
-        train_loader = DataLoader(dataset=dataset, batch_size=batch_size)
-        # TODO: implement validation loaders
+        train_loader = train_config.get_dataloader(dataset)
+
+        # TODO: implement validation data
+        # val_loaders = {
+        #     k: train_config.get_dataloader(v.build, train=False)
+        #     for k, v in self.val_data.items()
+        # }
         # checkpoint_callback = ModelCheckpoint(
         #     dirpath=self.save_path,
         #     filename="detector",
         # )
 
-        trainer = L.Trainer(
-            max_epochs=num_epochs,
-            max_steps=max_steps or -1,
-            # callbacks=[checkpoint_callback],
-            enable_checkpointing=False,
-            logger=None,
-            default_root_dir=self.save_path,
-        )
         self.model.eval()
         # We don't need gradients for base model parameters:
         required_grad = {}
@@ -180,7 +178,12 @@ class AbstractionDetector(ActivationBasedDetector):
         # transferred to the same device Lightning uses for everything else
         # (which seems tricky to do manually).
         module.model = self.model
-        trainer.fit(model=module, train_dataloaders=train_loader)
+
+        trainer = train_config.get_trainer()
+        trainer.fit(
+            model=module,
+            train_dataloaders=train_loader,
+        )
 
         # Restore original requires_grad values:
         for name, param in self.model.named_parameters():

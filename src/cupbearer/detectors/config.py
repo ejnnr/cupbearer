@@ -10,27 +10,17 @@ from simple_parsing.helpers import mutable_field
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.models import HookedModel
 from cupbearer.utils.scripts import load_config
+from cupbearer.utils.train import TrainConfig
 from cupbearer.utils.utils import BaseConfig, PathConfigMixin, get_object
-
-
-@dataclass
-class TrainConfig(BaseConfig):
-    pass
 
 
 @dataclass(kw_only=True)
 class DetectorConfig(BaseConfig, ABC):
     train: TrainConfig = mutable_field(TrainConfig)
-    max_batch_size: int = 4096
 
     @abstractmethod
     def build(self, model: HookedModel, save_dir: Path | None) -> AnomalyDetector:
         pass
-
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.max_batch_size = 2
 
 
 # TODO: this feels like unnecessary indirection, can maybe integrate this elsewhere

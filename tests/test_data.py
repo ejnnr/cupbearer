@@ -7,7 +7,8 @@ import torch
 # We shouldn't import TestDataMix directly because that will make pytest think
 # it's a test.
 from cupbearer import data
-from torch.utils.data import Dataset
+from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms.functional import InterpolationMode
 
 
 class DummyDataset(Dataset):
@@ -41,12 +42,14 @@ class DummyImageData(Dataset):
         self.num_classes = num_classes
         self.img = torch.tensor(
             [
-                [[i_y % 2, i_x % 2, (i_x + i_y) % 2] for i_x in range(shape[1])]
+                [[i_y % 2, i_x % 2, (i_x + i_y + 1) % 2] for i_x in range(shape[1])]
                 for i_y in range(shape[0])
             ],
             dtype=torch.float32,
             # Move channel dimension to front
         ).permute(2, 0, 1)
+        # Need any seed so that labels are (somewhat) consitent over instances
+        self._rng = np.random.default_rng(seed=5965)
 
     def __len__(self):
         return self.length
@@ -54,14 +57,14 @@ class DummyImageData(Dataset):
     def __getitem__(self, index) -> tuple[torch.Tensor, int]:
         if index >= self.length:
             raise IndexError
-        return self.img, np.random.randint(self.num_classes)
+        return self.img, self._rng.integers(self.num_classes)
 
 
 @dataclass
 class DummyImageConfig(data.DatasetConfig):
     length: int
     num_classes: int = 10
-    shape: tuple[int, int] = (8, 8)
+    shape: tuple[int, int] = (8, 12)
 
     def _build(self) -> Dataset:
         return DummyImageData(self.length, self.num_classes, self.shape)
@@ -282,3 +285,165 @@ def test_wanet_backdoor(clean_image_config):
         assert torch.max(clean_img) <= 1
         assert torch.max(anoma_img) <= 1
         assert torch.max(noise_img) <= 1
+
+
+def test_wanet_backdoor_on_multiple_workers(
+    clean_image_config,
+):
+    clean_image_config.num_classes = 1
+    target_class = 1
+    anomalous_config = data.BackdoorData(
+        original=clean_image_config,
+        backdoor=data.backdoors.WanetBackdoor(
+            p_backdoor=1.0,
+            p_noise=0.0,
+            target_class=target_class,
+        ),
+    )
+    data_loader = DataLoader(
+        dataset=anomalous_config.build(),
+        num_workers=2,
+        batch_size=1,
+    )
+    imgs = [img for img_batch, label_batch in data_loader for img in img_batch]
+    assert all(torch.allclose(imgs[0], img) for img in imgs)
+
+    clean_image = clean_image_config.build().dataset.img
+    assert not any(torch.allclose(clean_image, img) for img in imgs)
+
+
+#######################
+# Tests for Augmentations
+#######################
+
+
+@pytest.fixture(
+    params=[
+        data.RandomCrop(padding=100),
+        data.RandomHorizontalFlip(p=1.0),
+        data.RandomRotation(degrees=10, interpolation=InterpolationMode.BILINEAR),
+    ],
+)
+def augmentation(request):
+    return request.param
+
+
+def test_augmentation(clean_image_config, augmentation):
+    # See that augmentation does something unless dud
+    for img, label in clean_image_config.build():
+        aug_img, aug_label = augmentation((img, label))
+        assert label == aug_label
+        assert not torch.allclose(aug_img, img)
+
+    # Try with multiple workers and batches
+    data_loader = DataLoader(
+        dataset=clean_image_config.build(),
+        num_workers=2,
+        batch_size=3,
+        drop_last=False,
+    )
+    for img, label in data_loader:
+        aug_img, aug_label = augmentation((img, label))
+        assert torch.all(label == aug_label)
+        assert not torch.allclose(aug_img, img)
+
+    # Test that updating p does change augmentation probability
+    augmentation.p = 0.0
+    for img, label in data_loader:
+        aug_img, aug_label = augmentation((img, label))
+        assert torch.all(label == aug_label)
+        assert torch.all(aug_img == img)
+
+
+def test_random_crop(clean_image_config):
+    fill_val = 2.75
+    augmentation = data.RandomCrop(
+        padding=100,  # huge padding so that chance of no change is small
+        fill=fill_val,
+    )
+    for img, label in clean_image_config.build():
+        aug_img, aug_label = augmentation((img, label))
+        assert torch.any(aug_img == fill_val)
+
+
+@dataclass
+class DummyPytorchImageConfig(data.PytorchConfig):
+    name: str = "dummy"
+    length: int = 32
+    num_classes: int = 10
+    shape: tuple[int, int] = (8, 12)
+
+    def get_transforms(self):
+        transforms = super().get_transforms()
+        assert isinstance(transforms[0], data.transforms.ToTensor)
+        return transforms[1:]
+
+    def _build(self) -> Dataset:
+        return DummyImageData(self.length, self.num_classes, self.shape)
+
+
+@pytest.fixture
+def pytorch_data_config():
+    return DummyPytorchImageConfig()
+
+
+def test_pytorch_dataset_transforms(pytorch_data_config, BackdoorConfig):
+    for (_img, _label), (img, label) in zip(
+        pytorch_data_config._build(), pytorch_data_config.build()
+    ):
+        assert _label == label
+        assert _img.size() == img.size()
+        assert _img is not img, "Transforms does not seem to have been applied"
+
+    transforms = pytorch_data_config.get_transforms()
+    transform_typereps = [repr(type(t)) for t in transforms]
+    augmentation_used = False
+    for trafo in pytorch_data_config.get_transforms():
+        # Check that transform is unique in list
+        assert transforms.count(trafo) == 1
+        assert transform_typereps.count(repr(type(trafo))) == 1
+
+        # Check transform types
+        assert isinstance(trafo, data.transforms.Transform)
+        if isinstance(trafo, data.transforms.ProbabilisticTransform):
+            augmentation_used = True
+        else:
+            # Augmentations should by default come after all base transforms
+            assert not augmentation_used, "Transform applied after augmentation"
+    assert augmentation_used
+
+    # Test for BackdoorData
+    data_config = data.BackdoorData(
+        original=pytorch_data_config,
+        backdoor=BackdoorConfig(),
+    )
+    transforms = data_config.get_transforms()
+    transform_typereps = [repr(type(t)) for t in transforms]
+    augmentation_used = False
+    backdoor_used = False
+    for trafo in data_config.get_transforms():
+        # Check that transform is unique in list
+        assert transforms.count(trafo) == 1
+        assert transform_typereps.count(repr(type(trafo))) == 1
+
+        # Check transform types
+        assert not backdoor_used, "Multiple backdoors in transforms"
+        assert isinstance(trafo, data.transforms.Transform)
+        if isinstance(trafo, data.transforms.ProbabilisticTransform):
+            augmentation_used = True
+        elif isinstance(trafo, data.backdoors.Backdoor):
+            backdoor_used = True
+        else:
+            assert not augmentation_used, "Transform applied after augmentation"
+    assert augmentation_used
+    assert backdoor_used
+
+
+def test_no_augmentations(BackdoorConfig):
+    pytorch_data_config = DummyPytorchImageConfig(default_augmentations=False)
+    data_config = data.BackdoorData(
+        original=pytorch_data_config,
+        backdoor=BackdoorConfig(),
+    )
+    for trafo in data_config.get_transforms():
+        assert not isinstance(trafo, data.transforms.ProbabilisticTransform)

@@ -35,9 +35,11 @@ def main(cfg: Config):
     )
     rob_acc, l2, elapsed_time = atk.save(dataloader, save_path, return_verbose=True)
 
-    if rob_acc > cfg.success_threshold:
+    # N.B. rob_acc is in percent while success_threshold is not
+    if rob_acc > 100 * cfg.success_threshold:
         raise RuntimeError(
-            f"Attack failed, new accuracy is {rob_acc} > {cfg.success_threshold}."
+            "Attack failed, new accuracy is"
+            f" {rob_acc}% > {100 * cfg.success_threshold}%."
         )
 
     # Plot a few adversarial examples in a grid and save the plot as a pdf

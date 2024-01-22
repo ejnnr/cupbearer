@@ -34,7 +34,7 @@ class AnomalyDetector(ABC):
         self.trained = False
 
     @abstractmethod
-    def train(self, dataset, debug: bool = False, **kwargs):
+    def train(self, dataset, *, num_classes: int, train_config: utils.BaseConfig):
         """Train the anomaly detector with the given dataset as "normal" data."""
 
     @contextmanager
