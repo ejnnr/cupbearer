@@ -12,15 +12,12 @@ from simple_parsing.helpers import mutable_field
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
     model: ModelConfig = config_group(ModelConfig)
-    train_config: TrainConfig = mutable_field(TrainConfig, TrainConfig())
+    train_config: TrainConfig = mutable_field(TrainConfig)
     train_data: DatasetConfig = config_group(DatasetConfig)
     val_data: ValidationConfig = config_group(ValidationConfig, ValidationConfig)
     dir: DirConfig = mutable_field(
         DirConfig, base=os.path.join("logs", "train_classifier")
     )
-
-    def __post_init__(self):
-        super().__post_init__()
 
     @property
     def num_classes(self):
