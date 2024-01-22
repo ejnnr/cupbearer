@@ -55,7 +55,9 @@ class MLPConfig(ModelConfig):
         if self.debug:
             # TODO: we need at least two layers here because abstractions currently
             # only work in that case. Abstraction implementation should be fixed.
-            self.hidden_dims = [2, 2]
+            # Additionally, we make network with some width to reduce chance that all
+            # neurons are dead.
+            self.hidden_dims = [5, 5]
 
 
 @dataclass
