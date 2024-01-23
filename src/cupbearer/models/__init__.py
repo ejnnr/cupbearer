@@ -89,13 +89,14 @@ class CNNConfig(ModelConfig):
 class TransformerConfig(ModelConfig):
     model: str = "pythia-14m"
     num_classes: int = 2
+    device: str | None = None
 
     def build_model(self, input_format: DataFormat):
         if not isinstance(input_format, TextDataFormat):
             raise ValueError(
                 f"Transformers only support text input, got {type(input_format)}"
             )
-        return ClassifierTransformer(self.model, self.num_classes)
+        return ClassifierTransformer(self.model, self.num_classes, device=self.device)
 
 
 MODELS = {

@@ -11,7 +11,7 @@ class TransformerBase(HookedModel):
     def __init__(
         self,
         model: str | HookedTransformer,
-        max_length: int = 512,
+        max_length: int | None = None,
         device: str | None = None,
     ):
         super().__init__()
@@ -22,7 +22,7 @@ class TransformerBase(HookedModel):
                 model, device=device
             )
         self.model: HookedTransformer = model
-        self.max_length = max_length
+        self.max_length = max_length or self.model.cfg.n_ctx
         self._already_gave_mps_warning = False
 
     @property
@@ -98,7 +98,7 @@ class TransformerBase(HookedModel):
 
             tokens = tokens.to(self.model.cfg.device)
         else:
-            tokens = self.model.to_tokens(x, padding_side="right", truncate=True)
+            tokens = self.model.to_tokens(x, truncate=True)
 
         tokens = tokens[:, : self.max_length]
 
@@ -106,37 +106,63 @@ class TransformerBase(HookedModel):
             assert tokens.shape[1] == self.max_length, tokens.shape
         return tokens
 
-    def get_embeddings(self, tokens: torch.Tensor) -> torch.Tensor:
+    def get_embeddings(
+        self, tokens: torch.Tensor, layer: int | None = None
+    ) -> torch.Tensor:
         b, s = tokens.shape
+        # We handle the embedding layer manually because we want the model to get
+        # an attention mask, which means we have to either use start_at_layer, or
+        # pass in strings to forward(). But we want to be able to pass in tokens
+        # so that we can easily add a classification token at the end.
+        #
+        # This call shouldn't do any padding, but we need to specify the padding side
+        # to force it to compute attention masks.
+        (
+            residual,
+            _,
+            shortformer_pos_embed,
+            attention_mask,
+        ) = self.model.input_to_embed(tokens)
 
-        if not self._capturing:
-            _, cache = self.model.run_with_cache(
-                tokens,
-                names_filter="ln_final.hook_normalized",
-                return_cache_object=False,
-                # Don't need the logits, we only care about the embeddings:
-                return_type=None,
-            )
-        else:
+        embedding_name = (
+            f"blocks.{layer}.hook_resid_post"
+            if layer is not None
+            else "ln_final.hook_normalized"
+        )
+
+        # By default (if not capturing intermediate activations), only capture
+        # the layer we use for logit computations:
+        names = [embedding_name]
+
+        if self._capturing:
             if self._activations != {}:
                 raise ValueError("Activations already stored")
 
             if self._names is None:
+                # capture everything
                 names = None
             else:
-                names = [*self._names, "ln_final.hook_normalized"]
+                # capture only the specified names, plus the one we need later
+                # to compute logits
+                names += self._names
 
-            _, cache = self.model.run_with_cache(
-                tokens,
-                names_filter=names,
-                return_cache_object=False,
-                return_type=None,
-            )
+        _, cache = self.model.run_with_cache(
+            input=residual,
+            attention_mask=attention_mask,
+            # skip the embedding layer, we handled that manually
+            start_at_layer=0,
+            names_filter=names,
+            return_cache_object=False,
+            # Don't need the logits, we only care about the embeddings:
+            return_type=None,
+        )
+
+        if self._capturing:
             # Need to modify them in place to make sure they are available
             # via the context manager.
             self._activations.update(cache)
 
-        embeddings = cache["ln_final.hook_normalized"]
+        embeddings = cache[embedding_name]
         assert embeddings.shape == (b, s, self.model.cfg.d_model), embeddings.shape
         return embeddings
 
@@ -149,22 +175,62 @@ class ClassifierTransformer(TransformerBase):
         self,
         model: str | HookedTransformer,
         num_classes: int,
+        freeze_model: bool = False,
         device: str | None = None,
     ):
         super().__init__(model, device=device)
+        # We need to set this on the tokenizer, just passing it to `input_to_embeds`
+        # doesn't work, since that function only checks the padding_side on the
+        # tokenizer to determine whether to compute an attention mask.
+        # (It doesn't use LocallyOverridenDefaults itself, presumably since it's mainly
+        # meant to be called from forward(), which does that already.)
+        self.model.tokenizer.padding_side = "left"
+
+        self.freeze_model = freeze_model
+        if freeze_model:
+            for param in self.model.parameters():
+                param.requires_grad = False
+
         actual_device = next(self.model.parameters()).device
         self.classifier = nn.Linear(
             self.model.cfg.d_model, num_classes, device=actual_device
         )
-        # TODO: maybe we should use something less common here
-        self.cls_token = torch.tensor(
-            self.model.to_single_token(" omit"), device=actual_device, dtype=torch.long
-        ).view(1, 1)
+        # TODO: maybe we should use something less common here, this is just takend
+        # from Redwood's measurement tampering benchmark.
+        # TODO: figure out whether we want to use this or not---right now it's
+        # unnecessary because we're just summing over all tokens anyway.
+        # self.cls_token = torch.tensor(
+        #     self.model.to_single_token(" omit"), device=actual_device,
+        #     dtype=torch.long
+        # ).view(1, 1)
 
     def forward(self, x: str | list[str]) -> torch.Tensor:
         tokens = self.process_input(x)
+        # TODO: remove if we don't use this
+        # if tokens.shape[1] == self.max_length:
+        #     # Make space for the CLS token we'll add
+        #     tokens = tokens[:, : self.max_length - 1]
         # Append CLS token:
-        tokens = torch.cat([tokens, self.cls_token.expand(len(tokens), 1)], dim=1)
-        embeddings = self.get_embeddings(tokens)
-        logits = self.classifier(embeddings[:, -1, :])
+        # tokens = torch.cat([tokens, self.cls_token.expand(len(tokens), 1)], dim=1)
+
+        if self.freeze_model:
+            # If we're freezing the model, we don't use final layer embeddings since
+            # these have to correspond directly to next token predictions.
+            # TODO: does this really matter, and is the penultimate layer best?
+            # The - 2 is because we're zero-indexing layers.
+            embeddings = self.get_embeddings(tokens, layer=self.model.cfg.n_layers - 2)
+        else:
+            embeddings = self.get_embeddings(tokens)
+
+        # Take the mean over the sequence dimension, but ignore padding tokens.
+        # We're mainly doing this for the case where the model is frozen. If it's not,
+        # then this isn't really necessary but also shouldn't hurt.
+        mask = tokens != self.model.tokenizer.pad_token_id
+        mask = mask.unsqueeze(-1)
+        assert mask.shape == tokens.shape + (1,)
+        assert embeddings.shape == tokens.shape + (self.model.cfg.d_model,)
+        embeddings = embeddings * mask
+        embeddings = embeddings.sum(dim=1) / mask.sum(dim=1)
+
+        logits = self.classifier(embeddings)
         return logits

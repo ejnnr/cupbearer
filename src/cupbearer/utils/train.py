@@ -21,6 +21,7 @@ class TrainConfig(BaseConfig, PathConfigMixin):
     enable_progress_bar: bool = False
     log_every_n_steps: Optional[int] = None
     wandb: bool = False
+    device: str = "auto"
 
     @property
     def callbacks(self):
@@ -66,6 +67,7 @@ class TrainConfig(BaseConfig, PathConfigMixin):
             check_val_every_n_epoch=self.check_val_every_n_epoch,
             enable_progress_bar=self.enable_progress_bar,
             log_every_n_steps=self.log_every_n_steps,
+            accelerator=self.device,
         )
         trainer_kwargs.update(kwargs)  # override defaults if given
         return L.Trainer(**trainer_kwargs)
