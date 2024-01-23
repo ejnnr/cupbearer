@@ -73,8 +73,7 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         train_config: StatisticalTrainConfig,
     ):
         # Common for statistical methods is that the training does not require
-        # gradients, but instead computes makes use of summary statistics or
-        # similar
+        # gradients, but instead computes summary statistics or similar
         with torch.inference_mode():
             data_loader = train_config.get_dataloader(dataset)
             example_batch = next(iter(data_loader))

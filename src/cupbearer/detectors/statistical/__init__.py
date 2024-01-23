@@ -45,7 +45,7 @@ class SpectreConfig(ActivationBasedDetectorConfig):
         default_factory=ActivationCovarianceTrainConfig
     )
 
-    def build(self, model, save_dir) -> SpectralSignatureDetector:
+    def build(self, model, save_dir) -> SpectreDetector:
         return SpectreDetector(
             model=model,
             activation_name_func=self.resolve_name_func(),

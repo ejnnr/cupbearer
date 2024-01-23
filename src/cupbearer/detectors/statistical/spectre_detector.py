@@ -37,9 +37,8 @@ class SpectreDetector(ActivationCovarianceBasedDetector):
             )
             for k in activations.keys()
         }
-        return quantum_entropy(  # TODO should possibly pass rank
-            whitened_activations,
-        )
+        # TODO should possibly pass rank
+        return quantum_entropy(whitened_activations)
 
     def _get_trained_variables(self, saving: bool = False):
         return {
