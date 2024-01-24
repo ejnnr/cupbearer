@@ -3,11 +3,12 @@ import torch
 from cupbearer.detectors.statistical.helpers import quantum_entropy
 from cupbearer.detectors.statistical.statistical import (
     ActivationCovarianceBasedDetector,
+    ActivationCovarianceTrainConfig,
 )
 
 
 class SpectreDetector(ActivationCovarianceBasedDetector):
-    def post_covariance_training(self, rcond: float):
+    def post_covariance_training(self, train_config: ActivationCovarianceTrainConfig):
         whitening_matrices = {}
         for k, cov in self.covariances.items():
             # Compute decomposition
@@ -15,7 +16,9 @@ class SpectreDetector(ActivationCovarianceBasedDetector):
 
             # Zero entries corresponding to eigenvalues smaller than rcond
             vals_rsqrt = eigs.eigenvalues.rsqrt()
-            vals_rsqrt[eigs.eigenvalues < rcond * eigs.eigenvalues.max()] = 0
+            vals_rsqrt[
+                eigs.eigenvalues < train_config.rcond * eigs.eigenvalues.max()
+            ] = 0
 
             # PCA whitening
             # following https://doi.org/10.1080/00031305.2016.1277159

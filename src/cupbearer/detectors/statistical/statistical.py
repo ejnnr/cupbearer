@@ -116,7 +116,7 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
             )
 
     @abstractmethod
-    def post_covariance_training(self, rcond: float):
+    def post_covariance_training(self, train_config: ActivationCovarianceTrainConfig):
         pass
 
     def train(
@@ -139,4 +139,4 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
             if any(torch.count_nonzero(C) == 0 for C in self.covariances.values()):
                 raise RuntimeError("All zero covariance matrix detected.")
 
-            self.post_covariance_training(rcond=train_config.rcond)
+            self.post_covariance_training(train_config=train_config)

@@ -8,34 +8,17 @@ from cupbearer.detectors.statistical.statistical import (
 
 
 class MahalanobisDetector(ActivationCovarianceBasedDetector):
-    def post_covariance_training(self, rcond: float):
+    def post_covariance_training(self, train_config: MahalanobisTrainConfig):
         self.inv_covariances = {
-            k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
+            k: torch.linalg.pinv(C, rcond=train_config.rcond, hermitian=True)
             for k, C in self.covariances.items()
         }
-
-    def train(
-        self,
-        dataset,
-        *,
-        num_classes: int,
-        train_config: MahalanobisTrainConfig,
-        **kwargs,
-    ):
-        super().train(
-            dataset,
-            num_classes=num_classes,
-            train_config=train_config,
-        )
         self.inv_diag_covariances = None
         if train_config.relative:
-            with torch.inference_mode():
-                self.inv_diag_covariances = {
-                    k: torch.where(
-                        torch.diag(C) > train_config.rcond, 1 / torch.diag(C), 0
-                    )
-                    for k, C in self.covariances.items()
-                }
+            self.inv_diag_covariances = {
+                k: torch.where(torch.diag(C) > train_config.rcond, 1 / torch.diag(C), 0)
+                for k, C in self.covariances.items()
+            }
 
     def layerwise_scores(self, batch):
         _, activations = self.get_activations(batch)
