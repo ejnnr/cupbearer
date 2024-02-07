@@ -14,7 +14,7 @@ from cupbearer.utils.utils import BaseConfig, PathConfigMixin
 @dataclass(kw_only=True)
 class TaskConfigBase(BaseConfig, ABC, PathConfigMixin):
     @abstractmethod
-    def build_train_data(self) -> Dataset:
+    def build_train_data(self, normal_weight: float = 1.0) -> Dataset:
         pass
 
     @abstractmethod
@@ -79,12 +79,37 @@ class TaskConfig(TaskConfigBase, ABC):
     def _init_model(self):
         pass
 
-    def build_train_data(self) -> Dataset:
+    def build_train_data(self, normal_weight: float = 1.0) -> Dataset:
         if not self._train_data:
             self._init_train_data()
             assert self._train_data is not None, "init_train_data must set _train_data"
             self._train_data.max_size = self.max_train_size
-        return self._train_data.build()
+
+        if normal_weight == 1.0:
+            return self._train_data.build()
+        else:
+            # SpectralDetector uses poisoned data for training
+            anomalous = self._get_anomalous_test_data()
+
+            # As TestDataMix adds a label for poisoned or not, we remove this here
+            class RemoveMixLabelDataset(Dataset):
+                def __init__(self, dataset: Dataset):
+                    self._dataset = dataset
+
+                def __len__(self):
+                    return len(self._dataset)
+
+                def __getitem__(self, index):
+                    return self._dataset[index][0]
+
+            train_data = RemoveMixLabelDataset(
+                TestDataConfig(
+                    normal=self._train_data,
+                    anomalous=anomalous,
+                    normal_weight=normal_weight,
+                ).build()
+            )
+        return train_data
 
     def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
         if not self._model:

@@ -6,7 +6,10 @@ from .conf.train_detector_conf import Config
 
 
 def main(cfg: Config):
-    reference_data = cfg.task.build_train_data()
+    reference_data = cfg.task.build_train_data(
+        # TODO perhaps have the 0.1 to be configurable as well
+        normal_weight=(1.0 if cfg.detector.train_on_clean else 0.1)
+    )
     # reference_data[0] is the first sample, which is (input, ...), so we need another
     # [0] index
     example_input = reference_data[0][0]

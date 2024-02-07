@@ -29,6 +29,7 @@ class SpectralSignatureConfig(ActivationBasedDetectorConfig):
     train: ActivationCovarianceTrainConfig = field(
         default_factory=ActivationCovarianceTrainConfig
     )
+    train_on_clean: bool = False
 
     def build(self, model, save_dir) -> SpectralSignatureDetector:
         return SpectralSignatureDetector(
