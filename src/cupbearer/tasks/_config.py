@@ -5,7 +5,7 @@ from typing import Optional
 
 from torch.utils.data import Dataset
 
-from cupbearer.data import DatasetConfig, TestDataConfig, TestDataMix
+from cupbearer.data import DatasetConfig, TestDataConfig, TestDataMix, TensorDataFormat
 from cupbearer.models import ModelConfig
 from cupbearer.models.models import HookedModel
 from cupbearer.utils.utils import BaseConfig, PathConfigMixin
@@ -90,7 +90,8 @@ class TaskConfig(TaskConfigBase, ABC):
         if not self._model:
             self._init_model()
             assert self._model is not None, "init_model must set _model"
-        return self._model.build_model(input_shape)
+        input_format = TensorDataFormat(shape=input_shape)
+        return self._model.build_model(input_format)
 
     def build_test_data(self) -> TestDataMix:
         normal = self._get_normal_test_data()
