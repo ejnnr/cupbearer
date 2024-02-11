@@ -38,7 +38,7 @@ method to detect backdoors. First, we need to train a base model on poisoned dat
 python -m cupbearer.scripts.train_classifier \
        --train_data backdoor --train_data.original mnist \
        --train_data.backdoor corner --train_data.backdoor.p_backdoor 0.1 \
-       --model mlp --num_epochs 2 \
+       --model mlp --train_config.num_epochs 2 \
        --dir.full logs/demo/classifier
 ```
 This will train an MLP on MNIST, where the backdoor trigger is that the top left pixel
