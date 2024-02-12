@@ -174,3 +174,16 @@ class NoData(DatasetConfig):
         raise NotImplementedError
 
     # build already raises NotImplementedError by default
+
+
+class RemoveMixLabelDataset(Dataset):
+    """Help class to only return the first element of each item"""
+
+    def __init__(self, dataset: Dataset):
+        self._dataset = dataset
+
+    def __len__(self):
+        return len(self._dataset)
+
+    def __getitem__(self, index):
+        return self._dataset[index][0]

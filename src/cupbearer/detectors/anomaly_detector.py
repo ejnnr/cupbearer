@@ -19,6 +19,9 @@ from cupbearer.utils import utils
 
 
 class AnomalyDetector(ABC):
+    should_train_on_clean_data: bool = False
+    should_train_on_poisoned_data: bool = False
+
     def __init__(
         self,
         model: HookedModel,

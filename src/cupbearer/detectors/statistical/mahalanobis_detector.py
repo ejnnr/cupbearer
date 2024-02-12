@@ -8,6 +8,8 @@ from cupbearer.detectors.statistical.statistical import (
 
 
 class MahalanobisDetector(ActivationCovarianceBasedDetector):
+    should_train_on_clean_data: bool = True
+
     def post_covariance_training(self, train_config: MahalanobisTrainConfig):
         self.inv_covariances = {
             k: torch.linalg.pinv(C, rcond=train_config.rcond, hermitian=True)

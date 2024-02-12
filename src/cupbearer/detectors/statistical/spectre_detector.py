@@ -8,6 +8,10 @@ from cupbearer.detectors.statistical.statistical import (
 
 
 class SpectreDetector(ActivationCovarianceBasedDetector):
+    should_train_on_clean_data: bool = True
+    should_train_on_poisoned_data: bool = False
+    # TODO might work on poisoned with some changes, see arXiv:2104.11315
+
     def post_covariance_training(self, train_config: ActivationCovarianceTrainConfig):
         whitening_matrices = {}
         for k, cov in self.covariances.items():

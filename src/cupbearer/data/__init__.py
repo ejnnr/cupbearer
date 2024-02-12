@@ -1,6 +1,7 @@
 from cupbearer.utils.config_groups import register_config_group, register_config_option
 
 from ._shared import DatasetConfig, NoData, TrainDataFromRun
+from ._shared import RemoveMixLabelDataset as RemoveMixLabelDataset
 from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
 from .adversarial import AdversarialExampleConfig

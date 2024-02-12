@@ -13,6 +13,8 @@ from cupbearer.utils.train import TrainConfig
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
+    should_train_on_clean_data: bool = True
+
     def __init__(self, model, max_batch_size, save_path):
         super().__init__(model, max_batch_size, save_path)
         # We might as well make a copy here already, since whether we'll train this

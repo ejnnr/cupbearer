@@ -124,6 +124,8 @@ class AbstractionModule(L.LightningModule):
 class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
 
+    should_train_on_clean_data: bool = True
+
     def __init__(
         self,
         model: HookedModel,

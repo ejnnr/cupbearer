@@ -13,6 +13,8 @@ class SpectralSignatureDetector(ActivationCovarianceBasedDetector):
     Neural Information Processing Systems (2018).
     """
 
+    should_train_on_poisoned_data: bool = True
+
     def post_covariance_training(self, train_config: ActivationCovarianceTrainConfig):
         # Calculate top right singular vectors from covariance matrices
         self.top_singular_vectors = {
