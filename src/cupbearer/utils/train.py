@@ -2,8 +2,7 @@ from dataclasses import asdict, dataclass
 from typing import Optional
 
 import lightning as L
-from cupbearer.utils.config_groups import config_group
-from cupbearer.utils.optimizers import Adam, OptimizerConfig
+from cupbearer.utils.optimizers import OptimizerConfigMixin
 from cupbearer.utils.utils import BaseConfig, PathConfigMixin
 from lightning.pytorch import loggers
 from torch.utils.data import DataLoader

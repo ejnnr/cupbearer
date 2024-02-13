@@ -30,7 +30,7 @@ def main(cfg: Config):
         model=cfg.model,
         input_shape=example_input.shape,
         num_classes=cfg.num_classes,
-        optim_cfg=cfg.train_config.optim,
+        optim_cfg=cfg.train_config,
         val_loader_names=list(val_loaders.keys()),
     )
 
