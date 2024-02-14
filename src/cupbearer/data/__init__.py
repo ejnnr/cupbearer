@@ -1,7 +1,7 @@
 from ._shared import DatasetConfig as DatasetConfig
-from ._shared import NoData, TrainDataFromRun
 from ._shared import TestDataConfig as TestDataConfig
 from ._shared import TestDataMix as TestDataMix
+from ._shared import TrainDataFromRun
 from .adversarial import AdversarialExampleConfig
 from .backdoor_data import BackdoorData as BackdoorData
 from .backdoors import Backdoor as Backdoor
@@ -25,7 +25,6 @@ DATASETS = {
     "from_run": TrainDataFromRun,
     "adversarial": AdversarialExampleConfig,
     "toy_features": ToyFeaturesConfig,
-    "none": NoData,
 }
 
 TRANSFORMS: dict[str, type[Transform]] = {
