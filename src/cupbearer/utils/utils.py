@@ -4,10 +4,9 @@ import dataclasses
 import functools
 import importlib
 import pickle
-from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Optional, TypeVar, Union
+from typing import Iterable, TypeVar, Union
 
 import torch
 from simple_parsing.helpers import serialization
@@ -159,50 +158,6 @@ class BaseConfig(serialization.serializable.Serializable):
         return serialization.serializable.to_dict(
             self, dict_factory, recurse, save_dc_types=True
         )
-
-
-@dataclass(kw_only=True)
-class PathConfigMixin:
-    path: Optional[Path] = None
-
-    def get_path(self) -> Path:
-        if self.path is None:
-            raise ValueError("Path requested but not set")
-        return self.path
-
-    def set_path(self, path: Optional[Path]):
-        if self.path is None:
-            self.path = path
-
-
-@dataclass(kw_only=True)
-class GlobalConfig:
-    debug: bool = False
-    path: Optional[Path] = None
-
-
-_GLOBAL_SCRIPT_CONFIG = GlobalConfig(
-    debug=False,
-    path=None,
-)
-
-
-@contextmanager
-def set_config(path: Optional[str | Path] = None, debug: Optional[bool] = None):
-    global _GLOBAL_SCRIPT_CONFIG
-    old_config = copy.deepcopy(_GLOBAL_SCRIPT_CONFIG)
-    if path is not None:
-        _GLOBAL_SCRIPT_CONFIG.path = Path(path)
-    if debug is not None:
-        _GLOBAL_SCRIPT_CONFIG.debug = debug
-    try:
-        yield
-    finally:
-        _GLOBAL_SCRIPT_CONFIG = old_config
-
-
-def get_config() -> GlobalConfig:
-    return _GLOBAL_SCRIPT_CONFIG
 
 
 def get_object(path: str):

@@ -1,15 +1,17 @@
 from dataclasses import asdict, dataclass
+from pathlib import Path
 from typing import Optional
 
 import lightning as L
 from cupbearer.utils.optimizers import OptimizerConfigMixin
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin, get_config
+from cupbearer.utils.utils import BaseConfig
 from lightning.pytorch import loggers
 from torch.utils.data import DataLoader
 
 
 @dataclass(kw_only=True)
-class TrainConfig(BaseConfig, PathConfigMixin, OptimizerConfigMixin):
+class TrainConfig(BaseConfig, OptimizerConfigMixin):
+    path: Optional[Path] = None
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
@@ -36,7 +38,7 @@ class TrainConfig(BaseConfig, PathConfigMixin, OptimizerConfigMixin):
         else:
             return DataLoader(
                 dataset,
-                batch_size=self.batch_size,
+                batch_size=self.max_batch_size,
                 shuffle=False,
             )
 
@@ -68,12 +70,13 @@ class TrainConfig(BaseConfig, PathConfigMixin, OptimizerConfigMixin):
         trainer_kwargs.update(kwargs)  # override defaults if given
         return L.Trainer(**trainer_kwargs)
 
-    def __post_init__(self):
-        super().__post_init__()
-        if get_config().debug:
-            self.num_epochs = 1
-            self.max_steps = 1
-            self.max_batch_size = 2
-            self.wandb = False
-            self.batch_size = 2
-            self.log_every_n_steps = self.max_steps
+
+@dataclass(kw_only=True)
+class DebugTrainConfig(TrainConfig):
+    path = None
+    num_epochs = 1
+    max_steps = 1
+    max_batch_size = 2
+    wandb = False
+    batch_size = 2
+    log_every_n_steps = 1

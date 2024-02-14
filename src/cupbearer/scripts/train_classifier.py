@@ -18,7 +18,7 @@ def main(cfg: Config):
     }
 
     # Store transforms to be used in training
-    if cfg.output_enabled:
+    if cfg.path:
         for trafo in cfg.train_data.get_transforms():
             trafo.store(cfg.path)
 
@@ -37,12 +37,13 @@ def main(cfg: Config):
     # TODO: once we do longer training runs we'll want to have multiple
     # checkpoints, potentially based on validation loss
     callbacks = cfg.train_config.callbacks
-    callbacks.append(
-        ModelCheckpoint(
-            dirpath=cfg.path / "checkpoints",
-            save_last=True,
+    if cfg.path:
+        callbacks.append(
+            ModelCheckpoint(
+                dirpath=cfg.path / "checkpoints",
+                save_last=True,
+            )
         )
-    )
 
     trainer = cfg.train_config.get_trainer(callbacks=callbacks)
     with warnings.catch_warnings():

@@ -1,7 +1,6 @@
-from cupbearer.utils.config_groups import register_config_group
-
 from .abstraction import AbstractionDetectorConfig
-from .config import DetectorConfig, StoredDetector
+from .config import DetectorConfig as DetectorConfig
+from .config import StoredDetector
 from .finetuning import FinetuningConfig
 from .mahalanobis import MahalanobisConfig
 
@@ -11,5 +10,3 @@ DETECTORS = {
     "finetuning": FinetuningConfig,
     "from_run": StoredDetector,
 }
-
-register_config_group(DetectorConfig, DETECTORS)

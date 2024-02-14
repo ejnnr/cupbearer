@@ -1,5 +1,4 @@
 from cupbearer.utils.scripts import run
-from cupbearer.utils.utils import get_config
 
 from . import eval_detector
 from .conf import eval_detector_conf
@@ -12,10 +11,7 @@ def main(cfg: Config):
     # [0] index
     example_input = reference_data[0][0]
     model = cfg.task.build_model(input_shape=example_input.shape)
-    detector = cfg.detector.build(
-        model=model,
-        save_dir=get_config().path,
-    )
+    detector = cfg.detector.build(model=model, save_dir=cfg.path)
 
     # We want to convert the train dataclass to a dict, but *not* recursively.
     detector.train(
@@ -23,10 +19,10 @@ def main(cfg: Config):
         num_classes=cfg.task.num_classes,
         train_config=cfg.detector.train,
     )
-    if cfg.output_enabled:
+    if cfg.path:
         detector.save_weights(cfg.path / "detector")
         eval_cfg = eval_detector_conf.Config(
-            dir=cfg.dir,
+            path=cfg.path,
             task=cfg.task,
             seed=cfg.seed,
         )

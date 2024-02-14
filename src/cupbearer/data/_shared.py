@@ -48,11 +48,6 @@ class DatasetConfig(BaseConfig, ABC):
         # Not an abstractmethod because e.g. TestDataConfig overrides build() instead.
         raise NotImplementedError
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.max_size = 2
-
 
 class TransformDataset(Dataset):
     """Dataset that applies a transform to another dataset."""

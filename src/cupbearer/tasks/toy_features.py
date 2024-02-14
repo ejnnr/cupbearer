@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from pathlib import Path
 
 from cupbearer.data.toy_ambiguous_features import ToyFeaturesConfig
 from cupbearer.models import StoredModel
@@ -8,6 +9,7 @@ from . import TaskConfig
 
 @dataclass
 class ToyFeaturesTask(TaskConfig):
+    path: Path
     noise: float = 0.1
 
     def _init_train_data(self):
@@ -17,4 +19,4 @@ class ToyFeaturesTask(TaskConfig):
         return ToyFeaturesConfig(correlated=False, noise=self.noise)
 
     def _init_model(self):
-        self._model = StoredModel(path=self.get_path())
+        self._model = StoredModel(path=self.path)

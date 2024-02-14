@@ -16,11 +16,12 @@ class MahalanobisTrainConfig(BaseConfig):
     pbar: bool = True
     debug: bool = False
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.batch_size = 2
-            self.max_batch_size = 2
+
+@dataclass
+class DebugMahalanobisTrainConfig(MahalanobisTrainConfig):
+    max_batches: int = 2
+    batch_size: int = 2
+    max_batch_size: int = 2
 
 
 @dataclass
@@ -34,3 +35,10 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
             max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
+
+
+@dataclass
+class DebugMahalanobisConfig(MahalanobisConfig):
+    train: DebugMahalanobisTrainConfig = field(
+        default_factory=DebugMahalanobisTrainConfig
+    )

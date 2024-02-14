@@ -3,6 +3,7 @@ from cupbearer.utils.scripts import run
 
 
 def main(cfg: Config):
+    assert cfg.detector is not None  # make type checker happy
     # Init
     train_data = cfg.task.build_train_data()
     test_data = cfg.task.build_test_data()

@@ -3,29 +3,15 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Type, TypeVar
 
 import simple_parsing
-from cupbearer.utils.utils import BaseConfig, get_config
+from cupbearer.utils.utils import BaseConfig
 from loguru import logger
 
 
 @dataclass(kw_only=True)
 class ScriptConfig(BaseConfig):
     seed: int = 0
+    path: Optional[Path] = None
     save_config: bool = True
-
-    @property
-    def debug(self) -> bool:
-        return get_config().debug
-
-    @property
-    def path(self) -> Path:
-        path = get_config().path
-        if path is None:
-            raise ValueError("Path requested but not set")
-        return path
-
-    @property
-    def output_enabled(self) -> bool:
-        return get_config().path is not None
 
 
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
@@ -48,16 +34,15 @@ def run(
 
 
 def save_cfg(cfg: ScriptConfig, save_config: bool = True):
-    path = get_config().path
-    if path:
-        path.mkdir(parents=True, exist_ok=True)
+    if cfg.path:
+        cfg.path.mkdir(parents=True, exist_ok=True)
         if save_config:
             # TODO: replace this with cfg.save if/when that exposes save_dc_types.
             # Note that we need save_dc_types here even though `BaseConfig` already
             # enables that, since `save` calls `to_dict` directly, not `obj.to_dict`.
             simple_parsing.helpers.serialization.serializable.save(
                 cfg,
-                path / "config.yaml",
+                cfg.path / "config.yaml",
                 save_dc_types=True,
                 sort_keys=False,
             )

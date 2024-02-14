@@ -10,6 +10,9 @@ from .conf.eval_classifier_conf import Config
 
 
 def main(cfg: Config):
+    assert cfg.data is not None  # make type checker happy
+    assert cfg.path is not None  # make type checker happy
+
     for trafo in cfg.data.get_transforms():
         logger.debug(f"Loading transform: {trafo}")
         trafo.load(cfg.path)
