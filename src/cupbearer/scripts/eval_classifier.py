@@ -2,13 +2,14 @@ import json
 
 import lightning as L
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 from loguru import logger
 from torch.utils.data import DataLoader
 
 from .conf.eval_classifier_conf import Config
 
 
+@script
 def main(cfg: Config):
     assert cfg.data is not None  # make type checker happy
     assert cfg.path is not None  # make type checker happy
@@ -36,7 +37,3 @@ def main(cfg: Config):
 
     with open(cfg.path / "eval.json", "w") as f:
         json.dump(metrics, f)
-
-
-if __name__ == "__main__":
-    run(main, Config)

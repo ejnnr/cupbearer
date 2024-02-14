@@ -1,12 +1,13 @@
 import warnings
 
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from .conf.train_classifier_conf import Config
 
 
+@script
 def main(cfg: Config):
     dataset = cfg.train_data.build()
 
@@ -60,7 +61,3 @@ def main(cfg: Config):
             # since pytorch lightning would interpret that as an empty dataloader!
             val_dataloaders=list(val_loaders.values()) or None,
         )
-
-
-if __name__ == "__main__":
-    run(main, Config)

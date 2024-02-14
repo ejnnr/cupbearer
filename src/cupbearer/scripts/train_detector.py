@@ -1,10 +1,11 @@
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 
 from . import eval_detector
 from .conf import eval_detector_conf
 from .conf.train_detector_conf import Config
 
 
+@script
 def main(cfg: Config):
     reference_data = cfg.task.build_train_data()
     # reference_data[0] is the first sample, which is (input, ...), so we need another
@@ -26,8 +27,4 @@ def main(cfg: Config):
             task=cfg.task,
             seed=cfg.seed,
         )
-        run(eval_detector.main, eval_cfg)
-
-
-if __name__ == "__main__":
-    run(main, Config)
+        eval_detector.main(eval_cfg)

@@ -1,17 +1,12 @@
 import pytest
 import torch
 from cupbearer import data, detectors, models, tasks
-from cupbearer.scripts import (
-    eval_classifier,
-    train_classifier,
-    train_detector,
-)
+from cupbearer.scripts import eval_classifier, train_classifier, train_detector
 from cupbearer.scripts.conf import (
     eval_classifier_conf,
     train_classifier_conf,
     train_detector_conf,
 )
-from cupbearer.utils.scripts import run
 from cupbearer.utils.train import DebugTrainConfig
 
 # Ignore warnings about num_workers
@@ -34,7 +29,7 @@ def backdoor_classifier_path(module_tmp_path):
         model=models.DebugMLPConfig(),
         path=module_tmp_path,
     )
-    run(train_classifier.main, cfg)
+    train_classifier.main(cfg)
 
     assert (module_tmp_path / "config.yaml").is_file()
     assert (module_tmp_path / "checkpoints" / "last.ckpt").is_file()
@@ -49,7 +44,7 @@ def test_eval_classifier(backdoor_classifier_path):
         path=backdoor_classifier_path, data=data.MNIST(train=False)
     )
 
-    run(eval_classifier.main, cfg)
+    eval_classifier.main(cfg)
 
     assert (backdoor_classifier_path / "eval.json").is_file()
 
@@ -63,7 +58,7 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
         detector=detectors.AbstractionDetectorConfig(train=DebugTrainConfig()),
         path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector.main(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
 
@@ -85,7 +80,7 @@ def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
         ),
         path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector.main(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
 
@@ -106,7 +101,7 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
         detector=detectors.mahalanobis.DebugMahalanobisConfig(),
         path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector.main(cfg)
     assert (backdoor_classifier_path / "adv_examples.pt").is_file()
     assert (backdoor_classifier_path / "adv_examples.pdf").is_file()
     assert (tmp_path / "config.yaml").is_file()
@@ -126,7 +121,7 @@ def test_train_mahalanobis_backdoor(backdoor_classifier_path, tmp_path):
         path=tmp_path,
     )
 
-    run(train_detector.main, cfg)
+    train_detector.main(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:
@@ -143,7 +138,7 @@ def test_finetuning_detector(backdoor_classifier_path, tmp_path):
         detector=detectors.finetuning.FinetuningConfig(train=DebugTrainConfig()),
         path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector.main(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
 
@@ -168,7 +163,7 @@ def test_wanet(tmp_path):
         },
         train_config=DebugTrainConfig(num_workers=1),
     )
-    run(train_classifier.main, cfg)
+    train_classifier.main(cfg)
 
     assert (tmp_path / "wanet" / "config.yaml").is_file()
     assert (tmp_path / "wanet" / "checkpoints" / "last.ckpt").is_file()
@@ -192,7 +187,7 @@ def test_wanet(tmp_path):
         detector=detectors.mahalanobis.DebugMahalanobisConfig(),
         path=tmp_path / "wanet-mahalanobis",
     )
-    run(train_detector.main, train_detector_cfg)
+    train_detector.main(train_detector_cfg)
     assert isinstance(train_detector_cfg.task, tasks.BackdoorDetection)
     assert isinstance(train_detector_cfg.task.backdoor, data.WanetBackdoor)
     assert torch.allclose(

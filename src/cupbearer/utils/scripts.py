@@ -1,3 +1,4 @@
+import functools
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Optional, Type, TypeVar
@@ -17,13 +18,15 @@ class ScriptConfig(BaseConfig):
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
 
 
-def run(
-    script: Callable[[ConfigType], Any],
-    cfg: ConfigType,
-):
-    save_cfg(cfg, save_config=cfg.save_config)
+def script(
+    script_fn: Callable[[ConfigType], Any],
+) -> Callable[[ConfigType], Any]:
+    @functools.wraps(script_fn)
+    def run_script(cfg: ConfigType):
+        save_cfg(cfg, save_config=cfg.save_config)
+        return script_fn(cfg)
 
-    return script(cfg)
+    return run_script
 
 
 def save_cfg(cfg: ScriptConfig, save_config: bool = True):

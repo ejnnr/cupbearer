@@ -1,7 +1,8 @@
 from cupbearer.scripts.conf.eval_detector_conf import Config
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 
 
+@script
 def main(cfg: Config):
     assert cfg.detector is not None  # make type checker happy
     # Init
@@ -21,7 +22,3 @@ def main(cfg: Config):
         test_dataset=test_data,
         pbar=cfg.pbar,
     )
-
-
-if __name__ == "__main__":
-    run(main, Config)
