@@ -1,6 +1,6 @@
 import copy
 import warnings
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
@@ -29,7 +29,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         classifier = Classifier(
             self.finetuned_model,
             num_classes=num_classes,
-            optim_cfg=train_config.optim,
+            optim_cfg=train_config,
             save_hparams=False,
         )
 
@@ -37,7 +37,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         clean_loader = train_config.get_dataloader(clean_dataset)
 
         # Finetune the model on the clean dataset
-        trainer = train_config.get_trainer()
+        trainer = train_config.get_trainer(path=self.save_path)
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",
@@ -93,8 +93,6 @@ class FinetuningAnomalyDetector(AnomalyDetector):
 
 @dataclass
 class FinetuningConfig(DetectorConfig):
-    train: TrainConfig = field(default_factory=TrainConfig)
-
     def build(self, model, save_dir) -> FinetuningAnomalyDetector:
         return FinetuningAnomalyDetector(
             model=model,

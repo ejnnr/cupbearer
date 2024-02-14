@@ -104,6 +104,12 @@ class TaskConfig(TaskConfigBase, ABC):
 
 @dataclass(kw_only=True)
 class DebugTaskConfig(TaskConfig):
+    """Debug configs for specific tasks can inherit from this for convenience.
+
+    Note that children should inherit this first, to make sure MRO picks up on
+    the overriden defaults below!
+    """
+
     # Needs to be at least two because otherwise Mahalanobis distance scores are
     # NaN.
     max_train_size: int = 2

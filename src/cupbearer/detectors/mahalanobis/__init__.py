@@ -39,6 +39,4 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
 
 @dataclass
 class DebugMahalanobisConfig(MahalanobisConfig):
-    train: DebugMahalanobisTrainConfig = field(
-        default_factory=DebugMahalanobisTrainConfig
-    )
+    train: MahalanobisTrainConfig = field(default_factory=DebugMahalanobisTrainConfig)

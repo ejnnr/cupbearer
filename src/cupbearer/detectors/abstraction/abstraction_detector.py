@@ -179,7 +179,7 @@ class AbstractionDetector(ActivationBasedDetector):
         # (which seems tricky to do manually).
         module.model = self.model
 
-        trainer = train_config.get_trainer()
+        trainer = train_config.get_trainer(path=self.save_path)
         trainer.fit(
             model=module,
             train_dataloaders=train_loader,

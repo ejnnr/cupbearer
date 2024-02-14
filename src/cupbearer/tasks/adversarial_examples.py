@@ -6,7 +6,7 @@ from cupbearer.data._shared import TrainDataFromRun
 from cupbearer.data.adversarial import AdversarialExampleConfig
 from cupbearer.models import StoredModel
 
-from . import TaskConfig
+from ._config import DebugTaskConfig, TaskConfig
 
 
 @dataclass
@@ -40,7 +40,7 @@ class AdversarialExampleTask(TaskConfig):
 
 
 @dataclass(kw_only=True)
-class DebugAdversarialExampleTask(AdversarialExampleTask):
+class DebugAdversarialExampleTask(DebugTaskConfig, AdversarialExampleTask):
     attack_batch_size: int = 1
     success_threshold: float = 1.0
     steps: int = 1

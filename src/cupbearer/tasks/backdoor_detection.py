@@ -7,7 +7,7 @@ from cupbearer.data.backdoor_data import BackdoorData
 from cupbearer.models import StoredModel
 from cupbearer.utils.scripts import load_config
 
-from . import TaskConfig
+from ._config import DebugTaskConfig, TaskConfig
 
 
 @dataclass(kw_only=True)
@@ -29,3 +29,8 @@ class BackdoorDetection(TaskConfig):
 
     def _init_model(self):
         self._model = StoredModel(path=self.path)
+
+
+@dataclass
+class DebugBackdoorDetection(DebugTaskConfig, BackdoorDetection):
+    pass

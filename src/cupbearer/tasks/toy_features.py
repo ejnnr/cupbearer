@@ -4,7 +4,7 @@ from pathlib import Path
 from cupbearer.data.toy_ambiguous_features import ToyFeaturesConfig
 from cupbearer.models import StoredModel
 
-from . import TaskConfig
+from ._config import DebugTaskConfig, TaskConfig
 
 
 @dataclass
@@ -20,3 +20,8 @@ class ToyFeaturesTask(TaskConfig):
 
     def _init_model(self):
         self._model = StoredModel(path=self.path)
+
+
+@dataclass
+class DebugToyFeaturesTask(DebugTaskConfig, ToyFeaturesTask):
+    pass
