@@ -43,4 +43,4 @@ class Config(ScriptConfig):
 
 @dataclass
 class DebugConfig(Config):
-    train_config: TrainConfig = field(default_factory=DebugTrainConfig)
+    train_config: DebugTrainConfig = field(default_factory=DebugTrainConfig)

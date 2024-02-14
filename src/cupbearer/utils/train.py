@@ -11,7 +11,6 @@ from torch.utils.data import DataLoader
 
 @dataclass(kw_only=True)
 class TrainConfig(BaseConfig, OptimizerConfigMixin):
-    path: Optional[Path] = None
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
@@ -42,14 +41,17 @@ class TrainConfig(BaseConfig, OptimizerConfigMixin):
                 shuffle=False,
             )
 
-    def get_trainer(self, **kwargs):
+    # We deliberately don't make the `path` argument optional, since that makes it
+    # easy to forget passing it on (and this will likely only be used in internal
+    # code anyway).
+    def get_trainer(self, path: Path | None, **kwargs):
         # Define metrics logger
         if self.wandb:
             metrics_logger = loggers.WandbLogger(project="abstractions")
             metrics_logger.experiment.config.update(asdict(self))
-        elif self.path is not None:
+        if path:
             metrics_logger = loggers.TensorBoardLogger(
-                save_dir=self.path,
+                save_dir=path,
                 name="",
                 version="",
                 sub_dir="tensorboard",
@@ -62,7 +64,7 @@ class TrainConfig(BaseConfig, OptimizerConfigMixin):
             max_steps=self.max_steps,
             callbacks=self.callbacks,
             logger=metrics_logger,
-            default_root_dir=self.path,
+            default_root_dir=path,
             check_val_every_n_epoch=self.check_val_every_n_epoch,
             enable_progress_bar=self.enable_progress_bar,
             log_every_n_steps=self.log_every_n_steps,
@@ -73,10 +75,9 @@ class TrainConfig(BaseConfig, OptimizerConfigMixin):
 
 @dataclass(kw_only=True)
 class DebugTrainConfig(TrainConfig):
-    path = None
-    num_epochs = 1
-    max_steps = 1
-    max_batch_size = 2
-    wandb = False
-    batch_size = 2
-    log_every_n_steps = 1
+    num_epochs: int = 1
+    max_steps: int = 1
+    max_batch_size: int = 2
+    wandb: bool = False
+    batch_size: int = 2
+    log_every_n_steps: int = 1

@@ -41,6 +41,6 @@ class AdversarialExampleTask(TaskConfig):
 
 @dataclass(kw_only=True)
 class DebugAdversarialExampleTask(AdversarialExampleTask):
-    attack_batch_size = 1
-    success_threshold = 1.0
-    steps = 1
+    attack_batch_size: int = 1
+    success_threshold: float = 1.0
+    steps: int = 1

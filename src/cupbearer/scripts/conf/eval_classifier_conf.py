@@ -8,7 +8,7 @@ from cupbearer.utils.scripts import ScriptConfig
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
     data: DatasetConfig | None = None
-    max_steps: Optional[int] = None
+    max_batches: Optional[int] = None
     max_batch_size: int = 2048
     save_config: bool = False
     pbar: bool = True
@@ -29,7 +29,7 @@ class Config(ScriptConfig):
 
 @dataclass
 class DebugConfig(Config):
-    max_steps: int = 1
+    max_batches: int = 1
     max_batch_size: int = 2
     wandb: bool = False
     log_every_n_steps: int = 1

@@ -106,6 +106,6 @@ class TaskConfig(TaskConfigBase, ABC):
 class DebugTaskConfig(TaskConfig):
     # Needs to be at least two because otherwise Mahalanobis distance scores are
     # NaN.
-    max_train_size = 2
+    max_train_size: int = 2
     # Needs to be at least two so it can contain both normal and anomalous data.
-    max_test_size = 2
+    max_test_size: int = 2

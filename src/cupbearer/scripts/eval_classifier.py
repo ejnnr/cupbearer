@@ -30,6 +30,7 @@ def main(cfg: Config):
     trainer = L.Trainer(
         logger=False,
         default_root_dir=cfg.path,
+        limit_test_batches=cfg.max_batches,
     )
     metrics = trainer.test(classifier, [dataloader])
 

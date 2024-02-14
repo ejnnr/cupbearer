@@ -45,7 +45,7 @@ def main(cfg: Config):
             )
         )
 
-    trainer = cfg.train_config.get_trainer(callbacks=callbacks)
+    trainer = cfg.train_config.get_trainer(callbacks=callbacks, path=cfg.path)
     with warnings.catch_warnings():
         if not val_loaders:
             warnings.filterwarnings(
