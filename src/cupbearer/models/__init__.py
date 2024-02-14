@@ -75,10 +75,3 @@ class CNNConfig(ModelConfig):
 class DebugCNNConfig(CNNConfig):
     channels: list[int] = mutable_field([2])
     dense_dims: list[int] = mutable_field([2])
-
-
-MODELS = {
-    "mlp": MLPConfig,
-    "cnn": CNNConfig,
-    "from_run": StoredModel,
-}
