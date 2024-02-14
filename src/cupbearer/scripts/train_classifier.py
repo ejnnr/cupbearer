@@ -18,9 +18,9 @@ def main(cfg: Config):
     }
 
     # Store transforms to be used in training
-    if cfg.dir.path is not None:
+    if cfg.output_enabled:
         for trafo in cfg.train_data.get_transforms():
-            trafo.store(cfg.dir.path)
+            trafo.store(cfg.path)
 
     # Dataloader returns images and labels, only images get passed to model
     images, _ = next(iter(train_loader))
@@ -39,7 +39,7 @@ def main(cfg: Config):
     callbacks = cfg.train_config.callbacks
     callbacks.append(
         ModelCheckpoint(
-            dirpath=cfg.train_config.path / "checkpoints",
+            dirpath=cfg.path / "checkpoints",
             save_last=True,
         )
     )

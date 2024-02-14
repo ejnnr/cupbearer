@@ -24,8 +24,5 @@ class Config(ScriptConfig):
             # Can't reliably expect the attack to succeed with toy debug settings:
             self.success_threshold = 1.0
 
-        if self.dir.path is None:
-            raise ValueError("Must specify a run path")
-
-        self.model = StoredModel(path=self.dir.path)
-        self.data = TrainDataFromRun(path=self.dir.path)
+        self.model = StoredModel(path=self.path)
+        self.data = TrainDataFromRun(path=self.path)

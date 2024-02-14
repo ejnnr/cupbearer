@@ -11,7 +11,7 @@ def main(cfg: Config):
     model = cfg.task.build_model(input_shape=example_input.shape)
     detector = cfg.detector.build(
         model=model,
-        save_dir=cfg.dir.path,
+        save_dir=cfg.path,
     )
 
     # Evaluate detector

@@ -3,14 +3,13 @@ from typing import Optional
 
 import lightning as L
 from cupbearer.utils.optimizers import OptimizerConfigMixin
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin
+from cupbearer.utils.utils import BaseConfig, PathConfigMixin, get_config
 from lightning.pytorch import loggers
 from torch.utils.data import DataLoader
 
 
 @dataclass(kw_only=True)
-class TrainConfig(BaseConfig, PathConfigMixin):
-    optim: OptimizerConfig = config_group(OptimizerConfig, Adam)
+class TrainConfig(BaseConfig, PathConfigMixin, OptimizerConfigMixin):
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
@@ -69,9 +68,9 @@ class TrainConfig(BaseConfig, PathConfigMixin):
         trainer_kwargs.update(kwargs)  # override defaults if given
         return L.Trainer(**trainer_kwargs)
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
+    def __post_init__(self):
+        super().__post_init__()
+        if get_config().debug:
             self.num_epochs = 1
             self.max_steps = 1
             self.max_batch_size = 2

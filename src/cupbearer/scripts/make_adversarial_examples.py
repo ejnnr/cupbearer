@@ -13,8 +13,7 @@ from torch.utils.data import DataLoader, Subset
 # integrated into the dataset. That would mean significantly less silly passing
 # around of arguments.
 def main(cfg: Config):
-    assert cfg.dir.path is not None  # make type checker happy
-    save_path = cfg.dir.path / "adv_examples.pt"
+    save_path = cfg.path / "adv_examples.pt"
     if os.path.exists(save_path):
         logger.info("Adversarial examples already exist, skipping attack")
         return
@@ -54,7 +53,7 @@ def main(cfg: Config):
         except IndexError:
             pass
     plt.tight_layout()
-    plt.savefig(cfg.dir.path / "adv_examples.pdf")
+    plt.savefig(cfg.path / "adv_examples.pdf")
 
 
 if __name__ == "__main__":

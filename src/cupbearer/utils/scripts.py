@@ -1,58 +1,31 @@
 from dataclasses import dataclass
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable, Optional, Type, TypeVar
 
 import simple_parsing
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin
+from cupbearer.utils.utils import BaseConfig, get_config
 from loguru import logger
-from simple_parsing.helpers import field, mutable_field
-
-
-@dataclass(kw_only=True)
-class DirConfig(BaseConfig):
-    base: Optional[str] = None
-    run: str = field(
-        default_factory=lambda: datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-    )
-    full: Optional[str] = None
-
-    @property
-    def path(self) -> Optional[Path]:
-        if self.full is not None:
-            return Path(self.full)
-        if self.base is None:
-            return None
-        return Path(self.base) / self.run
 
 
 @dataclass(kw_only=True)
 class ScriptConfig(BaseConfig):
     seed: int = 0
-    dir: DirConfig = mutable_field(DirConfig)
     save_config: bool = True
-    debug: bool = field(action="store_true")
-    debug_with_logging: bool = field(action="store_true")
 
-    def __post_init__(self):
-        if self.debug:
-            # Disable all file output.
-            self.dir.base = None
-        if self.debug_with_logging:
-            self.debug = True
+    @property
+    def debug(self) -> bool:
+        return get_config().debug
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
+    @property
+    def path(self) -> Path:
+        path = get_config().path
+        if path is None:
+            raise ValueError("Path requested but not set")
+        return path
 
-        def set_paths_of_children(cfg):
-            for subcfg in cfg.subconfigs():
-                if isinstance(subcfg, PathConfigMixin):
-                    subcfg.set_path(self.dir.path)
-            for subcfg in cfg.subconfigs():
-                # Breadth first (though shouldn't matter)
-                set_paths_of_children(subcfg)
-
-        set_paths_of_children(self)
+    @property
+    def output_enabled(self) -> bool:
+        return get_config().path is not None
 
 
 ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
@@ -66,9 +39,8 @@ def run(
         cfg = simple_parsing.parse(
             cfg,
             argument_generation_mode=simple_parsing.ArgumentGenerationMode.NESTED,
+            add_config_path_arg=True,
         )
-
-    cfg._traverse_setup()
 
     save_cfg(cfg, save_config=cfg.save_config)
 
@@ -76,15 +48,16 @@ def run(
 
 
 def save_cfg(cfg: ScriptConfig, save_config: bool = True):
-    if cfg.dir.path:
-        cfg.dir.path.mkdir(parents=True, exist_ok=True)
+    path = get_config().path
+    if path:
+        path.mkdir(parents=True, exist_ok=True)
         if save_config:
             # TODO: replace this with cfg.save if/when that exposes save_dc_types.
             # Note that we need save_dc_types here even though `BaseConfig` already
             # enables that, since `save` calls `to_dict` directly, not `obj.to_dict`.
             simple_parsing.helpers.serialization.serializable.save(
                 cfg,
-                cfg.dir.path / "config.yaml",
+                path / "config.yaml",
                 save_dc_types=True,
                 sort_keys=False,
             )
