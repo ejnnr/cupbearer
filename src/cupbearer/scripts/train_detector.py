@@ -1,7 +1,6 @@
 from cupbearer.utils.scripts import script
 
-from . import eval_detector
-from .conf import eval_detector_conf
+from . import EvalDetectorConfig, eval_detector
 from .conf.train_detector_conf import Config
 
 
@@ -22,9 +21,9 @@ def main(cfg: Config):
     )
     if cfg.path:
         detector.save_weights(cfg.path / "detector")
-        eval_cfg = eval_detector_conf.Config(
+        eval_cfg = EvalDetectorConfig(
             path=cfg.path,
             task=cfg.task,
             seed=cfg.seed,
         )
-        eval_detector.main(eval_cfg)
+        eval_detector(eval_cfg)
