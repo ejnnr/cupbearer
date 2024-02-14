@@ -1,11 +1,10 @@
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
 from loguru import logger
-from simple_parsing.helpers import mutable_field
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.models import HookedModel
@@ -16,7 +15,7 @@ from cupbearer.utils.utils import BaseConfig, get_object
 
 @dataclass(kw_only=True)
 class DetectorConfig(BaseConfig, ABC):
-    train: TrainConfig = mutable_field(TrainConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
 
     @abstractmethod
     def build(self, model: HookedModel, save_dir: Path | None) -> AnomalyDetector:

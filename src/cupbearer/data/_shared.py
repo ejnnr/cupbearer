@@ -1,9 +1,8 @@
 from abc import ABC, abstractproperty
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from simple_parsing import field
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
 
@@ -17,6 +16,7 @@ class DatasetConfig(BaseConfig, ABC):
     # Only the values of the transforms dict are used, but simple_parsing doesn't
     # support lists of dataclasses, which is why we use a dict. One advantage
     # of this is also that it's easier to override specific transforms.
+    # TODO: We should probably make this a list now that we're abandoning CLI.
     transforms: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
 

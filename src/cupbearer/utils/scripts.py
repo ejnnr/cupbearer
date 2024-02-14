@@ -19,15 +19,8 @@ ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
 
 def run(
     script: Callable[[ConfigType], Any],
-    cfg: type[ConfigType] | ConfigType,
+    cfg: ConfigType,
 ):
-    if isinstance(cfg, type):
-        cfg = simple_parsing.parse(
-            cfg,
-            argument_generation_mode=simple_parsing.ArgumentGenerationMode.NESTED,
-            add_config_path_arg=True,
-        )
-
     save_cfg(cfg, save_config=cfg.save_config)
 
     return script(cfg)
