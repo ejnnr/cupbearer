@@ -19,6 +19,10 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         # detector or load weights for inference, we'll need to copy in both cases.
         self.finetuned_model = copy.deepcopy(self.model)
 
+    @property
+    def should_train_on_clean_data(self) -> bool:
+        return True
+
     def train(
         self,
         clean_dataset,

@@ -17,6 +17,7 @@ from cupbearer.utils.utils import BaseConfig, PathConfigMixin, get_object
 @dataclass(kw_only=True)
 class DetectorConfig(BaseConfig, ABC):
     train: TrainConfig = mutable_field(TrainConfig)
+    train_on_clean: bool = True
 
     @abstractmethod
     def build(self, model: HookedModel, save_dir: Path | None) -> AnomalyDetector:

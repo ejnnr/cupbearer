@@ -3,13 +3,19 @@ from cupbearer.utils.config_groups import register_config_group
 from .abstraction import AbstractionDetectorConfig
 from .config import DetectorConfig, StoredDetector
 from .finetuning import FinetuningConfig
-from .mahalanobis import MahalanobisConfig
+from .statistical import (
+    MahalanobisConfig,
+    QuantumEntropyConfig,
+    SpectralSignatureConfig,
+)
 
 DETECTORS = {
     "abstraction": AbstractionDetectorConfig,
     "mahalanobis": MahalanobisConfig,
     "finetuning": FinetuningConfig,
     "from_run": StoredDetector,
+    "spectral": SpectralSignatureConfig,
+    "que": QuantumEntropyConfig,
 }
 
 register_config_group(DetectorConfig, DETECTORS)

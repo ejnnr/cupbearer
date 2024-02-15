@@ -1,5 +1,8 @@
+import warnings
+
 import pytest
 import torch
+from cupbearer.data import RemoveMixLabelDataset
 from cupbearer.scripts import (
     eval_classifier,
     train_classifier,
@@ -116,15 +119,44 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
 
 
 @pytest.mark.slow
-def test_train_mahalanobis_backdoor(backdoor_classifier_path, tmp_path):
+@pytest.mark.parametrize(
+    "detector_name",
+    [
+        "mahalanobis",
+        "spectral",
+        "que",
+    ],
+)
+@pytest.mark.parametrize("train_on_clean", [False, True])
+def test_train_statistical_backdoor(
+    backdoor_classifier_path, tmp_path, detector_name, train_on_clean
+):
     cfg = parse(
         train_detector_conf.Config,
         args=f"--debug_with_logging --dir.full {tmp_path} "
         f"--task backdoor --task.backdoor corner "
-        f"--task.path {backdoor_classifier_path} --detector mahalanobis",
+        f"--task.path {backdoor_classifier_path} --detector {detector_name} "
+        f"--task.normal_weight_when_training {1.0 if train_on_clean else 0.9}",
         argument_generation_mode=ArgumentGenerationMode.NESTED,
     )
-    run(train_detector.main, cfg)
+    # Check that data is mixed when it should be
+    assert train_on_clean ^ isinstance(
+        cfg.task.build_train_data(), RemoveMixLabelDataset
+    )
+
+    # Train detector
+    warning_message = (
+        r".*Detector of type \w+ is not meant to be trained \w+ poisoned samples[.].*"
+    )
+    if train_on_clean ^ (detector_name != "spectral"):
+        # Should warn for incompatibility
+        with pytest.warns(match=warning_message):
+            run(train_detector.main, cfg)
+    else:
+        # Should not warn for incompatibility
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action="error", message=warning_message)
+            run(train_detector.main, cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:

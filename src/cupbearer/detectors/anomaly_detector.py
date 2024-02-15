@@ -33,6 +33,15 @@ class AnomalyDetector(ABC):
 
         self.trained = False
 
+    @property
+    @abstractmethod
+    def should_train_on_clean_data(self) -> bool:
+        pass
+
+    @property
+    def should_train_on_poisoned_data(self) -> bool:
+        return not self.should_train_on_clean_data
+
     @abstractmethod
     def train(self, dataset, *, num_classes: int, train_config: utils.BaseConfig):
         """Train the anomaly detector with the given dataset as "normal" data."""
