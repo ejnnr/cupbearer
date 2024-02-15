@@ -53,7 +53,11 @@ class MLPConfig(ModelConfig):
 
 @dataclass
 class DebugMLPConfig(MLPConfig):
-    hidden_dims: list[int] = mutable_field([2, 2])
+    # TODO: we need at least two layers here because abstractions currently
+    # only work in that case. Abstraction implementation should be fixed.
+    # Additionally, we make network with some width to reduce chance that all
+    # neurons are dead.
+    hidden_dims: list[int] = mutable_field([5, 5])
 
 
 @dataclass

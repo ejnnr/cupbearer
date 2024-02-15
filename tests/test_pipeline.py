@@ -1,7 +1,14 @@
+import warnings
+
 import pytest
 import torch
 from cupbearer import data, detectors, models, tasks
-from cupbearer.scripts import eval_classifier, train_classifier, train_detector
+from cupbearer.data import RemoveMixLabelDataset
+from cupbearer.scripts import (
+    eval_classifier,
+    train_classifier,
+    train_detector,
+)
 from cupbearer.scripts.conf import (
     eval_classifier_conf,
     train_classifier_conf,
@@ -98,7 +105,7 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
         task=tasks.adversarial_examples.DebugAdversarialExampleTask(
             path=backdoor_classifier_path
         ),
-        detector=detectors.mahalanobis.DebugMahalanobisConfig(),
+        detector=detectors.DebugMahalanobisConfig(),
         path=tmp_path,
     )
     train_detector(cfg)
@@ -112,16 +119,47 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
 
 
 @pytest.mark.slow
-def test_train_mahalanobis_backdoor(backdoor_classifier_path, tmp_path):
+@pytest.mark.parametrize(
+    "detector_type",
+    [
+        detectors.DebugMahalanobisConfig,
+        detectors.DebugSpectralSignatureConfig,
+        detectors.DebugQuantumEntropyConfig,
+    ],
+)
+@pytest.mark.parametrize("train_on_clean", [False, True])
+def test_train_statistical_backdoor(
+    backdoor_classifier_path, tmp_path, detector_type, train_on_clean
+):
     cfg = train_detector_conf.Config(
         task=tasks.backdoor_detection.DebugBackdoorDetection(
-            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
+            path=backdoor_classifier_path,
+            backdoor=data.CornerPixelBackdoor(),
+            normal_weight_when_training=1.0 if train_on_clean else 0.9,
         ),
-        detector=detectors.mahalanobis.DebugMahalanobisConfig(),
+        detector=detector_type(),
         path=tmp_path,
     )
 
     train_detector(cfg)
+    # Check that data is mixed when it should be
+    assert train_on_clean ^ isinstance(
+        cfg.task.build_train_data(), RemoveMixLabelDataset
+    )
+
+    # Train detector
+    warning_message = (
+        r".*Detector of type \w+ is not meant to be trained \w+ poisoned samples[.].*"
+    )
+    if train_on_clean ^ (detector_type != detectors.DebugSpectralSignatureConfig):
+        # Should warn for incompatibility
+        with pytest.warns(match=warning_message):
+            train_detector(cfg)
+    else:
+        # Should not warn for incompatibility
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action="error", message=warning_message)
+            train_detector(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:
@@ -184,7 +222,7 @@ def test_wanet(tmp_path):
         task=tasks.backdoor_detection.DebugBackdoorDetection(
             path=tmp_path / "wanet", backdoor=data.WanetBackdoor()
         ),
-        detector=detectors.mahalanobis.DebugMahalanobisConfig(),
+        detector=detectors.DebugMahalanobisConfig(),
         path=tmp_path / "wanet-mahalanobis",
     )
     train_detector(train_detector_cfg)

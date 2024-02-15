@@ -2,4 +2,11 @@
 from .abstraction import AbstractionDetectorConfig
 from .config import DetectorConfig, StoredDetector
 from .finetuning import FinetuningConfig
-from .mahalanobis import MahalanobisConfig
+from .statistical import (
+    DebugMahalanobisConfig,
+    DebugQuantumEntropyConfig,
+    DebugSpectralSignatureConfig,
+    MahalanobisConfig,
+    QuantumEntropyConfig,
+    SpectralSignatureConfig,
+)

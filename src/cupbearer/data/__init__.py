@@ -1,5 +1,11 @@
 # ruff: noqa: F401
-from ._shared import DatasetConfig, TestDataConfig, TestDataMix, TrainDataFromRun
+from ._shared import (
+    DatasetConfig,
+    RemoveMixLabelDataset,
+    TestDataConfig,
+    TestDataMix,
+    TrainDataFromRun,
+)
 from .adversarial import AdversarialExampleConfig
 from .backdoor_data import BackdoorData
 from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor

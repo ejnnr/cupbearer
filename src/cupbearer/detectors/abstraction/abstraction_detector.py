@@ -140,6 +140,10 @@ class AbstractionDetector(ActivationBasedDetector):
             save_path=save_path,
         )
 
+    @property
+    def should_train_on_clean_data(self) -> bool:
+        return True
+
     def train(
         self,
         dataset,
