@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from cupbearer.models import HookedModel
-from cupbearer.utils.config_groups import config_group, register_config_group
 from cupbearer.utils.train import TrainConfig
 from cupbearer.utils.utils import BaseConfig
 
@@ -45,17 +44,10 @@ class AutoencoderAbstractionConfig(AbstractionConfig):
         )
 
 
-ABSTRACTIONS = {
-    "lca": LocallyConsistentAbstractionConfig,
-    "autoencoder": AutoencoderAbstractionConfig,
-}
-register_config_group(AbstractionConfig, ABSTRACTIONS)
-
-
 @dataclass
 class AbstractionDetectorConfig(DetectorConfig):
-    abstraction: AbstractionConfig = config_group(
-        AbstractionConfig, LocallyConsistentAbstractionConfig
+    abstraction: AbstractionConfig = field(
+        default_factory=LocallyConsistentAbstractionConfig
     )
     train: TrainConfig = field(default_factory=TrainConfig)
 

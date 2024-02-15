@@ -7,6 +7,8 @@ from .que_detector import QuantumEntropyDetector
 from .spectral_detector import SpectralSignatureDetector
 from .statistical import (
     ActivationCovarianceTrainConfig,
+    DebugActivationCovarianceTrainConfig,
+    DebugMahalanobisTrainConfig,
     MahalanobisTrainConfig,
 )
 
@@ -25,11 +27,15 @@ class MahalanobisConfig(ActivationBasedDetectorConfig):
 
 
 @dataclass
+class DebugMahalanobisConfig(MahalanobisConfig):
+    train: MahalanobisTrainConfig = field(default_factory=DebugMahalanobisTrainConfig)
+
+
+@dataclass
 class SpectralSignatureConfig(ActivationBasedDetectorConfig):
     train: ActivationCovarianceTrainConfig = field(
         default_factory=ActivationCovarianceTrainConfig
     )
-    train_on_clean: bool = False
 
     def build(self, model, save_dir) -> SpectralSignatureDetector:
         return SpectralSignatureDetector(
@@ -38,6 +44,13 @@ class SpectralSignatureConfig(ActivationBasedDetectorConfig):
             max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
+
+
+@dataclass
+class DebugSpectralSignatureConfig(SpectralSignatureConfig):
+    train: ActivationCovarianceTrainConfig = field(
+        default_factory=DebugActivationCovarianceTrainConfig
+    )
 
 
 @dataclass
@@ -53,3 +66,10 @@ class QuantumEntropyConfig(ActivationBasedDetectorConfig):
             max_batch_size=self.train.max_batch_size,
             save_path=save_dir,
         )
+
+
+@dataclass
+class DebugQuantumEntropyConfig(QuantumEntropyConfig):
+    train: ActivationCovarianceTrainConfig = field(
+        default_factory=DebugActivationCovarianceTrainConfig
+    )

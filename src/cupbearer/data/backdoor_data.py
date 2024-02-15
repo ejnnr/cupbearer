@@ -5,13 +5,12 @@ from dataclasses import dataclass
 from cupbearer.data import DatasetConfig
 from cupbearer.data.backdoors import Backdoor
 from cupbearer.data.transforms import Transform
-from cupbearer.utils.config_groups import config_group
 
 
 @dataclass
 class BackdoorData(DatasetConfig):
-    original: DatasetConfig = config_group(DatasetConfig)
-    backdoor: Backdoor = config_group(Backdoor)
+    original: DatasetConfig
+    backdoor: Backdoor
 
     @property
     def num_classes(self):

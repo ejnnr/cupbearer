@@ -1,9 +1,8 @@
 from abc import ABC, abstractproperty
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from simple_parsing import field
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
 
@@ -17,6 +16,7 @@ class DatasetConfig(BaseConfig, ABC):
     # Only the values of the transforms dict are used, but simple_parsing doesn't
     # support lists of dataclasses, which is why we use a dict. One advantage
     # of this is also that it's easier to override specific transforms.
+    # TODO: We should probably make this a list now that we're abandoning CLI.
     transforms: dict[str, Transform] = field(default_factory=dict)
     max_size: Optional[int] = None
 
@@ -47,11 +47,6 @@ class DatasetConfig(BaseConfig, ABC):
     def _build(self) -> Dataset:
         # Not an abstractmethod because e.g. TestDataConfig overrides build() instead.
         raise NotImplementedError
-
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.max_size = 2
 
 
 class TransformDataset(Dataset):
@@ -156,24 +151,6 @@ class TestDataConfig(DatasetConfig):
         if self.transforms:
             raise ValueError("Transforms are not supported for TestDataConfig.")
         return dataset
-
-
-@dataclass
-class NoData(DatasetConfig):
-    """Dummy class for non-existent datasets.
-
-    This is a workaround because simple_parsing doesn't support None as an option
-    when using subgroups, so we can pass this instead when we mean "no dataset".
-
-    It still needs to be instantiable, but otherwise should raise NotImplementedError
-    on any operation.
-    """
-
-    @property
-    def num_classes(self):
-        raise NotImplementedError
-
-    # build already raises NotImplementedError by default
 
 
 class RemoveMixLabelDataset(Dataset):

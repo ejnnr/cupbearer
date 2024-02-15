@@ -144,3 +144,22 @@ class RandomHorizontalFlip(ProbabilisticTransform):
 
     def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
         return F.hflip(img)
+
+
+@dataclass
+class GaussianNoise(Transform):
+    """Adds Gaussian noise to the image.
+
+    Note that this expects to_tensor to have been applied already.
+
+    Args:
+        std: Standard deviation of the Gaussian noise.
+    """
+
+    std: float
+
+    def __call__(self, sample: tuple[torch.Tensor, ...]):
+        img, *rest = sample
+        noise = torch.randn_like(img) * self.std
+        img = img + noise
+        return img, *rest

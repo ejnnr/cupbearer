@@ -13,11 +13,11 @@ from cupbearer.data import (
 )
 from cupbearer.models import ModelConfig
 from cupbearer.models.models import HookedModel
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin
+from cupbearer.utils.utils import BaseConfig
 
 
 @dataclass(kw_only=True)
-class TaskConfigBase(BaseConfig, ABC, PathConfigMixin):
+class TaskConfigBase(BaseConfig, ABC):
     @abstractmethod
     def build_train_data(self) -> Dataset:
         pass
@@ -41,15 +41,6 @@ class TaskConfig(TaskConfigBase, ABC):
     normal_weight_when_training: float = 1.0
     max_train_size: Optional[int] = None
     max_test_size: Optional[int] = None
-
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            # Needs to be at least two because otherwise Mahalanobis distance scores are
-            # NaN.
-            self.max_train_size = 2
-            # Needs to be at least two so it can contain both normal and anomalous data.
-            self.max_test_size = 2
 
     def __post_init__(self):
         # We'll only actually instantiate these when we need them, in case relevant
@@ -130,3 +121,42 @@ class TaskConfig(TaskConfigBase, ABC):
             self._init_train_data()
             assert self._train_data is not None, "init_train_data must set _train_data"
         return self._train_data.num_classes
+
+
+@dataclass(kw_only=True)
+class CustomTask(TaskConfig):
+    """A fully customizable task config, where all datasets are specified directly."""
+
+    train_data: DatasetConfig
+    anomalous_data: DatasetConfig
+    normal_test_data: Optional[DatasetConfig] = None
+    model: ModelConfig
+
+    def _init_train_data(self):
+        self._train_data = self.train_data
+
+    def _get_anomalous_test_data(self) -> DatasetConfig:
+        return self.anomalous_data
+
+    def _get_normal_test_data(self) -> DatasetConfig:
+        if self.normal_test_data:
+            return self.normal_test_data
+        return super()._get_normal_test_data()
+
+    def _init_model(self):
+        self._model = self.model
+
+
+@dataclass(kw_only=True)
+class DebugTaskConfig(TaskConfig):
+    """Debug configs for specific tasks can inherit from this for convenience.
+
+    Note that children should inherit this first, to make sure MRO picks up on
+    the overriden defaults below!
+    """
+
+    # Needs to be at least two because otherwise Mahalanobis distance scores are
+    # NaN.
+    max_train_size: int = 2
+    # Needs to be at least two so it can contain both normal and anomalous data.
+    max_test_size: int = 2

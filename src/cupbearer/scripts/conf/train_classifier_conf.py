@@ -1,23 +1,17 @@
-import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
-from cupbearer.data import BackdoorData, DatasetConfig, ValidationConfig, WanetBackdoor
+from cupbearer.data import BackdoorData, DatasetConfig, WanetBackdoor
 from cupbearer.models import CNNConfig, MLPConfig, ModelConfig
-from cupbearer.utils.config_groups import config_group
-from cupbearer.utils.scripts import DirConfig, ScriptConfig
-from cupbearer.utils.train import TrainConfig
-from simple_parsing.helpers import mutable_field
+from cupbearer.utils.scripts import ScriptConfig
+from cupbearer.utils.train import DebugTrainConfig, TrainConfig
 
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
-    model: ModelConfig = config_group(ModelConfig)
-    train_config: TrainConfig = mutable_field(TrainConfig)
-    train_data: DatasetConfig = config_group(DatasetConfig)
-    val_data: ValidationConfig = config_group(ValidationConfig, ValidationConfig)
-    dir: DirConfig = mutable_field(
-        DirConfig, base=os.path.join("logs", "train_classifier")
-    )
+    model: ModelConfig
+    train_config: TrainConfig = field(default_factory=TrainConfig)
+    train_data: DatasetConfig
+    val_data: dict[str, DatasetConfig] = field(default_factory=dict)
 
     @property
     def num_classes(self):
@@ -46,12 +40,7 @@ class Config(ScriptConfig):
                         str_factor * self.train_data.backdoor.control_grid
                     )
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.num_epochs = 1
-            self.max_steps = 3
-            self.max_batch_size = 32
-            self.wandb = False
-            self.batch_size = 11
-            self.log_every_n_steps = self.max_steps
+
+@dataclass
+class DebugConfig(Config):
+    train_config: DebugTrainConfig = field(default_factory=DebugTrainConfig)

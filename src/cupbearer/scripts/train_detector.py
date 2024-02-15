@@ -1,22 +1,19 @@
 import warnings
 
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 
-from . import eval_detector
-from .conf import eval_detector_conf
+from . import EvalDetectorConfig, eval_detector
 from .conf.train_detector_conf import Config
 
 
+@script
 def main(cfg: Config):
     reference_data = cfg.task.build_train_data()
     # reference_data[0] is the first sample, which is (input, ...), so we need another
     # [0] index
     example_input = reference_data[0][0]
     model = cfg.task.build_model(input_shape=example_input.shape)
-    detector = cfg.detector.build(
-        model=model,
-        save_dir=cfg.dir.path,
-    )
+    detector = cfg.detector.build(model=model, save_dir=cfg.path)
 
     if cfg.task.normal_weight_when_training < 1.0:
         if not detector.should_train_on_poisoned_data:
@@ -37,17 +34,11 @@ def main(cfg: Config):
         num_classes=cfg.task.num_classes,
         train_config=cfg.detector.train,
     )
-    if cfg.dir.path is not None:
-        detector.save_weights(cfg.dir.path / "detector")
-        eval_cfg = eval_detector_conf.Config(
-            dir=cfg.dir,
+    if cfg.path:
+        detector.save_weights(cfg.path / "detector")
+        eval_cfg = EvalDetectorConfig(
+            path=cfg.path,
             task=cfg.task,
             seed=cfg.seed,
-            debug=cfg.debug,
-            debug_with_logging=cfg.debug_with_logging,
         )
-        run(eval_detector.main, eval_cfg)
-
-
-if __name__ == "__main__":
-    run(main, Config)
+        eval_detector(eval_cfg)

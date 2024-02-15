@@ -1,21 +1,12 @@
-from cupbearer.utils.config_groups import register_config_group
-
+# ruff: noqa: F401
 from .abstraction import AbstractionDetectorConfig
 from .config import DetectorConfig, StoredDetector
 from .finetuning import FinetuningConfig
 from .statistical import (
+    DebugMahalanobisConfig,
+    DebugQuantumEntropyConfig,
+    DebugSpectralSignatureConfig,
     MahalanobisConfig,
     QuantumEntropyConfig,
     SpectralSignatureConfig,
 )
-
-DETECTORS = {
-    "abstraction": AbstractionDetectorConfig,
-    "mahalanobis": MahalanobisConfig,
-    "finetuning": FinetuningConfig,
-    "from_run": StoredDetector,
-    "spectral": SpectralSignatureConfig,
-    "que": QuantumEntropyConfig,
-}
-
-register_config_group(DetectorConfig, DETECTORS)

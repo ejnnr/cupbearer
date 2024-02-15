@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy as np
 import sklearn.metrics
@@ -23,7 +23,7 @@ class AnomalyDetector(ABC):
         self,
         model: HookedModel,
         max_batch_size: int = 4096,
-        save_path: Path | str | None = None,
+        save_path: Optional[Path | str] = None,
     ):
         self.model = model
         # For storing the original detector variables when finetuning

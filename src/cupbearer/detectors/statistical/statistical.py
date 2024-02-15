@@ -17,7 +17,6 @@ class StatisticalTrainConfig(BaseConfig, ABC):
     max_batch_size: int = 4096
     pbar: bool = True
     num_workers: int = 0
-    debug: bool = False
     # robust: bool = False  # TODO spectre uses
     # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
 
@@ -37,11 +36,12 @@ class StatisticalTrainConfig(BaseConfig, ABC):
                 shuffle=False,
             )
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.max_batches = 3
-            self.batch_size = 5
+
+@dataclass
+class DebugStatisticalTrainConfig(StatisticalTrainConfig):
+    max_batchs: int = 3
+    batch_size: int = 5
+    max_batch_size: int = 5
 
 
 @dataclass
@@ -50,8 +50,20 @@ class ActivationCovarianceTrainConfig(StatisticalTrainConfig):
 
 
 @dataclass
+class DebugActivationCovarianceTrainConfig(
+    DebugStatisticalTrainConfig, ActivationCovarianceTrainConfig
+):
+    pass
+
+
+@dataclass
 class MahalanobisTrainConfig(ActivationCovarianceTrainConfig):
     relative: bool = False
+
+
+@dataclass
+class DebugMahalanobisTrainConfig(DebugStatisticalTrainConfig, MahalanobisTrainConfig):
+    pass
 
 
 class StatisticalDetector(ActivationBasedDetector, ABC):

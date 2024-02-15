@@ -1,12 +1,13 @@
 import warnings
 
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from .conf.train_classifier_conf import Config
 
 
+@script
 def main(cfg: Config):
     dataset = cfg.train_data.build()
 
@@ -18,9 +19,9 @@ def main(cfg: Config):
     }
 
     # Store transforms to be used in training
-    if cfg.dir.path is not None:
+    if cfg.path:
         for trafo in cfg.train_data.get_transforms():
-            trafo.store(cfg.dir.path)
+            trafo.store(cfg.path)
 
     # Dataloader returns images and labels, only images get passed to model
     images, _ = next(iter(train_loader))
@@ -30,21 +31,22 @@ def main(cfg: Config):
         model=cfg.model,
         input_shape=example_input.shape,
         num_classes=cfg.num_classes,
-        optim_cfg=cfg.train_config.optim,
+        optim_cfg=cfg.train_config,
         val_loader_names=list(val_loaders.keys()),
     )
 
     # TODO: once we do longer training runs we'll want to have multiple
     # checkpoints, potentially based on validation loss
     callbacks = cfg.train_config.callbacks
-    callbacks.append(
-        ModelCheckpoint(
-            dirpath=cfg.train_config.path / "checkpoints",
-            save_last=True,
+    if cfg.path:
+        callbacks.append(
+            ModelCheckpoint(
+                dirpath=cfg.path / "checkpoints",
+                save_last=True,
+            )
         )
-    )
 
-    trainer = cfg.train_config.get_trainer(callbacks=callbacks)
+    trainer = cfg.train_config.get_trainer(callbacks=callbacks, path=cfg.path)
     with warnings.catch_warnings():
         if not val_loaders:
             warnings.filterwarnings(
@@ -59,7 +61,3 @@ def main(cfg: Config):
             # since pytorch lightning would interpret that as an empty dataloader!
             val_dataloaders=list(val_loaders.values()) or None,
         )
-
-
-if __name__ == "__main__":
-    run(main, Config)
