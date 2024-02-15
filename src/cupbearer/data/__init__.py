@@ -6,6 +6,7 @@ from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdo
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 from .transforms import (
+    GaussianNoise,
     RandomCrop,
     RandomHorizontalFlip,
     RandomRotation,

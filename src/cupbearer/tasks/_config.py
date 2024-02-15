@@ -103,6 +103,30 @@ class TaskConfig(TaskConfigBase, ABC):
 
 
 @dataclass(kw_only=True)
+class CustomTask(TaskConfig):
+    """A fully customizable task config, where all datasets are specified directly."""
+
+    train_data: DatasetConfig
+    anomalous_data: DatasetConfig
+    normal_test_data: Optional[DatasetConfig] = None
+    model: ModelConfig
+
+    def _init_train_data(self):
+        self._train_data = self.train_data
+
+    def _get_anomalous_test_data(self) -> DatasetConfig:
+        return self.anomalous_data
+
+    def _get_normal_test_data(self) -> DatasetConfig:
+        if self.normal_test_data:
+            return self.normal_test_data
+        return super()._get_normal_test_data()
+
+    def _init_model(self):
+        self._model = self.model
+
+
+@dataclass(kw_only=True)
 class DebugTaskConfig(TaskConfig):
     """Debug configs for specific tasks can inherit from this for convenience.
 
