@@ -75,3 +75,28 @@ def mahalanobis(
             distance -= torch.einsum("bi,i->b", delta**2, inv_diag_covariances[k])
         distances[k] = distance
     return distances
+
+
+def quantum_entropy(
+    whitened_activations: dict[str, torch.Tensor],
+    alpha: float = 4,
+) -> dict[str, torch.Tensor]:
+    """Quantum Entropy score per layer."""
+    distances: dict[str, torch.Tensor] = {}
+    for k, activation in whitened_activations.items():
+        activation = activation.flatten(start_dim=1)
+
+        # Compute QUE-score
+        centered_batch = activation - activation.mean(dim=0, keepdim=True)
+        batch_cov = centered_batch.mT @ centered_batch
+
+        batch_cov_norm = torch.linalg.eigvalsh(batch_cov).max()
+        exp_factor = torch.matrix_exp(alpha * batch_cov / batch_cov_norm)
+
+        distances[k] = torch.einsum(
+            "bi,ij,jb->b",
+            activation,
+            exp_factor,
+            activation.mT,
+        )
+    return distances

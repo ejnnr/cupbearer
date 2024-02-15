@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+from pathlib import Path
 
 import torch
 
 from cupbearer.data import DataFormat, TensorDataFormat, TextDataFormat
-from cupbearer.utils.config_groups import register_config_group
 from cupbearer.utils.scripts import load_config
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin, mutable_field
+from cupbearer.utils.utils import BaseConfig, mutable_field
 
 from .hooked_model import HookedModel
 from .models import CNN, MLP
@@ -21,17 +21,17 @@ class ModelConfig(BaseConfig, ABC):
 
 
 @dataclass
-class StoredModel(ModelConfig, PathConfigMixin):
+class StoredModel(ModelConfig):
+    path: Path
+
     def build_model(self, input_format) -> HookedModel:
-        model_cfg = load_config(self.get_path(), "model", ModelConfig)
+        model_cfg = load_config(self.path, "model", ModelConfig)
         model = model_cfg.build_model(input_format)
 
         # Our convention is that LightningModules store the actual pytorch model
         # as a `model` attribute. We use the last checkpoint (generated via the
         # save_last=True option to the ModelCheckpoint callback).
-        state_dict = torch.load(self.get_path() / "checkpoints" / "last.ckpt")[
-            "state_dict"
-        ]
+        state_dict = torch.load(self.path / "checkpoints" / "last.ckpt")["state_dict"]
         # We want the state_dict for the 'model' submodule, so remove
         # the 'model.' prefix from the keys.
         state_dict = {k[6:]: v for k, v in state_dict.items() if k.startswith("model.")}
@@ -54,12 +54,14 @@ class MLPConfig(ModelConfig):
             hidden_dims=self.hidden_dims,
         )
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            # TODO: we need at least two layers here because abstractions currently
-            # only work in that case. Abstraction implementation should be fixed.
-            self.hidden_dims = [2, 2]
+
+@dataclass
+class DebugMLPConfig(MLPConfig):
+    # TODO: we need at least two layers here because abstractions currently
+    # only work in that case. Abstraction implementation should be fixed.
+    # Additionally, we make network with some width to reduce chance that all
+    # neurons are dead.
+    hidden_dims: list[int] = mutable_field([5, 5])
 
 
 @dataclass
@@ -78,12 +80,6 @@ class CNNConfig(ModelConfig):
             dense_dims=self.dense_dims,
         )
 
-    def setup_and_validate(self):
-        super().setup_and_validate()
-        if self.debug:
-            self.channels = [2]
-            self.dense_dims = [2]
-
 
 @dataclass
 class TransformerConfig(ModelConfig):
@@ -99,11 +95,7 @@ class TransformerConfig(ModelConfig):
         return ClassifierTransformer(self.model, self.num_classes, device=self.device)
 
 
-MODELS = {
-    "mlp": MLPConfig,
-    "cnn": CNNConfig,
-    "transformer": TransformerConfig,
-    "from_run": StoredModel,
-}
-
-register_config_group(ModelConfig, MODELS)
+@dataclass
+class DebugCNNConfig(CNNConfig):
+    channels: list[int] = mutable_field([2])
+    dense_dims: list[int] = mutable_field([2])

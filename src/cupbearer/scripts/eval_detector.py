@@ -1,8 +1,10 @@
 from cupbearer.scripts.conf.eval_detector_conf import Config
-from cupbearer.utils.scripts import run
+from cupbearer.utils.scripts import script
 
 
+@script
 def main(cfg: Config):
+    assert cfg.detector is not None  # make type checker happy
     # Init
     train_data = cfg.task.build_train_data()
     test_data = cfg.task.build_test_data()
@@ -11,7 +13,7 @@ def main(cfg: Config):
     model = cfg.task.build_model(input_shape=example_input.shape)
     detector = cfg.detector.build(
         model=model,
-        save_dir=cfg.dir.path,
+        save_dir=cfg.path,
     )
 
     # Evaluate detector
@@ -20,7 +22,3 @@ def main(cfg: Config):
         test_dataset=test_data,
         pbar=cfg.pbar,
     )
-
-
-if __name__ == "__main__":
-    run(main, Config)

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 import numpy as np
 import sklearn.metrics
@@ -23,7 +23,7 @@ class AnomalyDetector(ABC):
         self,
         model: HookedModel,
         max_batch_size: int = 4096,
-        save_path: Path | str | None = None,
+        save_path: Optional[Path | str] = None,
     ):
         self.model = model
         # For storing the original detector variables when finetuning
@@ -32,6 +32,15 @@ class AnomalyDetector(ABC):
         self.save_path = None if save_path is None else Path(save_path)
 
         self.trained = False
+
+    @property
+    @abstractmethod
+    def should_train_on_clean_data(self) -> bool:
+        pass
+
+    @property
+    def should_train_on_poisoned_data(self) -> bool:
+        return not self.should_train_on_clean_data
 
     @abstractmethod
     def train(self, dataset, *, num_classes: int, train_config: utils.BaseConfig):

@@ -2,7 +2,6 @@ from typing import Tuple
 
 # We use torch to generate random numbers, to keep things consistent
 # with torchvision transforms.
-import numpy as np
 from PIL.Image import Image
 
 
@@ -19,22 +18,3 @@ class AddInfoDict:
         # We already store it here in case CornerPixelToWhite is not used, so that
         # we don't have to add a special case when computing metrics.
         return img, target, {"original_target": target}
-
-
-class GaussianNoise:
-    """Adds Gaussian noise to the image.
-
-    Note that this expects to_tensor to have been applied already.
-
-    Args:
-        std: Standard deviation of the Gaussian noise.
-    """
-
-    def __init__(self, std: float):
-        self.std = std
-
-    def __call__(self, sample: Tuple[np.ndarray, ...]):
-        img, *rest = sample
-        noise = np.random.normal(0, self.std, img.shape)
-        img = img + noise
-        return img, *rest
