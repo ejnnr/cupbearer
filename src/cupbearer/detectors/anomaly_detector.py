@@ -19,9 +19,6 @@ from cupbearer.utils import utils
 
 
 class AnomalyDetector(ABC):
-    should_train_on_clean_data: bool = False
-    should_train_on_poisoned_data: bool = False
-
     def __init__(
         self,
         model: HookedModel,
@@ -35,6 +32,15 @@ class AnomalyDetector(ABC):
         self.save_path = None if save_path is None else Path(save_path)
 
         self.trained = False
+
+    @property
+    @abstractmethod
+    def should_train_on_clean_data(self) -> bool:
+        pass
+
+    @property
+    def should_train_on_poisoned_data(self) -> bool:
+        return not self.should_train_on_clean_data
 
     @abstractmethod
     def train(self, dataset, *, num_classes: int, train_config: utils.BaseConfig):

@@ -124,8 +124,6 @@ class AbstractionModule(L.LightningModule):
 class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
 
-    should_train_on_clean_data: bool = True
-
     def __init__(
         self,
         model: HookedModel,
@@ -141,6 +139,10 @@ class AbstractionDetector(ActivationBasedDetector):
             max_batch_size=max_batch_size,
             save_path=save_path,
         )
+
+    @property
+    def should_train_on_clean_data(self) -> bool:
+        return True
 
     def train(
         self,
