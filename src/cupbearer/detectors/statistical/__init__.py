@@ -3,8 +3,8 @@ from dataclasses import dataclass, field
 from cupbearer.detectors.config import ActivationBasedDetectorConfig
 
 from .mahalanobis_detector import MahalanobisDetector
+from .que_detector import QuantumEntropyDetector
 from .spectral_detector import SpectralSignatureDetector
-from .spectre_detector import SpectreDetector
 from .statistical import (
     ActivationCovarianceTrainConfig,
     MahalanobisTrainConfig,
@@ -41,13 +41,13 @@ class SpectralSignatureConfig(ActivationBasedDetectorConfig):
 
 
 @dataclass
-class SpectreConfig(ActivationBasedDetectorConfig):
+class QuantumEntropyConfig(ActivationBasedDetectorConfig):
     train: ActivationCovarianceTrainConfig = field(
         default_factory=ActivationCovarianceTrainConfig
     )
 
-    def build(self, model, save_dir) -> SpectreDetector:
-        return SpectreDetector(
+    def build(self, model, save_dir) -> QuantumEntropyDetector:
+        return QuantumEntropyDetector(
             model=model,
             activation_name_func=self.resolve_name_func(),
             max_batch_size=self.train.max_batch_size,

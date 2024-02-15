@@ -124,7 +124,7 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
     [
         "mahalanobis",
         "spectral",
-        "spectre",
+        "que",
     ],
 )
 @pytest.mark.parametrize("train_on_clean", [False, True])

@@ -47,8 +47,6 @@ class StatisticalTrainConfig(BaseConfig, ABC):
 @dataclass
 class ActivationCovarianceTrainConfig(StatisticalTrainConfig):
     rcond: float = 1e-5
-    # robust: bool = False  # TODO spectre uses
-    # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
 
 
 @dataclass

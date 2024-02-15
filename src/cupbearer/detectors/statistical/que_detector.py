@@ -7,7 +7,7 @@ from cupbearer.detectors.statistical.statistical import (
 )
 
 
-class SpectreDetector(ActivationCovarianceBasedDetector):
+class QuantumEntropyDetector(ActivationCovarianceBasedDetector):
     @property
     def should_train_on_clean_data(self) -> bool:
         return True

@@ -5,8 +5,8 @@ import torch
 from cupbearer.detectors.statistical import (
     MahalanobisDetector,
     MahalanobisTrainConfig,
+    QuantumEntropyDetector,
     SpectralSignatureDetector,
-    SpectreDetector,
 )
 from cupbearer.detectors.statistical.statistical import (
     ActivationCovarianceBasedDetector,
@@ -62,7 +62,7 @@ class TestTrainedStatisticalDetectors:
         [
             MahalanobisDetector,
             SpectralSignatureDetector,
-            SpectreDetector,
+            QuantumEntropyDetector,
         ],
     )
     def test_covariance_matrices(self, dataset, Model, Detector):
@@ -102,7 +102,7 @@ class TestTrainedStatisticalDetectors:
             )
 
     def test_whitening_matrices(self, dataset, Model):
-        detector = self.train_detector(dataset, Model, SpectreDetector)
+        detector = self.train_detector(dataset, Model, QuantumEntropyDetector)
         assert detector.covariances.keys() == detector.whitening_matrices.keys()
         for layer_name, cov in detector.covariances.items():
             W = detector.whitening_matrices[layer_name]
