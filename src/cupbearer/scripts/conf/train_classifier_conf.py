@@ -28,10 +28,11 @@ class Config(ScriptConfig):
         if isinstance(self.train_data, BackdoorData):
             for name, val_config in self.val_data.items():
                 # WanetBackdoor
-                if isinstance(self.train_data.backdoor, WanetBackdoor):
-                    assert isinstance(val_config, BackdoorData) and isinstance(
-                        val_config.backdoor, WanetBackdoor
-                    )
+                if (
+                    isinstance(self.train_data.backdoor, WanetBackdoor)
+                    and isinstance(val_config, BackdoorData)
+                    and isinstance(val_config.backdoor, WanetBackdoor)
+                ):
                     str_factor = (
                         val_config.backdoor.warping_strength
                         / self.train_data.backdoor.warping_strength
