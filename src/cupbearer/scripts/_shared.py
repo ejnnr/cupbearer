@@ -1,8 +1,9 @@
 import lightning as L
 import torch
-from cupbearer.models import HookedModel, ModelConfig
-from cupbearer.utils.optimizers import OptimizerConfigMixin
 from torchmetrics.classification import Accuracy
+
+from cupbearer.models import HookedModel, ModelConfig
+from cupbearer.utils.optimizers import OptimizerConfig
 
 
 class Classifier(L.LightningModule):
@@ -10,7 +11,7 @@ class Classifier(L.LightningModule):
         self,
         model: ModelConfig | HookedModel,
         num_classes: int,
-        optim_cfg: OptimizerConfigMixin,
+        optim_cfg: OptimizerConfig,
         input_shape: tuple[int, ...] | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,

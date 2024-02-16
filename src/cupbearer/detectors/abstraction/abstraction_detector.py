@@ -15,7 +15,7 @@ from cupbearer.detectors.anomaly_detector import (
     ActivationBasedDetector,
 )
 from cupbearer.models import HookedModel
-from cupbearer.utils.optimizers import OptimizerConfigMixin
+from cupbearer.utils.optimizers import OptimizerConfig
 from cupbearer.utils.train import TrainConfig
 
 
@@ -94,7 +94,7 @@ class AbstractionModule(L.LightningModule):
         self,
         get_activations: Callable[[torch.Tensor], tuple[Any, dict[str, torch.Tensor]]],
         abstraction: Abstraction,
-        optim_cfg: OptimizerConfigMixin,
+        optim_cfg: OptimizerConfig,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["get_activations", "abstraction"])
@@ -157,7 +157,7 @@ class AbstractionDetector(ActivationBasedDetector):
         module = AbstractionModule(
             self.get_activations,
             self.abstraction,
-            optim_cfg=train_config,
+            optim_cfg=train_config.optimizer,
         )
 
         train_loader = train_config.get_dataloader(dataset)

@@ -1,8 +1,9 @@
 import warnings
 
+from lightning.pytorch.callbacks import ModelCheckpoint
+
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import script
-from lightning.pytorch.callbacks import ModelCheckpoint
 
 from .conf.train_classifier_conf import Config
 
@@ -31,7 +32,7 @@ def main(cfg: Config):
         model=cfg.model,
         input_shape=example_input.shape,
         num_classes=cfg.num_classes,
-        optim_cfg=cfg.train_config,
+        optim_cfg=cfg.train_config.optimizer,
         val_loader_names=list(val_loaders.keys()),
     )
 

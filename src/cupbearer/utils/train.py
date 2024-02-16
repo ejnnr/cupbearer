@@ -1,4 +1,4 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -6,15 +6,16 @@ import lightning as L
 from lightning.pytorch import loggers
 from torch.utils.data import DataLoader
 
-from cupbearer.utils.optimizers import OptimizerConfigMixin
+from cupbearer.utils.optimizers import OptimizerConfig
 from cupbearer.utils.utils import BaseConfig
 
 
 @dataclass(kw_only=True)
-class TrainConfig(BaseConfig, OptimizerConfigMixin):
+class TrainConfig(BaseConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
+    optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     num_workers: int = 0
     max_steps: int = -1
     check_val_every_n_epoch: int = 1
