@@ -8,7 +8,7 @@ from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig, mutable_field
 
 from .hooked_model import HookedModel
-from .models import CNN, MLP
+from .models import CNN, MLP, PreActBlock, PreActResNet
 
 
 @dataclass(kw_only=True)
@@ -79,3 +79,13 @@ class CNNConfig(ModelConfig):
 class DebugCNNConfig(CNNConfig):
     channels: list[int] = mutable_field([2])
     dense_dims: list[int] = mutable_field([2])
+
+
+@dataclass
+class ResnetConfig(ModelConfig):
+    output_dim: int = 10
+    # ResNet18 default:
+    num_blocks: list[int] = mutable_field([2, 2, 2, 2])
+
+    def build_model(self, input_shape) -> HookedModel:
+        return PreActResNet(PreActBlock, self.num_blocks, num_classes=self.output_dim)
