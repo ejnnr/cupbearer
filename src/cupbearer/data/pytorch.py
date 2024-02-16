@@ -27,7 +27,7 @@ class PytorchConfig(DatasetConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.default_augmentations:
+        if self.default_augmentations and self.train:
             # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
             self.transforms["random_crop"] = RandomCrop(p=0.8, padding=5)
             self.transforms["random_rotation"] = RandomRotation(p=0.5, degrees=10)
@@ -60,7 +60,7 @@ class CIFAR10(PytorchConfig):
 
     def __post_init__(self):
         super().__post_init__()
-        if self.default_augmentations:
+        if self.default_augmentations and self.train:
             self.transforms["random_horizontal_flip"] = RandomHorizontalFlip(p=0.5)
 
 
