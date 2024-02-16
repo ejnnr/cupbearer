@@ -12,6 +12,11 @@ class Config(ScriptConfig):
     train_config: TrainConfig = field(default_factory=TrainConfig)
     train_data: DatasetConfig
     val_data: dict[str, DatasetConfig] = field(default_factory=dict)
+    # If True, returns the Lighting Trainer object (which has the model and a bunch
+    # of other information, this may be useful when using interactively).
+    # Otherwise (default), return only a dictionary of latest metrics, to avoid e.g.
+    # submitit trying to pickle the entire Trainer object.
+    return_trainer: bool = False
 
     @property
     def num_classes(self):
