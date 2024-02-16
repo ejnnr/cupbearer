@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 
 import lightning as L
-from lightning.pytorch import loggers
+from lightning.pytorch import callbacks, loggers
 from torch.utils.data import DataLoader
 
 from cupbearer.utils.optimizers import OptimizerConfig
@@ -17,6 +17,7 @@ class TrainConfig(BaseConfig):
     max_batch_size: int = 2048
     optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     num_workers: int = 0
+    pin_memory: bool = True
     max_steps: int = -1
     check_val_every_n_epoch: int = 1
     pbar: bool = False
@@ -24,10 +25,17 @@ class TrainConfig(BaseConfig):
     wandb: bool = False
     devices: int | list[int] | str = "auto"
     accelerator: str = "auto"
+    precision: int | str = 32
+    monitor_device_stats: bool = False
+    profiler: Optional[str] = None
 
     @property
     def callbacks(self):
-        return []
+        callback_list = []
+        if self.monitor_device_stats:
+            callback_list.append(callbacks.DeviceStatsMonitor(cpu_stats=True))
+
+        return callback_list
 
     def get_dataloader(self, dataset, train=True):
         if train:
@@ -37,6 +45,7 @@ class TrainConfig(BaseConfig):
                 shuffle=True,
                 num_workers=self.num_workers,
                 persistent_workers=self.num_workers > 0,
+                pin_memory=self.pin_memory,
             )
         else:
             return DataLoader(
@@ -74,6 +83,8 @@ class TrainConfig(BaseConfig):
             log_every_n_steps=self.log_every_n_steps,
             devices=self.devices,
             accelerator=self.accelerator,
+            precision=self.precision,
+            profiler=self.profiler,
         )
         trainer_kwargs.update(kwargs)  # override defaults if given
         return L.Trainer(**trainer_kwargs)
