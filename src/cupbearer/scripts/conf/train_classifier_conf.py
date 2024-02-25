@@ -1,25 +1,19 @@
-import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Literal
 
-from cupbearer.data import BackdoorData, DatasetConfig, ValidationConfig, WanetBackdoor, TamperingDataConfig
+from cupbearer.data import BackdoorData, DatasetConfig, WanetBackdoor, TamperingDataConfig
 from cupbearer.models import CNNConfig, MLPConfig, ModelConfig, TamperTransformerConfig
-from cupbearer.utils.config_groups import config_group
-from cupbearer.utils.scripts import DirConfig, ScriptConfig
-from cupbearer.utils.train import TrainConfig
-from simple_parsing.helpers import mutable_field
+from cupbearer.utils.scripts import ScriptConfig
+from cupbearer.utils.train import DebugTrainConfig, TrainConfig
 
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
-    model: ModelConfig = config_group(ModelConfig)
-    train_config: TrainConfig = mutable_field(TrainConfig)
-    train_data: DatasetConfig = config_group(DatasetConfig)
-    val_data: ValidationConfig = config_group(ValidationConfig, ValidationConfig)
+    model: ModelConfig
+    train_config: TrainConfig = field(default_factory=TrainConfig)
+    train_data: DatasetConfig
+    val_data: dict[str, DatasetConfig] = field(default_factory=dict),
     task: Literal["binary", "multiclass", "multilabel"] = "multiclass"
-    dir: DirConfig = mutable_field(
-        DirConfig, base=os.path.join("logs", "train_classifier")
-    )
 
     @property
     def num_classes(self):
@@ -56,3 +50,8 @@ class Config(ScriptConfig):
                     val_config.backdoor.control_grid = (
                         str_factor * self.train_data.backdoor.control_grid
                     )
+
+
+@dataclass
+class DebugConfig(Config):
+    train_config: DebugTrainConfig = field(default_factory=DebugTrainConfig)

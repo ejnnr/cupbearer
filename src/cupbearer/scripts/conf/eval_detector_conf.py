@@ -2,16 +2,18 @@ from dataclasses import dataclass
 
 from cupbearer.detectors import DetectorConfig, StoredDetector
 from cupbearer.tasks import TaskConfigBase
-from cupbearer.utils.config_groups import config_group
 from cupbearer.utils.scripts import ScriptConfig
-from simple_parsing import field
 
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
-    task: TaskConfigBase = config_group(TaskConfigBase)
-    detector: DetectorConfig = config_group(
-        DetectorConfig, default_factory=StoredDetector
-    )
+    task: TaskConfigBase
+    detector: DetectorConfig | None = None
     save_config: bool = False
-    pbar: bool = field(action="store_true")
+    pbar: bool = False
+
+    def __post_init__(self):
+        if self.detector is None:
+            if self.path is None:
+                raise ValueError("Path or detector must be set")
+            self.detector = StoredDetector(path=self.path)

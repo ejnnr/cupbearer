@@ -1,35 +1,19 @@
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import torch
-from cupbearer.utils.config_groups import register_config_group
-from cupbearer.utils.utils import BaseConfig
 
 
 @dataclass
-class OptimizerConfig(BaseConfig, ABC):
-    learning_rate: float = 1e-3
+class OptimizerConfigMixin:
+    """Optimizer settings, meant to be used as a mix-in in other configs."""
 
-    @abstractmethod
-    def build(self, params) -> torch.optim.Optimizer:
-        pass
+    optimizer: str = "adam"
+    lr: float = 1e-3
 
-
-@dataclass
-class Adam(OptimizerConfig):
-    def build(self, params):
-        return torch.optim.Adam(params, lr=self.learning_rate)
-
-
-@dataclass
-class SGD(OptimizerConfig):
-    def build(self, params):
-        return torch.optim.SGD(params, lr=self.learning_rate)
-
-
-OPTIMIZERS = {
-    "adam": Adam,
-    "sgd": SGD,
-}
-
-register_config_group(OptimizerConfig, OPTIMIZERS)
+    def get_optimizer(self, params) -> torch.optim.Optimizer:
+        if self.optimizer == "adam":
+            return torch.optim.Adam(params, lr=self.lr)
+        elif self.optimizer == "sgd":
+            return torch.optim.SGD(params, lr=self.lr)
+        else:
+            raise ValueError(f"Unknown optimizer {self.optimizer}")

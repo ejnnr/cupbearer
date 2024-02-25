@@ -1,22 +1,21 @@
 from abc import ABC, abstractmethod
 from collections.abc import Collection
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, Optional
 
 from loguru import logger
-from simple_parsing.helpers import mutable_field
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.models.models import HookedModel
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.train import TrainConfig
-from cupbearer.utils.utils import BaseConfig, PathConfigMixin, get_object
+from cupbearer.utils.utils import BaseConfig, get_object
 
 
 @dataclass(kw_only=True)
 class DetectorConfig(BaseConfig, ABC):
-    train: TrainConfig = mutable_field(TrainConfig)
+    train: TrainConfig = field(default_factory=TrainConfig)
 
     @abstractmethod
     def build(self, model: HookedModel, save_dir: Path | None) -> AnomalyDetector:
@@ -35,9 +34,11 @@ class ActivationBasedDetectorConfig(DetectorConfig):
 
 
 @dataclass(kw_only=True)
-class StoredDetector(DetectorConfig, PathConfigMixin):
+class StoredDetector(DetectorConfig):
+    path: Path
+
     def build(self, model, save_dir) -> AnomalyDetector:
-        detector_cfg = load_config(self.get_path(), "detector", DetectorConfig)
+        detector_cfg = load_config(self.path, "detector", DetectorConfig)
         if isinstance(detector_cfg, StoredDetector) and detector_cfg.path == self.path:
             raise RuntimeError(
                 f"It looks like the detector you're trying to load from {self.path} "
@@ -46,7 +47,7 @@ class StoredDetector(DetectorConfig, PathConfigMixin):
             )
         detector = detector_cfg.build(model, save_dir)
         try:
-            detector.load_weights(self.get_path() / "detector")
+            detector.load_weights(self.path / "detector")
         except FileNotFoundError:
             logger.warning(
                 f"Didn't find weights for detector from {self.path}. "

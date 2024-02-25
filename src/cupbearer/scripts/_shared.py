@@ -2,11 +2,12 @@ from typing_extensions import Literal
 
 import lightning as L
 import torch
-from cupbearer.data import DataFormat
-from cupbearer.models import HookedModel, ModelConfig
-from cupbearer.utils.optimizers import OptimizerConfig
 from torchmetrics.classification import Accuracy
 from torchmetrics.utilities.enums import ClassificationTask
+
+from cupbearer.data import DataFormat
+from cupbearer.models import HookedModel, ModelConfig
+from cupbearer.utils.optimizers import OptimizerConfigMixin
 
 
 class Classifier(L.LightningModule):
@@ -15,7 +16,7 @@ class Classifier(L.LightningModule):
         model: ModelConfig | HookedModel,
         num_classes: int | None,
         num_labels: int | None,
-        optim_cfg: OptimizerConfig,
+        optim_cfg: OptimizerConfigMixin,
         input_format: DataFormat | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
@@ -107,4 +108,4 @@ class Classifier(L.LightningModule):
             self.log(f"{name}/acc_epoch", self.val_accuracy[i])
 
     def configure_optimizers(self):
-        return self.optim_cfg.build(self.parameters())
+        return self.optim_cfg.get_optimizer(self.parameters())

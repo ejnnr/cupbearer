@@ -1,5 +1,9 @@
+import warnings
+
 import pytest
 import torch
+from cupbearer import data, detectors, models, tasks
+from cupbearer.data import RemoveMixLabelDataset
 from cupbearer.scripts import (
     eval_classifier,
     train_classifier,
@@ -10,8 +14,7 @@ from cupbearer.scripts.conf import (
     train_classifier_conf,
     train_detector_conf,
 )
-from cupbearer.utils.scripts import run
-from simple_parsing import ArgumentGenerationMode, parse
+from cupbearer.utils.train import DebugTrainConfig
 
 # Ignore warnings about num_workers
 pytestmark = pytest.mark.filterwarnings(
@@ -26,14 +29,14 @@ pytestmark = pytest.mark.filterwarnings(
 @pytest.fixture(scope="module")
 def backdoor_classifier_path(module_tmp_path):
     """Trains a backdoored classifier and returns the path to the run directory."""
-    cfg = parse(
-        train_classifier_conf.Config,
-        args=f"--debug_with_logging --dir.full {module_tmp_path} "
-        "--train_data backdoor --train_data.original mnist "
-        "--train_data.backdoor corner --model mlp",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = train_classifier_conf.DebugConfig(
+        train_data=data.BackdoorData(
+            original=data.MNIST(), backdoor=data.CornerPixelBackdoor()
+        ),
+        model=models.DebugMLPConfig(),
+        path=module_tmp_path,
     )
-    run(train_classifier.main, cfg)
+    train_classifier(cfg)
 
     assert (module_tmp_path / "config.yaml").is_file()
     assert (module_tmp_path / "checkpoints" / "last.ckpt").is_file()
@@ -44,27 +47,25 @@ def backdoor_classifier_path(module_tmp_path):
 
 @pytest.mark.slow
 def test_eval_classifier(backdoor_classifier_path):
-    cfg = parse(
-        eval_classifier_conf.Config,
-        args=f"--debug_with_logging --dir.full {backdoor_classifier_path} "
-        "--data mnist --data.train false",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = eval_classifier_conf.DebugConfig(
+        path=backdoor_classifier_path, data=data.MNIST(train=False)
     )
-    run(eval_classifier.main, cfg)
+
+    eval_classifier(cfg)
 
     assert (backdoor_classifier_path / "eval.json").is_file()
 
 
 @pytest.mark.slow
 def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
-    cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path} "
-        f"--task backdoor --task.backdoor corner "
-        f"--task.path {backdoor_classifier_path} --detector abstraction",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = train_detector_conf.Config(
+        task=tasks.BackdoorDetection(
+            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
+        ),
+        detector=detectors.AbstractionDetectorConfig(train=DebugTrainConfig()),
+        path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
 
@@ -76,15 +77,17 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
 
 @pytest.mark.slow
 def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
-    cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path} "
-        f"--task backdoor --task.backdoor corner "
-        f"--task.path {backdoor_classifier_path} --detector abstraction "
-        f"--detector.abstraction autoencoder",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = train_detector_conf.Config(
+        task=tasks.BackdoorDetection(
+            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
+        ),
+        detector=detectors.AbstractionDetectorConfig(
+            train=DebugTrainConfig(),
+            abstraction=detectors.abstraction.AutoencoderAbstractionConfig(),
+        ),
+        path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
 
@@ -98,14 +101,14 @@ def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
 def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
     # This test doesn't need a backdoored classifier, but we already have one
     # and it doesn't hurt, so reusing it makes execution faster.
-    cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path} "
-        f"--task adversarial_examples --task.path {backdoor_classifier_path} "
-        "--detector mahalanobis",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = train_detector_conf.Config(
+        task=tasks.adversarial_examples.DebugAdversarialExampleTask(
+            path=backdoor_classifier_path
+        ),
+        detector=detectors.DebugMahalanobisConfig(),
+        path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector(cfg)
     assert (backdoor_classifier_path / "adv_examples.pt").is_file()
     assert (backdoor_classifier_path / "adv_examples.pdf").is_file()
     assert (tmp_path / "config.yaml").is_file()
@@ -116,15 +119,47 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
 
 
 @pytest.mark.slow
-def test_train_mahalanobis_backdoor(backdoor_classifier_path, tmp_path):
-    cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path} "
-        f"--task backdoor --task.backdoor corner "
-        f"--task.path {backdoor_classifier_path} --detector mahalanobis",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+@pytest.mark.parametrize(
+    "detector_type",
+    [
+        detectors.DebugMahalanobisConfig,
+        detectors.DebugSpectralSignatureConfig,
+        detectors.DebugQuantumEntropyConfig,
+    ],
+)
+@pytest.mark.parametrize("train_on_clean", [False, True])
+def test_train_statistical_backdoor(
+    backdoor_classifier_path, tmp_path, detector_type, train_on_clean
+):
+    cfg = train_detector_conf.Config(
+        task=tasks.backdoor_detection.DebugBackdoorDetection(
+            path=backdoor_classifier_path,
+            backdoor=data.CornerPixelBackdoor(),
+            normal_weight_when_training=1.0 if train_on_clean else 0.9,
+        ),
+        detector=detector_type(),
+        path=tmp_path,
     )
-    run(train_detector.main, cfg)
+
+    train_detector(cfg)
+    # Check that data is mixed when it should be
+    assert train_on_clean ^ isinstance(
+        cfg.task.build_train_data(), RemoveMixLabelDataset
+    )
+
+    # Train detector
+    warning_message = (
+        r".*Detector of type \w+ is not meant to be trained \w+ poisoned samples[.].*"
+    )
+    if train_on_clean ^ (detector_type != detectors.DebugSpectralSignatureConfig):
+        # Should warn for incompatibility
+        with pytest.warns(match=warning_message):
+            train_detector(cfg)
+    else:
+        # Should not warn for incompatibility
+        with warnings.catch_warnings():
+            warnings.filterwarnings(action="error", message=warning_message)
+            train_detector(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:
@@ -134,14 +169,14 @@ def test_train_mahalanobis_backdoor(backdoor_classifier_path, tmp_path):
 
 @pytest.mark.slow
 def test_finetuning_detector(backdoor_classifier_path, tmp_path):
-    cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path} "
-        f"--task backdoor --task.backdoor corner "
-        f"--task.path {backdoor_classifier_path} --detector finetuning",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = train_detector_conf.Config(
+        task=tasks.BackdoorDetection(
+            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
+        ),
+        detector=detectors.finetuning.FinetuningConfig(train=DebugTrainConfig()),
+        path=tmp_path,
     )
-    run(train_detector.main, cfg)
+    train_detector(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
 
@@ -153,42 +188,46 @@ def test_finetuning_detector(backdoor_classifier_path, tmp_path):
 
 @pytest.mark.slow
 def test_wanet(tmp_path):
-    cfg = parse(
-        train_classifier_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path / 'wanet'} "
-        "--train_data backdoor --train_data.original gtsrb "
-        "--train_data.backdoor wanet --model mlp "
-        "--val_data.backdoor backdoor --val_data.backdoor.original gtsrb "
-        "--val_data.backdoor.backdoor wanet "
-        "--train_config.num_workers=1",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    cfg = train_classifier_conf.DebugConfig(
+        train_data=data.BackdoorData(
+            original=data.GTSRB(), backdoor=data.WanetBackdoor()
+        ),
+        model=models.DebugMLPConfig(),
+        path=tmp_path / "wanet",
+        val_data={
+            "backdoor": data.BackdoorData(
+                original=data.GTSRB(), backdoor=data.WanetBackdoor()
+            )
+        },
+        train_config=DebugTrainConfig(num_workers=1),
     )
-    run(train_classifier.main, cfg)
+    train_classifier(cfg)
 
     assert (tmp_path / "wanet" / "config.yaml").is_file()
     assert (tmp_path / "wanet" / "checkpoints" / "last.ckpt").is_file()
     assert (tmp_path / "wanet" / "tensorboard").is_dir()
 
-    # Check that NoData is handled correctly
-    for name, data_cfg in cfg.val_data.items():
-        if name == "backdoor":
-            assert torch.allclose(
-                data_cfg.backdoor.control_grid,
-                cfg.train_data.backdoor.control_grid,
-            )
-        else:
-            with pytest.raises(NotImplementedError):
-                data_cfg.build()
+    # Checks mostly to make the type checker happy for the allclose assert
+    assert isinstance(cfg.val_data["backdoor"], data.BackdoorData)
+    assert isinstance(cfg.val_data["backdoor"].backdoor, data.WanetBackdoor)
+    assert isinstance(cfg.train_data, data.BackdoorData)
+    assert isinstance(cfg.train_data.backdoor, data.WanetBackdoor)
+    assert torch.allclose(
+        cfg.val_data["backdoor"].backdoor.control_grid,
+        cfg.train_data.backdoor.control_grid,
+    )
 
     # Check that from_run can load WanetBackdoor properly
-    train_detector_cfg = parse(
-        train_detector_conf.Config,
-        args=f"--debug_with_logging --dir.full {tmp_path / 'wanet-mahalanobis'} "
-        f"--task backdoor --task.backdoor wanet --task.path {tmp_path / 'wanet'} "
-        "--detector mahalanobis",
-        argument_generation_mode=ArgumentGenerationMode.NESTED,
+    train_detector_cfg = train_detector_conf.Config(
+        task=tasks.backdoor_detection.DebugBackdoorDetection(
+            path=tmp_path / "wanet", backdoor=data.WanetBackdoor()
+        ),
+        detector=detectors.DebugMahalanobisConfig(),
+        path=tmp_path / "wanet-mahalanobis",
     )
-    run(train_detector.main, train_detector_cfg)
+    train_detector(train_detector_cfg)
+    assert isinstance(train_detector_cfg.task, tasks.BackdoorDetection)
+    assert isinstance(train_detector_cfg.task.backdoor, data.WanetBackdoor)
     assert torch.allclose(
         train_detector_cfg.task.backdoor.control_grid,
         cfg.train_data.backdoor.control_grid,

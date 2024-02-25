@@ -29,55 +29,19 @@ Alternatively, if you're going to do development work on the library itself:
 Depending on what platform you're on, you may need to install Pytorch separately *before*
 installing `cupbearer`, in particular if you want to control CUDA version etc.
 
-## Running scripts
-You can run any script with the `-h` flag to see a list of options and possible values.
+## Running experiments
+We provide scripts in `cupbearer.scripts` for more easily running experiments.
+See [demo.ipynb](demo.ipynb) for a quick example of how to use them---this is likely
+also the best way to get an overview of how the components of `cupbearer` fit together.
 
-Let's look at an example, where we use a simple Mahalanobis distance-based detection
-method to detect backdoors. First, we need to train a base model on poisoned data:
-```bash
-python -m cupbearer.scripts.train_classifier \
-       --train_data backdoor --train_data.original mnist \
-       --train_data.backdoor corner --train_data.backdoor.p_backdoor 0.1 \
-       --model mlp --train_config.num_epochs 2 \
-       --dir.full logs/demo/classifier
-```
-This will train an MLP on MNIST, where the backdoor trigger is that the top left pixel
-is set to white (and the model is trained to classify images with this trigger as zeros).
-There are many more options like learning rate etc. you can set, but the defaults should
-work well enough.
-
-This script will have saved the final model to `logs/demo/classifier/checkpoints/last.ckpt`.
-We can now train a Mahalanobis-based detector on this model:
-```bash
-python -m cupbearer.scripts.train_detector \
-       --detector mahalanobis --task backdoor \
-       --task.backdoor corner --task.path logs/demo/classifier \
-       --dir.full logs/demo/mahalanobis
-```
-(The fact that we need to specify the backdoor trigger again is an artifact of how
-things are currently implemented and will likely be changed---the detector is only actually
-trained on clean images). `train_detector` loads the model from `task.path` and
-also uses that to figure out which dataset to use (in this case, MNIST again).
-
-If everything works, this should print out an AUCROC and AP of >0.99.
-(This detection task is very easy.) Inside the `logs/demo/mahalanobis` directory,
-there should also be a `histogram.pdf` plot that shows the distribution of anomaly
-scores. Backdoored images and clean images should be very well separated.
-
-We could also evaluate the detector on images with a *different* backdoor trigger
-(as an ablation to check that these are *not* flagged as anomalous). We can use
-the `eval_detector` script for this (which is also what `train_detector` uses
-internally to produce the evaluation results at the end):
-```bash
-python -m cupbearer.scripts.eval_detector \
-       --detector.path logs/demo/mahalanobis \
-       --task backdoor --task.backdoor noise --task.backdoor.std 0.1 \
-       --task.path logs/demo/classifier \
-       --dir.full logs/demo/mahalanobis_ablation
-```
-This will still have an AUCROC and AP greater than 0.5 because the noise is
-somewhat anomalous in terms of Mahalanobis distance, but it should be closer to 0.5
-than before.
+These "scripts" are Python functions and designed to be used from within Python,
+e.g. in a Jupyter notebook or via [submitit](https://github.com/facebookincubator/submitit/tree/main)
+if on Slurm. But of course you could also write a simple Python wrapper and then use
+them from the CLI. Their configuration interface is designed to be very general,
+which sometimes comes at the cost of being a bit verbose---we recommend writing helper
+functions for your specific use case on top of the general script interface.
+Of course you can also use the components of `cupbearer` directly without going through
+any of the scripts.
 
 ## Whence the name?
 Just like a cupbearer tastes wine to avoid poisoning the king, mechanistic anomaly
