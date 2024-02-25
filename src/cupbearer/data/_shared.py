@@ -21,8 +21,12 @@ class DatasetConfig(BaseConfig, ABC):
     max_size: Optional[int] = None
 
     @abstractproperty
-    def num_classes(self) -> int:  # type: ignore
+    def num_classes(self) -> int | None:  # type: ignore
         pass
+    
+    @property
+    def num_labels(self) -> int | None:
+        return None
 
     def get_transforms(self) -> list[Transform]:
         """Return a list of transforms that should be applied to this dataset.

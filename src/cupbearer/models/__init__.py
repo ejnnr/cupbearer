@@ -11,6 +11,9 @@ from cupbearer.utils.utils import BaseConfig, PathConfigMixin, mutable_field
 from .hooked_model import HookedModel
 from .models import CNN, MLP
 from .transformers import ClassifierTransformer
+from .transformers_hf import TamperingPredictionTransformer, load_transformer
+from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
 @dataclass(kw_only=True)
@@ -98,11 +101,31 @@ class TransformerConfig(ModelConfig):
             )
         return ClassifierTransformer(self.model, self.num_classes, device=self.device)
 
+@dataclass
+class TamperTransformerConfig(ModelConfig):
+    name: str
+    n_sensors: int = 3
+    sensor_token: str = " omit"
+
+    def build_model(self, input_format: DataFormat) -> TamperingPredictionTransformer:
+        if not isinstance(input_format, TextDataFormat):
+            raise ValueError(
+                f"Transformers only support text input, got {type(input_format)}"
+            )
+        transformer, tokenizer, emd_dim, max_len = self._load_transformer()
+        return TamperingPredictionTransformer(
+            model=transformer, tokenizer=tokenizer, embed_dim=emd_dim, 
+            max_length=max_len, n_sensors=self.n_sensors, sensor_token=self.sensor_token
+        )
+    def _load_transformer(self) -> tuple[PreTrainedModel, PreTrainedTokenizerBase, int, int]:
+       return load_transformer(self.name)
+
 
 MODELS = {
     "mlp": MLPConfig,
     "cnn": CNNConfig,
     "transformer": TransformerConfig,
+    "tamper_transformer": TamperTransformerConfig,
     "from_run": StoredModel,
 }
 

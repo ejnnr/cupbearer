@@ -8,6 +8,7 @@ from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdo
 from .data_format import DataFormat, TensorDataFormat, TextDataFormat  # noqa
 from .huggingface import IMDBDatasetConfig
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
+from .tampering import TamperingDataConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 from .transforms import (
     RandomCrop,
@@ -27,6 +28,7 @@ DATASETS = {
     "adversarial": AdversarialExampleConfig,
     "imdb": IMDBDatasetConfig,
     "toy_features": ToyFeaturesConfig,
+    "tampering": TamperingDataConfig,
     "none": NoData,
 }
 

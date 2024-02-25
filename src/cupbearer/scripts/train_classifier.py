@@ -39,8 +39,10 @@ def main(cfg: Config):
         model=cfg.model,
         input_format=input_format,
         num_classes=cfg.num_classes,
+        num_labels=cfg.num_labels,
         optim_cfg=cfg.train_config.optim,
         val_loader_names=list(val_loaders.keys()),
+        task=cfg.task
     )
 
     # TODO: once we do longer training runs we'll want to have multiple
