@@ -19,26 +19,25 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         # detector or load weights for inference, we'll need to copy in both cases.
         self.finetuned_model = copy.deepcopy(self.model)
 
-    @property
-    def should_train_on_clean_data(self) -> bool:
-        return True
-
     def train(
         self,
-        clean_dataset,
+        trusted_data,
+        untrusted_data,
         *,
         num_classes: int,
         train_config: TrainConfig,
     ):
+        if trusted_data is None:
+            raise ValueError("Finetuning detector requires trusted training data.")
         classifier = Classifier(
             self.finetuned_model,
             num_classes=num_classes,
-            optim_cfg=train_config,
+            optim_cfg=train_config.optimizer,
             save_hparams=False,
         )
 
         # Create a DataLoader for the clean dataset
-        clean_loader = train_config.get_dataloader(clean_dataset)
+        clean_loader = train_config.get_dataloader(trusted_data)
 
         # Finetune the model on the clean dataset
         trainer = train_config.get_trainer(path=self.save_path)

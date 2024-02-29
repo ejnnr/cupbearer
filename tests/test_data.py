@@ -3,9 +3,6 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
-
-# We shouldn't import TestDataMix directly because that will make pytest think
-# it's a test.
 from cupbearer import data
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms.functional import InterpolationMode
@@ -87,7 +84,7 @@ def anomalous_dataset():
 
 @pytest.fixture
 def mixed_dataset(clean_dataset, anomalous_dataset):
-    return data.TestDataMix(clean_dataset, anomalous_dataset)
+    return data.MixedData(clean_dataset, anomalous_dataset)
 
 
 @pytest.fixture
@@ -102,7 +99,7 @@ def anomalous_config():
 
 @pytest.fixture
 def mixed_config(clean_config, anomalous_config):
-    return data.TestDataConfig(clean_config, anomalous_config)
+    return data.MixedDataConfig(clean_config, anomalous_config)
 
 
 def test_len(mixed_dataset):
@@ -118,7 +115,7 @@ def test_contents(mixed_dataset):
 
 
 def test_uneven_weight(clean_dataset, anomalous_dataset):
-    mixed_data = data.TestDataMix(clean_dataset, anomalous_dataset, normal_weight=0.3)
+    mixed_data = data.MixedData(clean_dataset, anomalous_dataset, normal_weight=0.3)
     # The 7 anomalous datapoints should be 70% of the dataset, so total length should
     # be 10.
     assert len(mixed_data) == 10
@@ -149,7 +146,7 @@ def test_mixed_max_size(clean_config, anomalous_config):
     anomalous_config.max_size = 23
     # The actual mixed dataset we build now is the same as before: 10 datapoints,
     # 3 normal and 7 anomalous.
-    mixed_config = data.TestDataConfig(clean_config, anomalous_config)
+    mixed_config = data.MixedDataConfig(clean_config, anomalous_config)
     mixed_config.max_size = 10
     mixed_config.normal_weight = 0.3
     mixed_data = mixed_config.build()

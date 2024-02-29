@@ -8,9 +8,7 @@ from cupbearer.detectors.statistical.statistical import (
 
 
 class MahalanobisDetector(ActivationCovarianceBasedDetector):
-    @property
-    def should_train_on_clean_data(self) -> bool:
-        return True
+    use_trusted: bool = True
 
     def post_covariance_training(self, train_config: MahalanobisTrainConfig):
         self.inv_covariances = {

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 
 import torch
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from cupbearer.detectors.anomaly_detector import ActivationBasedDetector
@@ -20,7 +20,7 @@ class StatisticalTrainConfig(BaseConfig, ABC):
     # robust: bool = False  # TODO spectre uses
     # https://www.semanticscholar.org/paper/Being-Robust-(in-High-Dimensions)-Can-Be-Practical-Diakonikolas-Kamath/2a6de51d86f13e9eb7efa85491682dad0ccd65e8?utm_source=direct_link
 
-    def get_dataloader(self, dataset, train=True):
+    def get_dataloader(self, dataset: Dataset, train=True):
         if train:
             return DataLoader(
                 dataset,
@@ -39,7 +39,7 @@ class StatisticalTrainConfig(BaseConfig, ABC):
 
 @dataclass
 class DebugStatisticalTrainConfig(StatisticalTrainConfig):
-    max_batchs: int = 3
+    max_batches: int = 3
     batch_size: int = 5
     max_batch_size: int = 5
 
@@ -67,6 +67,8 @@ class DebugMahalanobisTrainConfig(DebugStatisticalTrainConfig, MahalanobisTrainC
 
 
 class StatisticalDetector(ActivationBasedDetector, ABC):
+    use_trusted: bool
+
     @abstractmethod
     def init_variables(self, activation_sizes: dict[str, torch.Size]):
         pass
@@ -77,7 +79,8 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
 
     def train(
         self,
-        dataset,
+        trusted_data,
+        untrusted_data,
         *,
         num_classes: int,
         train_config: StatisticalTrainConfig,
@@ -85,7 +88,20 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         # Common for statistical methods is that the training does not require
         # gradients, but instead computes summary statistics or similar
         with torch.inference_mode():
-            data_loader = train_config.get_dataloader(dataset)
+            if self.use_trusted:
+                if trusted_data is None:
+                    raise ValueError(
+                        f"{self.__class__.__name__} requires trusted training data."
+                    )
+                data = trusted_data
+            else:
+                if untrusted_data is None:
+                    raise ValueError(
+                        f"{self.__class__.__name__} requires untrusted training data."
+                    )
+                data = untrusted_data
+
+            data_loader = train_config.get_dataloader(data)
             example_batch = next(iter(data_loader))
             _, example_activations = self.get_activations(example_batch)
 
@@ -131,13 +147,15 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
 
     def train(
         self,
-        dataset,
+        trusted_data,
+        untrusted_data,
         *,
         num_classes: int,
         train_config: ActivationCovarianceTrainConfig,
     ):
         super().train(
-            dataset,
+            trusted_data=trusted_data,
+            untrusted_data=untrusted_data,
             num_classes=num_classes,
             train_config=train_config,
         )

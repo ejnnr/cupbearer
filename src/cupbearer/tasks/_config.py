@@ -1,150 +1,130 @@
-from abc import ABC, abstractmethod, abstractproperty
-from copy import deepcopy
+from abc import ABC
 from dataclasses import dataclass
 from typing import Optional
 
-from torch.utils.data import Dataset
-
 from cupbearer.data import (
     DatasetConfig,
-    RemoveMixLabelDataset,
-    TestDataConfig,
-    TestDataMix,
+    MixedDataConfig,
 )
 from cupbearer.models import ModelConfig
 from cupbearer.models.models import HookedModel
-from cupbearer.utils.utils import BaseConfig
 
 
 @dataclass(kw_only=True)
-class TaskConfigBase(BaseConfig, ABC):
-    @abstractmethod
-    def build_train_data(self) -> Dataset:
-        pass
+class TaskConfig(ABC):
+    # Proportion of clean data in untrusted datasets:
+    clean_test_weight: float = 0.5
+    clean_train_weight: float = 0.5
+    # Whether to allow using trusted and untrusted data for training:
+    allow_trusted: bool = True
+    allow_untrusted: bool = True
 
-    @abstractmethod
-    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
-        pass
-
-    @abstractmethod
-    def build_test_data(self) -> TestDataMix:
-        pass
-
-    @abstractproperty
-    def num_classes(self) -> int:  # type: ignore
-        pass
-
-
-@dataclass(kw_only=True)
-class TaskConfig(TaskConfigBase, ABC):
-    normal_weight: float = 0.5
-    normal_weight_when_training: float = 1.0
     max_train_size: Optional[int] = None
     max_test_size: Optional[int] = None
 
     def __post_init__(self):
         # We'll only actually instantiate these when we need them, in case relevant
         # attributes get changed after initialization.
-        self._train_data: Optional[DatasetConfig] = None
-        self._test_data: Optional[DatasetConfig] = None
+
+        # TODO: I think this is no longer necessary after the config refactor.
+        self._trusted_data: Optional[DatasetConfig] = None
+        self._untrusted_data: Optional[DatasetConfig] = None
+        self._test_data: Optional[MixedDataConfig] = None
         self._model: Optional[ModelConfig] = None
 
-    @abstractmethod
-    def _init_train_data(self):
-        pass
+    def _get_clean_data(self, train: bool) -> DatasetConfig:
+        raise NotImplementedError
 
-    def _get_normal_test_data(self) -> DatasetConfig:
-        # Default implementation: just use the training data, but the test split
-        # if possible. May be overridden, e.g. if normal test data is meant to be
-        # harder or otherwise out-of-distribution.
-        if not self._train_data:
-            self._init_train_data()
-            assert self._train_data is not None, "init_train_data must set _train_data"
-        normal = deepcopy(self._train_data)
-        if hasattr(normal, "train"):
-            # TODO: this is a bit of a hack, maybe there should be a nicer interface
-            # for this.
-            normal.train = False  # type: ignore
+    def _get_anomalous_data(self, train: bool) -> DatasetConfig:
+        raise NotImplementedError
 
-        return normal
+    def _get_model(self) -> ModelConfig:
+        raise NotImplementedError
 
-    @abstractmethod
-    def _get_anomalous_test_data(self) -> DatasetConfig:
-        pass
-
-    @abstractmethod
-    def _init_model(self):
-        pass
-
-    def build_train_data(self) -> Dataset:
-        if not self._train_data:
-            self._init_train_data()
-            assert self._train_data is not None, "init_train_data must set _train_data"
-            self._train_data.max_size = self.max_train_size
-
-        if self.normal_weight_when_training == 1.0:
-            return self._train_data.build()
-        else:
-            # E.g. SpectralDetector should use poisoned data when training
-            anomalous = self._get_anomalous_test_data()
-
-            # As TestDataMix adds a label for poisoned or not, we remove this here
-            train_data = RemoveMixLabelDataset(
-                TestDataConfig(
-                    normal=self._train_data,
-                    anomalous=anomalous,
-                    normal_weight=self.normal_weight_when_training,
-                ).build()
+    @property
+    def trusted_data(self) -> DatasetConfig:
+        """Clean data that may be used for training."""
+        if not self.allow_trusted:
+            raise ValueError(
+                "Using trusted training data is not allowed for this task."
             )
-        return train_data
+        if not self._trusted_data:
+            self._trusted_data = self._get_clean_data(train=True)
+            self._trusted_data.max_size = self.max_train_size
+        return self._trusted_data
+
+    @property
+    def untrusted_data(self) -> DatasetConfig:
+        """A mix of clean and anomalous data that may be used for training."""
+        if not self.allow_untrusted:
+            raise ValueError(
+                "Using untrusted training data is not allowed for this task."
+            )
+        if not self._untrusted_data:
+            anomalous_data = self._get_anomalous_data(train=True)
+            clean_data = self._get_clean_data(train=True)
+            self._untrusted_data = MixedDataConfig(
+                normal=clean_data,
+                anomalous=anomalous_data,
+                normal_weight=self.clean_train_weight,
+                max_size=self.max_train_size,
+                return_anomaly_labels=False,
+            )
+        return self._untrusted_data
 
     def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
         if not self._model:
-            self._init_model()
-            assert self._model is not None, "init_model must set _model"
+            self._model = self._get_model()
         return self._model.build_model(input_shape)
 
-    def build_test_data(self) -> TestDataMix:
-        normal = self._get_normal_test_data()
-        anomalous = self._get_anomalous_test_data()
-        self._test_data = TestDataConfig(
-            normal=normal,
-            anomalous=anomalous,
-            normal_weight=self.normal_weight,
-            max_size=self.max_test_size,
-        )
-        return self._test_data.build()
+    @property
+    def test_data(self) -> MixedDataConfig:
+        if not self._test_data:
+            normal = self._get_clean_data(train=False)
+            anomalous = self._get_anomalous_data(train=False)
+            self._test_data = MixedDataConfig(
+                normal=normal,
+                anomalous=anomalous,
+                normal_weight=self.clean_test_weight,
+                max_size=self.max_test_size,
+            )
+        return self._test_data
 
     @property
     def num_classes(self):
-        if not self._train_data:
-            self._init_train_data()
-            assert self._train_data is not None, "init_train_data must set _train_data"
-        return self._train_data.num_classes
+        try:
+            return self.trusted_data.num_classes
+        except ValueError:
+            return self.untrusted_data.num_classes
 
 
-@dataclass(kw_only=True)
+@dataclass
 class CustomTask(TaskConfig):
     """A fully customizable task config, where all datasets are specified directly."""
 
-    train_data: DatasetConfig
-    anomalous_data: DatasetConfig
-    normal_test_data: Optional[DatasetConfig] = None
+    clean_test_data: DatasetConfig
+    anomalous_test_data: DatasetConfig
     model: ModelConfig
+    clean_train_data: Optional[DatasetConfig] = None
+    anomalous_train_data: Optional[DatasetConfig] = None
 
-    def _init_train_data(self):
-        self._train_data = self.train_data
+    def __post_init__(self):
+        super(CustomTask, self).__post_init__()
+        self.allow_trusted = self.clean_train_data is not None
+        self.allow_untrusted = self.anomalous_train_data is not None
 
-    def _get_anomalous_test_data(self) -> DatasetConfig:
-        return self.anomalous_data
+    def _get_clean_data(self, train: bool) -> DatasetConfig:
+        # This is a bit of a hack because it might return `None`, but that only
+        # becomes important if illegal training data is used.
+        return self.clean_train_data if train else self.clean_test_data
 
-    def _get_normal_test_data(self) -> DatasetConfig:
-        if self.normal_test_data:
-            return self.normal_test_data
-        return super()._get_normal_test_data()
+    def _get_anomalous_data(self, train: bool) -> DatasetConfig:
+        # This is a bit of a hack because it might return `None`, but that only
+        # becomes important if illegal training data is used.
+        return self.anomalous_train_data if train else self.anomalous_test_data
 
-    def _init_model(self):
-        self._model = self.model
+    def _get_model(self) -> ModelConfig:
+        return self.model
 
 
 @dataclass(kw_only=True)

@@ -1,13 +1,13 @@
 from dataclasses import dataclass
 
 from cupbearer.detectors import DetectorConfig, StoredDetector
-from cupbearer.tasks import TaskConfigBase
+from cupbearer.tasks import TaskConfig
 from cupbearer.utils.scripts import ScriptConfig
 
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
-    task: TaskConfigBase
+    task: TaskConfig
     detector: DetectorConfig | None = None
     save_config: bool = False
     pbar: bool = False

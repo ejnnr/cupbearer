@@ -24,6 +24,10 @@ class DatasetConfig(BaseConfig, ABC):
     def num_classes(self) -> int:  # type: ignore
         pass
 
+    def get_test_split(self) -> "DatasetConfig":
+        # Not every dataset will define this
+        raise NotImplementedError
+
     def get_transforms(self) -> list[Transform]:
         """Return a list of transforms that should be applied to this dataset.
 
@@ -68,6 +72,9 @@ class TransformDataset(Dataset):
 class TrainDataFromRun(DatasetConfig):
     path: Path
 
+    def get_test_split(self) -> DatasetConfig:
+        return self.cfg.get_test_split()
+
     def __post_init__(self):
         self._cfg = None
 
@@ -95,16 +102,18 @@ class TrainDataFromRun(DatasetConfig):
         return transforms
 
 
-class TestDataMix(Dataset):
+class MixedData(Dataset):
     def __init__(
         self,
         normal: Dataset,
         anomalous: Dataset,
         normal_weight: float = 0.5,
+        return_anomaly_labels: bool = True,
     ):
         self.normal_data = normal
         self.anomalous_data = anomalous
         self.normal_weight = normal_weight
+        self.return_anomaly_labels = return_anomaly_labels
         self._length = min(
             int(len(normal) / normal_weight), int(len(anomalous) / (1 - normal_weight))
         )
@@ -116,23 +125,36 @@ class TestDataMix(Dataset):
 
     def __getitem__(self, index):
         if index < self.normal_len:
-            return self.normal_data[index], 0
+            if self.return_anomaly_labels:
+                return self.normal_data[index], 0
+            return self.normal_data[index]
         else:
-            return self.anomalous_data[index - self.normal_len], 1
+            if self.return_anomaly_labels:
+                return self.anomalous_data[index - self.normal_len], 1
+            return self.anomalous_data[index - self.normal_len]
 
 
 @dataclass
-class TestDataConfig(DatasetConfig):
+class MixedDataConfig(DatasetConfig):
     normal: DatasetConfig
     anomalous: DatasetConfig
     normal_weight: float = 0.5
+    return_anomaly_labels: bool = True
+
+    def get_test_split(self) -> "MixedDataConfig":
+        return MixedDataConfig(
+            normal=self.normal.get_test_split(),
+            anomalous=self.anomalous.get_test_split(),
+            normal_weight=self.normal_weight,
+            return_anomaly_labels=self.return_anomaly_labels,
+        )
 
     @property
     def num_classes(self):
         assert (n := self.normal.num_classes) == self.anomalous.num_classes
         return n
 
-    def build(self) -> TestDataMix:
+    def build(self) -> MixedData:
         # We need to override this method because max_size needs to be applied in a
         # different way: TestDataMix just has normal data first and then anomalous data,
         # if we just used a Subset with indices 1...n, we'd get an incorrect ratio.
@@ -145,22 +167,11 @@ class TestDataConfig(DatasetConfig):
             anomalous_size = self.max_size - normal_size
             assert anomalous_size <= len(anomalous)
             anomalous = Subset(anomalous, range(anomalous_size))
-        dataset = TestDataMix(normal, anomalous, self.normal_weight)
+        dataset = MixedData(
+            normal, anomalous, self.normal_weight, self.return_anomaly_labels
+        )
         # We don't want to return a TransformDataset here. Transforms should be applied
         # directly to the normal and anomalous data.
         if self.transforms:
             raise ValueError("Transforms are not supported for TestDataConfig.")
         return dataset
-
-
-class RemoveMixLabelDataset(Dataset):
-    """Help class to only return the first element of each item"""
-
-    def __init__(self, dataset: Dataset):
-        self._dataset = dataset
-
-    def __len__(self):
-        return len(self._dataset)
-
-    def __getitem__(self, index):
-        return self._dataset[index][0]

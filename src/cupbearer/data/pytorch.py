@@ -1,3 +1,4 @@
+import dataclasses
 from dataclasses import dataclass
 
 from torch.utils.data import Dataset
@@ -24,6 +25,14 @@ class PytorchConfig(DatasetConfig):
     train: bool = True
     transforms: dict[str, Transform] = mutable_field({"to_tensor": ToTensor()})
     default_augmentations: bool = True
+
+    def get_test_split(self) -> DatasetConfig:
+        if self.train:
+            # TODO: this will keep the augmentations around,
+            # which we probably don't want?
+            return dataclasses.replace(self, train=False)
+        else:
+            raise ValueError("This dataset is already a test split.")
 
     def __post_init__(self):
         super().__post_init__()

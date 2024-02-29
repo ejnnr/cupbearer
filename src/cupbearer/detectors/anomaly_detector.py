@@ -13,7 +13,7 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from cupbearer.data import TestDataMix
+from cupbearer.data import MixedData
 from cupbearer.models.models import HookedModel
 from cupbearer.utils import utils
 
@@ -33,18 +33,19 @@ class AnomalyDetector(ABC):
 
         self.trained = False
 
-    @property
     @abstractmethod
-    def should_train_on_clean_data(self) -> bool:
-        pass
+    def train(
+        self,
+        trusted_data: Dataset | None,
+        untrusted_data: Dataset | None,
+        *,
+        num_classes: int,
+        train_config: utils.BaseConfig,
+    ):
+        """Train the anomaly detector with the given datasets.
 
-    @property
-    def should_train_on_poisoned_data(self) -> bool:
-        return not self.should_train_on_clean_data
-
-    @abstractmethod
-    def train(self, dataset, *, num_classes: int, train_config: utils.BaseConfig):
-        """Train the anomaly detector with the given dataset as "normal" data."""
+        At least one of trusted_data or untrusted_data must be provided.
+        """
 
     @contextmanager
     def finetune(self, **kwargs):
@@ -91,15 +92,18 @@ class AnomalyDetector(ABC):
         self,
         # Don't need train_dataset here, but e.g. adversarial abstractions need it,
         # and in general there's no reason to deny detectors access to it during eval.
+        # TODO: I think we can/should remove this and require detectors to handle
+        # anything involving training data during training (now that they get access
+        # to untrusted data then).
         train_dataset: Dataset,
-        test_dataset: TestDataMix,
+        test_dataset: MixedData,
         histogram_percentile: float = 95,
         num_bins: int = 100,
         pbar: bool = False,
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
-        assert isinstance(test_dataset, TestDataMix), type(test_dataset)
+        assert isinstance(test_dataset, MixedData), type(test_dataset)
 
         test_loader = DataLoader(
             test_dataset,

@@ -1,9 +1,6 @@
-import warnings
-
 import pytest
 import torch
 from cupbearer import data, detectors, models, tasks
-from cupbearer.data import RemoveMixLabelDataset
 from cupbearer.scripts import (
     eval_classifier,
     train_classifier,
@@ -109,7 +106,7 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
         path=tmp_path,
     )
     train_detector(cfg)
-    assert (backdoor_classifier_path / "adv_examples.pt").is_file()
+    assert (backdoor_classifier_path / "adv_examples_train.pt").is_file()
     assert (backdoor_classifier_path / "adv_examples.pdf").is_file()
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
@@ -127,39 +124,18 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
         detectors.DebugQuantumEntropyConfig,
     ],
 )
-@pytest.mark.parametrize("train_on_clean", [False, True])
-def test_train_statistical_backdoor(
-    backdoor_classifier_path, tmp_path, detector_type, train_on_clean
-):
+def test_train_statistical_backdoor(backdoor_classifier_path, tmp_path, detector_type):
     cfg = train_detector_conf.Config(
         task=tasks.backdoor_detection.DebugBackdoorDetection(
             path=backdoor_classifier_path,
             backdoor=data.CornerPixelBackdoor(),
-            normal_weight_when_training=1.0 if train_on_clean else 0.9,
         ),
         detector=detector_type(),
         path=tmp_path,
     )
 
     train_detector(cfg)
-    # Check that data is mixed when it should be
-    assert train_on_clean ^ isinstance(
-        cfg.task.build_train_data(), RemoveMixLabelDataset
-    )
 
-    # Train detector
-    warning_message = (
-        r".*Detector of type \w+ is not meant to be trained \w+ poisoned samples[.].*"
-    )
-    if train_on_clean ^ (detector_type != detectors.DebugSpectralSignatureConfig):
-        # Should warn for incompatibility
-        with pytest.warns(match=warning_message):
-            train_detector(cfg)
-    else:
-        # Should not warn for incompatibility
-        with warnings.catch_warnings():
-            warnings.filterwarnings(action="error", message=warning_message)
-            train_detector(cfg)
     assert (tmp_path / "config.yaml").is_file()
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:

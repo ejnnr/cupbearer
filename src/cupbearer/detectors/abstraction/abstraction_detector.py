@@ -146,11 +146,14 @@ class AbstractionDetector(ActivationBasedDetector):
 
     def train(
         self,
-        dataset,
+        trusted_data,
+        untrusted_data,
         *,
         num_classes: int,
         train_config: TrainConfig,
     ):
+        if trusted_data is None:
+            raise ValueError("Abstraction detector requires trusted training data.")
         # Possibly we should store this as a submodule to save optimizers and continue
         # training later. But as long as we don't actually make use of that,
         # this is easiest.
@@ -160,7 +163,7 @@ class AbstractionDetector(ActivationBasedDetector):
             optim_cfg=train_config.optimizer,
         )
 
-        train_loader = train_config.get_dataloader(dataset)
+        train_loader = train_config.get_dataloader(trusted_data)
 
         # TODO: implement validation data
         # val_loaders = {

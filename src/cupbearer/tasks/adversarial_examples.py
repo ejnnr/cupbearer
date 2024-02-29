@@ -2,9 +2,8 @@ import math
 from dataclasses import dataclass
 from pathlib import Path
 
-from cupbearer.data._shared import TrainDataFromRun
-from cupbearer.data.adversarial import AdversarialExampleConfig
-from cupbearer.models import StoredModel
+from cupbearer.data import AdversarialExampleConfig, DatasetConfig, TrainDataFromRun
+from cupbearer.models import ModelConfig, StoredModel
 
 from ._config import DebugTaskConfig, TaskConfig
 
@@ -17,15 +16,18 @@ class AdversarialExampleTask(TaskConfig):
     steps: int = 40
     eps: float = 8 / 255
 
-    def _init_train_data(self):
-        self._train_data = TrainDataFromRun(path=self.path)
+    def _get_clean_data(self, train: bool) -> DatasetConfig:
+        if train:
+            return TrainDataFromRun(path=self.path)
+        else:
+            return TrainDataFromRun(path=self.path).get_test_split()
 
-    def _get_anomalous_test_data(self):
+    def _get_anomalous_data(self, train: bool) -> DatasetConfig:
         max_size = None
         if self.max_test_size:
             # This isn't strictly necessary, but it lets us avoid generating more
             # adversarial examples than needed.
-            max_size = math.ceil(self.max_test_size * (1 - self.normal_weight))
+            max_size = math.ceil(self.max_test_size * (1 - self.clean_test_weight))
         return AdversarialExampleConfig(
             path=self.path,
             max_size=max_size,
@@ -33,10 +35,11 @@ class AdversarialExampleTask(TaskConfig):
             success_threshold=self.success_threshold,
             steps=self.steps,
             eps=self.eps,
+            use_test_data=not train,
         )
 
-    def _init_model(self):
-        self._model = StoredModel(path=self.path)
+    def _get_model(self) -> ModelConfig:
+        return StoredModel(path=self.path)
 
 
 @dataclass(kw_only=True)

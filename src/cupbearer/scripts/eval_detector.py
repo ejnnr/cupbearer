@@ -6,8 +6,8 @@ from cupbearer.utils.scripts import script
 def main(cfg: Config):
     assert cfg.detector is not None  # make type checker happy
     # Init
-    train_data = cfg.task.build_train_data()
-    test_data = cfg.task.build_test_data()
+    train_data = cfg.task.trusted_data.build()
+    test_data = cfg.task.test_data.build()
     # train_data[0] is the first sample, which is (input, ...), so we need another [0]
     example_input = train_data[0][0]
     model = cfg.task.build_model(input_shape=example_input.shape)

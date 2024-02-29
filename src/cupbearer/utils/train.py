@@ -4,7 +4,7 @@ from typing import Optional
 
 import lightning as L
 from lightning.pytorch import callbacks, loggers
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.utils.optimizers import OptimizerConfig
 from cupbearer.utils.utils import BaseConfig
@@ -37,7 +37,7 @@ class TrainConfig(BaseConfig):
 
         return callback_list
 
-    def get_dataloader(self, dataset, train=True):
+    def get_dataloader(self, dataset: Dataset, train=True):
         if train:
             return DataLoader(
                 dataset,

@@ -51,7 +51,9 @@ class TestTrainedStatisticalDetectors:
         detector = Detector(model=model)
 
         detector.train(
-            dataset=dataset,
+            # Just make sure all detectors get the data they need:
+            trusted_data=dataset,
+            untrusted_data=dataset,
             num_classes=7,
             train_config=self.train_config,
         )

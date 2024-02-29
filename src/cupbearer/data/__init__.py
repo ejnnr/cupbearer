@@ -1,9 +1,8 @@
 # ruff: noqa: F401
 from ._shared import (
     DatasetConfig,
-    RemoveMixLabelDataset,
-    TestDataConfig,
-    TestDataMix,
+    MixedData,
+    MixedDataConfig,
     TrainDataFromRun,
 )
 from .adversarial import AdversarialExampleConfig

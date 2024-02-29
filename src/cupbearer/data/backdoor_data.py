@@ -12,6 +12,11 @@ class BackdoorData(DatasetConfig):
     original: DatasetConfig
     backdoor: Backdoor
 
+    def get_test_split(self) -> DatasetConfig:
+        return BackdoorData(
+            original=self.original.get_test_split(), backdoor=self.backdoor
+        )
+
     @property
     def num_classes(self):
         return self.original.num_classes

@@ -17,19 +17,27 @@ from . import DatasetConfig, TrainDataFromRun
 
 def make_adversarial_example(
     path: Path,
+    filename: str,
     batch_size: int = 128,
     eps: float = 8 / 255,
     max_examples: Optional[int] = None,
     success_threshold: float = 0.1,
     steps: int = 40,
+    use_test_data: bool = False,
 ):
-    save_path = path / "adv_examples.pt"
+    save_path = path / f"{filename}.pt"
     if os.path.exists(save_path):
         logger.info("Adversarial examples already exist, skipping attack")
         return
+    else:
+        logger.info(
+            "Adversarial examples not found, running attack with default settings"
+        )
 
     model_cfg = StoredModel(path=path)
     data_cfg = TrainDataFromRun(path=path)
+    if use_test_data:
+        data_cfg = data_cfg.get_test_split()
 
     dataset = data_cfg.build()
     if max_examples:
@@ -76,22 +84,24 @@ class AdversarialExampleConfig(DatasetConfig):
     success_threshold: float = 0.1
     steps: int = 40
     eps: float = 8 / 255
+    use_test_data: bool = False
 
     def _build(self) -> Dataset:
-        if not (self.path / "adv_examples").exists():
-            logger.info(
-                "Adversarial examples not found, running attack with default settings"
-            )
-            make_adversarial_example(
-                path=self.path,
-                batch_size=self.attack_batch_size,
-                eps=self.eps,
-                max_examples=self.max_size,
-                success_threshold=self.success_threshold,
-                steps=self.steps,
-            )
+        filename = f"adv_examples_{'test' if self.use_test_data else 'train'}"
+        make_adversarial_example(
+            path=self.path,
+            filename=filename,
+            batch_size=self.attack_batch_size,
+            eps=self.eps,
+            max_examples=self.max_size,
+            success_threshold=self.success_threshold,
+            steps=self.steps,
+            use_test_data=self.use_test_data,
+        )
 
-        return AdversarialExampleDataset(base_run=self.path, num_examples=self.max_size)
+        return AdversarialExampleDataset(
+            filepath=self.path / filename, num_examples=self.max_size
+        )
 
     @property
     def num_classes(self):
@@ -100,10 +110,8 @@ class AdversarialExampleConfig(DatasetConfig):
 
 
 class AdversarialExampleDataset(Dataset):
-    def __init__(self, base_run: Path, num_examples=None):
-        self.base_run = base_run
-
-        data = utils.load(base_run / "adv_examples")
+    def __init__(self, filepath: Path, num_examples=None):
+        data = utils.load(filepath)
         assert isinstance(data, dict)
         self.examples = data["adv_inputs"]
         self.labels = data["labels"]
