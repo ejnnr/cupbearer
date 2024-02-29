@@ -56,9 +56,7 @@ def test_eval_classifier(backdoor_classifier_path):
 @pytest.mark.slow
 def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
     cfg = train_detector_conf.Config(
-        task=tasks.BackdoorDetection(
-            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
-        ),
+        task=tasks.BackdoorDetection(path=backdoor_classifier_path),
         detector=detectors.AbstractionDetectorConfig(train=DebugTrainConfig()),
         path=tmp_path,
     )
@@ -75,9 +73,7 @@ def test_train_abstraction_corner_backdoor(backdoor_classifier_path, tmp_path):
 @pytest.mark.slow
 def test_train_autoencoder_corner_backdoor(backdoor_classifier_path, tmp_path):
     cfg = train_detector_conf.Config(
-        task=tasks.BackdoorDetection(
-            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
-        ),
+        task=tasks.BackdoorDetection(path=backdoor_classifier_path),
         detector=detectors.AbstractionDetectorConfig(
             train=DebugTrainConfig(),
             abstraction=detectors.abstraction.AutoencoderAbstractionConfig(),
@@ -127,8 +123,9 @@ def test_train_mahalanobis_advex(backdoor_classifier_path, tmp_path):
 def test_train_statistical_backdoor(backdoor_classifier_path, tmp_path, detector_type):
     cfg = train_detector_conf.Config(
         task=tasks.backdoor_detection.DebugBackdoorDetection(
+            # Need some untrusted data for SpectralSignatureConfig
             path=backdoor_classifier_path,
-            backdoor=data.CornerPixelBackdoor(),
+            trusted_fraction=0.5,
         ),
         detector=detector_type(),
         path=tmp_path,
@@ -146,9 +143,7 @@ def test_train_statistical_backdoor(backdoor_classifier_path, tmp_path, detector
 @pytest.mark.slow
 def test_finetuning_detector(backdoor_classifier_path, tmp_path):
     cfg = train_detector_conf.Config(
-        task=tasks.BackdoorDetection(
-            path=backdoor_classifier_path, backdoor=data.CornerPixelBackdoor()
-        ),
+        task=tasks.BackdoorDetection(path=backdoor_classifier_path),
         detector=detectors.finetuning.FinetuningConfig(train=DebugTrainConfig()),
         path=tmp_path,
     )
@@ -195,16 +190,14 @@ def test_wanet(tmp_path):
 
     # Check that from_run can load WanetBackdoor properly
     train_detector_cfg = train_detector_conf.Config(
-        task=tasks.backdoor_detection.DebugBackdoorDetection(
-            path=tmp_path / "wanet", backdoor=data.WanetBackdoor()
-        ),
+        task=tasks.backdoor_detection.DebugBackdoorDetection(path=tmp_path / "wanet"),
         detector=detectors.DebugMahalanobisConfig(),
         path=tmp_path / "wanet-mahalanobis",
     )
     train_detector(train_detector_cfg)
     assert isinstance(train_detector_cfg.task, tasks.BackdoorDetection)
-    assert isinstance(train_detector_cfg.task.backdoor, data.WanetBackdoor)
+    assert isinstance(train_detector_cfg.task._backdoor, data.WanetBackdoor)
     assert torch.allclose(
-        train_detector_cfg.task.backdoor.control_grid,
+        train_detector_cfg.task._backdoor.control_grid,
         cfg.train_data.backdoor.control_grid,
     )

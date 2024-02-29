@@ -86,6 +86,7 @@ class SubsetConfig(DatasetConfig):
         end = int(self.end_fraction * len(full))
         return Subset(full, range(start, end))
 
+    @property
     def num_classes(self) -> int:  # type: ignore
         return self.full_dataset.num_classes
 
