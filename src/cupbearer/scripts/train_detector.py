@@ -10,8 +10,12 @@ def main(cfg: Config):
 
     if cfg.task.allow_trusted:
         trusted_data = cfg.task.trusted_data.build()
+        if len(trusted_data) == 0:
+            trusted_data = None
     if cfg.task.allow_untrusted:
         untrusted_data = cfg.task.untrusted_data.build()
+        if len(untrusted_data) == 0:
+            untrusted_data = None
 
     example_data = trusted_data or untrusted_data
     if example_data is None:

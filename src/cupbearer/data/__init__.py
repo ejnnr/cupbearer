@@ -3,7 +3,9 @@ from ._shared import (
     DatasetConfig,
     MixedData,
     MixedDataConfig,
+    SubsetConfig,
     TrainDataFromRun,
+    split_dataset_cfg,
 )
 from .adversarial import AdversarialExampleConfig
 from .backdoor_data import BackdoorData

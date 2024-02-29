@@ -53,6 +53,70 @@ class DatasetConfig(BaseConfig, ABC):
         raise NotImplementedError
 
 
+@dataclass
+class SubsetConfig(DatasetConfig):
+    full_dataset: DatasetConfig
+    start_fraction: float = 0.0
+    end_fraction: float = 1.0
+
+    def __post_init__(self):
+        super().__post_init__()
+        if self.max_size:
+            raise ValueError(
+                "max_size should be set on the full dataset, not the subset."
+            )
+        if self.start_fraction > self.end_fraction:
+            raise ValueError(
+                f"{self.start_fraction=} must be less than or equal "
+                f"to {self.end_fraction=}."
+            )
+        if self.start_fraction < 0 or self.end_fraction > 1:
+            raise ValueError(
+                "Fractions must be between 0 and 1, "
+                f"got {self.start_fraction} and {self.end_fraction}."
+            )
+        if self.transforms:
+            raise ValueError(
+                "Transforms should be applied to the full dataset, not the subset."
+            )
+
+    def _build(self) -> Dataset:
+        full = self.full_dataset.build()
+        start = int(self.start_fraction * len(full))
+        end = int(self.end_fraction * len(full))
+        return Subset(full, range(start, end))
+
+    def num_classes(self) -> int:  # type: ignore
+        return self.full_dataset.num_classes
+
+    def get_test_split(self) -> "DatasetConfig":
+        return SubsetConfig(
+            full_dataset=self.full_dataset.get_test_split(),
+            start_fraction=self.start_fraction,
+            end_fraction=self.end_fraction,
+        )
+
+    # Mustn't inherit get_transforms() from full_dataset, they're already applied
+    # to the full dataset on build.
+
+
+def split_dataset_cfg(cfg: DatasetConfig, *fractions: float) -> list[SubsetConfig]:
+    if not fractions:
+        raise ValueError("At least one fraction must be provided.")
+    if not all(0 <= f <= 1 for f in fractions):
+        raise ValueError("Fractions must be between 0 and 1.")
+    if not sum(fractions) == 1:
+        fractions = fractions + (1 - sum(fractions),)
+
+    subsets = []
+    current_start = 0.0
+    for fraction in fractions:
+        subsets.append(SubsetConfig(cfg, current_start, current_start + fraction))
+        current_start += fraction
+    assert current_start == 1.0
+    return subsets
+
+
 class TransformDataset(Dataset):
     """Dataset that applies a transform to another dataset."""
 
@@ -162,10 +226,10 @@ class MixedDataConfig(DatasetConfig):
         anomalous = self.anomalous.build()
         if self.max_size:
             normal_size = int(self.max_size * self.normal_weight)
-            assert normal_size <= len(normal)
+            normal_size = min(len(normal), normal_size)
             normal = Subset(normal, range(normal_size))
             anomalous_size = self.max_size - normal_size
-            assert anomalous_size <= len(anomalous)
+            anomalous_size = min(len(anomalous), anomalous_size)
             anomalous = Subset(anomalous, range(anomalous_size))
         dataset = MixedData(
             normal, anomalous, self.normal_weight, self.return_anomaly_labels
