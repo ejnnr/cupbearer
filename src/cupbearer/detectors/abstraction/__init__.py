@@ -5,7 +5,6 @@ from cupbearer.models import HookedModel
 from cupbearer.utils.train import TrainConfig
 from cupbearer.utils.utils import BaseConfig
 
-from ..config import DetectorConfig
 from .abstraction import (
     Abstraction,
     AutoencoderAbstraction,
@@ -45,7 +44,7 @@ class AutoencoderAbstractionConfig(AbstractionConfig):
 
 
 @dataclass
-class AbstractionDetectorConfig(DetectorConfig):
+class AbstractionDetectorConfig:
     abstraction: AbstractionConfig = field(
         default_factory=LocallyConsistentAbstractionConfig
     )

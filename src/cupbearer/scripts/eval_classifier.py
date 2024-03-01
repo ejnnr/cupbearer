@@ -1,32 +1,34 @@
 import json
 
 import lightning as L
-from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import script
 from loguru import logger
 from torch.utils.data import DataLoader
+
+from cupbearer.data import BackdoorDataset
+from cupbearer.scripts._shared import Classifier
+from cupbearer.utils.scripts import script
 
 from .conf.eval_classifier_conf import Config
 
 
 @script
 def main(cfg: Config):
-    assert cfg.data is not None  # make type checker happy
     assert cfg.path is not None  # make type checker happy
 
-    for trafo in cfg.data.get_transforms():
-        logger.debug(f"Loading transform: {trafo}")
-        trafo.load(cfg.path)
+    if isinstance(cfg.data, BackdoorDataset):
+        logger.debug(f"Loading transform: {cfg.data.backdoor}")
+        cfg.data.backdoor.load(cfg.path)
 
-    dataset = cfg.data.build()
     dataloader = DataLoader(
-        dataset,
+        cfg.data,
         batch_size=cfg.max_batch_size,
         shuffle=False,
     )
 
     classifier = Classifier.load_from_checkpoint(
-        cfg.path / "checkpoints" / "last.ckpt", test_loader_names=["test"]
+        cfg.path / "checkpoints" / "last.ckpt",
+        model=cfg.model,
+        test_loader_names=["test"],
     )
     trainer = L.Trainer(
         logger=False,

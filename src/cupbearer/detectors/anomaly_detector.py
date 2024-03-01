@@ -21,16 +21,24 @@ from cupbearer.utils import utils
 class AnomalyDetector(ABC):
     def __init__(
         self,
-        model: HookedModel,
         max_batch_size: int = 4096,
         save_path: Optional[Path | str] = None,
     ):
-        self.model = model
         # For storing the original detector variables when finetuning
         self._original_variables = None
         self.max_batch_size = max_batch_size
         self.save_path = None if save_path is None else Path(save_path)
 
+        self.trained = False
+
+    def set_model(self, model: HookedModel):
+        # This is separate from __init__ because we want to be able to set the model
+        # automatically based on the task, instead of letting the user pass it in.
+        # On the other hand, it's separate from train() because we might need to set
+        # the model even when just using the detector for inference.
+        #
+        # Subclasses can implement more complex logic here.
+        self.model = model
         self.trained = False
 
     @abstractmethod
@@ -42,7 +50,7 @@ class AnomalyDetector(ABC):
         num_classes: int,
         train_config: utils.BaseConfig,
     ):
-        """Train the anomaly detector with the given datasets.
+        """Train the anomaly detector with the given datasets on the given model.
 
         At least one of trusted_data or untrusted_data must be provided.
         """
@@ -153,6 +161,8 @@ class AnomalyDetector(ABC):
         if not self.save_path:
             return
 
+        self.save_path.mkdir(parents=True, exist_ok=True)
+
         # Everything from here is just saving metrics and creating figures
         # (which we skip if they aren't going to be saved anyway).
         with open(self.save_path / "eval.json", "w") as f:
@@ -223,25 +233,35 @@ class AnomalyDetector(ABC):
         self._set_trained_variables(utils.load(path))
 
 
+def default_activation_name_func(model):
+    return model.default_names
+
+
 class ActivationBasedDetector(AnomalyDetector):
     """AnomalyDetector using activations."""
 
     def __init__(
         self,
-        model: HookedModel,
-        activation_name_func: Callable[[HookedModel], Collection[str]] | None = None,
+        activation_name_func: str
+        | Callable[[HookedModel], Collection[str]]
+        | None = None,
         max_batch_size: int = 4096,
         save_path: Path | str | None = None,
     ):
-        super().__init__(
-            model=model, max_batch_size=max_batch_size, save_path=save_path
-        )
+        super().__init__(max_batch_size=max_batch_size, save_path=save_path)
+
         if activation_name_func is None:
+            activation_name_func = default_activation_name_func
+        elif isinstance(activation_name_func, str):
+            activation_name_func = utils.get_object(activation_name_func)
 
-            def activation_name_func(model):
-                return model.default_names
+        assert callable(activation_name_func)  # make type checker happy
 
-        self.activation_names = activation_name_func(model)
+        self.activation_name_func = activation_name_func
+
+    def set_model(self, model: HookedModel):
+        super().set_model(model)
+        self.activation_names = self.activation_name_func(model)
 
     def get_activations(self, batch):
         inputs = utils.inputs_from_batch(batch)

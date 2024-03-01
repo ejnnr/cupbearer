@@ -2,43 +2,29 @@ import lightning as L
 import torch
 from torchmetrics.classification import Accuracy
 
-from cupbearer.models import HookedModel, ModelConfig
+from cupbearer.models import HookedModel
 from cupbearer.utils.optimizers import OptimizerConfig
 
 
 class Classifier(L.LightningModule):
     def __init__(
         self,
-        model: ModelConfig | HookedModel,
+        model: HookedModel,
         num_classes: int,
         optim_cfg: OptimizerConfig,
-        input_shape: tuple[int, ...] | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
     ):
         super().__init__()
-        if isinstance(model, HookedModel) and save_hparams:
-            raise ValueError(
-                "Cannot save hyperparameters when model is already instantiated. "
-                "Either pass a ModelConfig or set save_hparams=False."
-            )
         if save_hparams:
-            self.save_hyperparameters()
+            self.save_hyperparameters(ignore=["model"])
         if val_loader_names is None:
             val_loader_names = []
         if test_loader_names is None:
             test_loader_names = []
 
-        if isinstance(model, HookedModel):
-            self.model = model
-        elif input_shape is None:
-            raise ValueError(
-                "Must provide input_shape when passing a ModelConfig "
-                "instead of an instantiated model."
-            )
-        else:
-            self.model = model.build_model(input_shape=input_shape)
+        self.model = model
         self.optim_cfg = optim_cfg
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names

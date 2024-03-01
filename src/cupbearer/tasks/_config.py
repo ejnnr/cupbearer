@@ -1,216 +1,95 @@
-from abc import ABC, abstractmethod
-from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional
+from typing import Callable, Optional
 
-from cupbearer.data import (
-    DatasetConfig,
-    MixedDataConfig,
-    split_dataset_cfg,
-)
-from cupbearer.models import ModelConfig
+from torch.utils.data import Dataset, random_split
+
+from cupbearer.data import MixedData
 from cupbearer.models.models import HookedModel
 
 
 @dataclass(kw_only=True)
-class TaskConfig(ABC):
-    # Proportion of clean data in untrusted datasets:
-    clean_test_weight: float = 0.5
-    clean_train_weight: float = 0.5
-    # Whether to allow using trusted and untrusted data for training:
-    allow_trusted: bool = True
-    allow_untrusted: bool = True
+class Task:
+    trusted_data: Dataset
+    untrusted_train_data: Optional[MixedData] = None
+    test_data: MixedData
+    model: HookedModel
 
-    max_train_size: Optional[int] = None
-    max_test_size: Optional[int] = None
-
-    def __post_init__(self):
-        # We'll only actually instantiate these when we need them, in case relevant
-        # attributes get changed after initialization.
-
-        # TODO: I think this is no longer necessary after the config refactor.
-        self._trusted_data: Optional[DatasetConfig] = None
-        self._untrusted_data: Optional[DatasetConfig] = None
-        self._test_data: Optional[MixedDataConfig] = None
-        self._model: Optional[ModelConfig] = None
-
-    def _get_trusted_data(self) -> DatasetConfig:
-        raise NotImplementedError
-
-    def _get_clean_untrusted_data(self) -> DatasetConfig:
-        raise NotImplementedError
-
-    def _get_anomalous_data(self) -> DatasetConfig:
-        raise NotImplementedError
-
-    # The following two methods don't need to be implemented, the task will use
-    # get_test_split() on the untrusted data by default.
-    def _get_clean_test_data(self) -> DatasetConfig:
-        raise NotImplementedError
-
-    def _get_anomalous_test_data(self) -> DatasetConfig:
-        raise NotImplementedError
-
-    def _get_model(self) -> ModelConfig:
-        raise NotImplementedError
-
-    @property
-    def trusted_data(self) -> DatasetConfig:
-        """Clean data that may be used for training."""
-        if not self.allow_trusted:
-            raise ValueError(
-                "Using trusted training data is not allowed for this task."
-            )
-        if not self._trusted_data:
-            self._trusted_data = deepcopy(self._get_trusted_data())
-            self._trusted_data.max_size = self.max_train_size
-        return self._trusted_data
-
-    @property
-    def untrusted_data(self) -> DatasetConfig:
-        """A mix of clean and anomalous data that may be used for training."""
-        if not self.allow_untrusted:
-            raise ValueError(
-                "Using untrusted training data is not allowed for this task."
-            )
-        if not self._untrusted_data:
-            anomalous_data = self._get_anomalous_data()
-            clean_data = self._get_clean_untrusted_data()
-            self._untrusted_data = MixedDataConfig(
-                normal=clean_data,
+    @classmethod
+    def from_separate_data(
+        cls,
+        model: HookedModel,
+        trusted_data: Dataset,
+        clean_test_data: Dataset,
+        anomalous_test_data: Dataset,
+        clean_untrusted_data: Optional[Dataset] = None,
+        anomalous_data: Optional[Dataset] = None,
+        clean_train_weight: Optional[float] = 0.5,
+        clean_test_weight: Optional[float] = 0.5,
+    ):
+        untrusted_train_data = None
+        if clean_untrusted_data and anomalous_data:
+            untrusted_train_data = MixedData(
+                normal=clean_untrusted_data,
                 anomalous=anomalous_data,
-                normal_weight=self.clean_train_weight,
-                max_size=self.max_train_size,
+                normal_weight=clean_train_weight,
                 return_anomaly_labels=False,
             )
-        return self._untrusted_data
 
-    def build_model(self, input_shape: list[int] | tuple[int]) -> HookedModel:
-        if not self._model:
-            self._model = self._get_model()
-        return self._model.build_model(input_shape)
+        test_data = MixedData(
+            normal=clean_test_data,
+            anomalous=anomalous_test_data,
+            normal_weight=clean_test_weight,
+        )
+        return Task(
+            trusted_data=trusted_data,
+            untrusted_train_data=untrusted_train_data,
+            test_data=test_data,
+            model=model,
+        )
 
-    @property
-    def test_data(self) -> MixedDataConfig:
-        if not self._test_data:
-            try:
-                anomalous_data = self._get_anomalous_test_data()
-                clean_data = self._get_clean_test_data()
-            except NotImplementedError:
-                anomalous_data = self._get_anomalous_data().get_test_split()
-                clean_data = self._get_clean_untrusted_data().get_test_split()
-            self._test_data = MixedDataConfig(
-                normal=clean_data,
-                anomalous=anomalous_data,
-                normal_weight=self.clean_test_weight,
-                max_size=self.max_test_size,
+    @classmethod
+    def from_base_data(
+        cls,
+        model: HookedModel,
+        train_data: Dataset,
+        test_data: Dataset,
+        anomaly_func: Callable[[Dataset, bool], Dataset],
+        clean_untrusted_func: Optional[Callable[[Dataset], Dataset]] = None,
+        trusted_fraction: float = 1.0,
+        clean_train_weight: float = 0.5,
+        clean_test_weight: float = 0.5,
+    ):
+        if trusted_fraction == 1.0:
+            trusted_data = train_data
+            clean_untrusted_data = anomalous_data = None
+        else:
+            untrusted_fraction = 1 - trusted_fraction
+            train_fractions = (
+                trusted_fraction,
+                untrusted_fraction * clean_train_weight,
+                untrusted_fraction * (1 - clean_train_weight),
             )
-        return self._test_data
+            trusted_data, clean_untrusted_data, anomalous_data = random_split(
+                train_data, train_fractions
+            )
 
-    @property
-    def num_classes(self):
-        try:
-            return self.trusted_data.num_classes
-        except ValueError:
-            return self.untrusted_data.num_classes
+            if clean_untrusted_func:
+                clean_untrusted_data = clean_untrusted_func(clean_untrusted_data)
+            # Second argument to anomaly_func is whether this is training data
+            anomalous_data = anomaly_func(anomalous_data, True)
 
+        test_fractions = (clean_test_weight, 1 - clean_test_weight)
+        clean_test_data, anomalous_test_data = random_split(test_data, test_fractions)
 
-@dataclass
-class FuzzedTask(TaskConfig):
-    """A task where the anomalous inputs are some modified version of clean ones."""
+        if clean_untrusted_func:
+            clean_test_data = clean_untrusted_func(clean_test_data)
+        anomalous_test_data = anomaly_func(anomalous_test_data, False)
 
-    trusted_fraction: float = 1.0
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        # First we get the base (unmodified) data and its test split.
-        train_data = self._get_base_data()
-        test_data = train_data.get_test_split()
-
-        # We split the training data up into three parts:
-        # 1. A `trusted_fraction` part will be used as trusted data.
-        # 2. Out of the remaining part, a `clean_untrusted_fraction` part will be used
-        #    as clean untrusted data.
-        # 3. The rest will be used as anomalous training data.
-        (
-            self._trusted_data,
-            self._clean_untrusted_data,
-            _anomalous_base,
-        ) = split_dataset_cfg(
-            train_data,
-            self.trusted_fraction,
-            # Using clean_train_weight here means we'll end up using all our data,
-            # since this is also what's used later in the MixedDataConfig.
-            (1 - self.trusted_fraction) * self.clean_train_weight,
-            (1 - self.trusted_fraction) * (1 - self.clean_train_weight),
+        return Task.from_separate_data(
+            model=model,
+            trusted_data=trusted_data,
+            clean_untrusted_data=clean_untrusted_data,
+            anomalous_data=anomalous_data,
+            clean_test_data=clean_test_data,
+            anomalous_test_data=anomalous_test_data,
         )
-
-        # Similarly, we plit up the test data, except there is no trusted subset.
-        self._clean_test_data, _anomalous_test_base = split_dataset_cfg(
-            test_data,
-            self.clean_test_weight,
-        )
-
-        self._anomalous_data = self.fuzz(_anomalous_base)
-        self._anomalous_test_data = self.fuzz(_anomalous_test_base)
-
-    @abstractmethod
-    def fuzz(self, data: DatasetConfig) -> DatasetConfig:
-        pass
-
-    @abstractmethod
-    def _get_base_data(self) -> DatasetConfig:
-        pass
-
-    def _get_trusted_data(self) -> DatasetConfig:
-        return self._trusted_data
-
-    def _get_clean_untrusted_data(self) -> DatasetConfig:
-        return self._clean_untrusted_data
-
-    def _get_anomalous_data(self) -> DatasetConfig:
-        return self._anomalous_data
-
-    def _get_clean_test_data(self) -> DatasetConfig:
-        return self._clean_test_data
-
-    def _get_anomalous_test_data(self) -> DatasetConfig:
-        return self._anomalous_test_data
-
-
-@dataclass(kw_only=True)
-class CustomTask(TaskConfig):
-    """A fully customizable task config, where all datasets are specified directly."""
-
-    trusted_data: DatasetConfig
-    clean_untrusted_data: DatasetConfig
-    anomalous_data: DatasetConfig
-    model: ModelConfig
-
-    def _get_clean_untrusted_data(self) -> DatasetConfig:
-        return self.clean_untrusted_data
-
-    def _get_trusted_data(self) -> DatasetConfig:
-        return self.trusted_data
-
-    def _get_anomalous_data(self) -> DatasetConfig:
-        return self.anomalous_data
-
-    def _get_model(self) -> ModelConfig:
-        return self.model
-
-
-@dataclass(kw_only=True)
-class DebugTaskConfig(TaskConfig):
-    """Debug configs for specific tasks can inherit from this for convenience.
-
-    Note that children should inherit this first, to make sure MRO picks up on
-    the overriden defaults below!
-    """
-
-    # Needs to be at least two because otherwise Mahalanobis distance scores are
-    # NaN.
-    max_train_size: int = 2
-    # Needs to be at least two so it can contain both normal and anomalous data.
-    max_test_size: int = 2

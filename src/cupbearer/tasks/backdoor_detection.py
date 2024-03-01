@@ -1,41 +1,38 @@
-from dataclasses import dataclass
-from pathlib import Path
+from torch.utils.data import Dataset
 
-from cupbearer.data import DatasetConfig
-from cupbearer.data.backdoor_data import BackdoorData
-from cupbearer.models import ModelConfig, StoredModel
-from cupbearer.utils.scripts import load_config
+from cupbearer.data import Backdoor, BackdoorDataset
+from cupbearer.models import HookedModel
 
-from ._config import DebugTaskConfig, FuzzedTask
+from ._config import Task
 
 
-@dataclass(kw_only=True)
-class BackdoorDetection(FuzzedTask):
-    path: Path
-    no_load: bool = False
+def backdoor_detection(
+    model: HookedModel,
+    train_data: Dataset,
+    test_data: Dataset,
+    backdoor: Backdoor,
+    trusted_fraction: float = 1.0,
+    clean_train_weight: float = 0.5,
+    clean_test_weight: float = 0.5,
+):
+    assert backdoor.p_backdoor == 1.0, (
+        "Your anomalous data is not pure backdoor data, "
+        "this is probably unintentional."
+    )
 
-    def __post_init__(self):
-        backdoor_data = load_config(self.path, "train_data", BackdoorData)
-        self._original = backdoor_data.original
-        self._backdoor = backdoor_data.backdoor
-        self._backdoor.p_backdoor = 1.0
+    # TODO: for WaNet, we currently expect the user to load the control grid.
+    # (Otherwise we'd have to always take in a path here, and also when working
+    # in a notebook it might just be easier to pass in the existing backdoor object.)
+    # But we should somehow check somewhere that it's loaded to avoid silent errors.
 
-        if not self.no_load:
-            self._backdoor.load(self.path)
-
-        # Call this only now that _original and _backdoor are set.
-        super().__post_init__()
-
-    def _get_base_data(self) -> DatasetConfig:
-        return self._original
-
-    def fuzz(self, data: DatasetConfig) -> DatasetConfig:
-        return BackdoorData(original=data, backdoor=self._backdoor)
-
-    def _get_model(self) -> ModelConfig:
-        return StoredModel(path=self.path)
-
-
-@dataclass
-class DebugBackdoorDetection(DebugTaskConfig, BackdoorDetection):
-    pass
+    return Task.from_base_data(
+        model=model,
+        train_data=train_data,
+        test_data=test_data,
+        anomaly_func=lambda dataset, _: BackdoorDataset(
+            original=dataset, backdoor=backdoor
+        ),
+        trusted_fraction=trusted_fraction,
+        clean_train_weight=clean_train_weight,
+        clean_test_weight=clean_test_weight,
+    )

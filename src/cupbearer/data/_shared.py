@@ -1,13 +1,11 @@
 from abc import ABC, abstractproperty
 from dataclasses import dataclass, field
-from pathlib import Path
 from typing import Optional
 
 from torch.utils.data import Dataset, Subset
 from torchvision.transforms import Compose
 
 from cupbearer.data.transforms import Transform
-from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig
 
 
@@ -101,6 +99,27 @@ class SubsetConfig(DatasetConfig):
     # to the full dataset on build.
 
 
+# def split_dataset(dataset: Dataset, *fractions: float) -> list[Subset]:
+#     if not fractions:
+#         raise ValueError("At least one fraction must be provided.")
+#     if not all(0 <= f <= 1 for f in fractions):
+#         raise ValueError("Fractions must be between 0 and 1.")
+#     if not sum(fractions) == 1:
+#         fractions = fractions + (1 - sum(fractions),)
+
+#     total = len(dataset)
+
+#     markers = [int(total * fraction) for fraction in fractions]
+
+#     subsets = []
+#     current_start = 0
+#     for marker in markers:
+#         subsets.append(Subset(dataset, range(current_start, current_start + marker)))
+#         current_start += marker
+#     assert current_start == total
+#     return subsets
+
+
 def split_dataset_cfg(cfg: DatasetConfig, *fractions: float) -> list[SubsetConfig]:
     if not fractions:
         raise ValueError("At least one fraction must be provided.")
@@ -133,57 +152,29 @@ class TransformDataset(Dataset):
         return self.transform(sample)
 
 
-@dataclass
-class TrainDataFromRun(DatasetConfig):
-    path: Path
-
-    def get_test_split(self) -> DatasetConfig:
-        return self.cfg.get_test_split()
-
-    def __post_init__(self):
-        self._cfg = None
-
-    @property
-    def cfg(self):
-        if self._cfg is None:
-            # It's important we cache this, not mainly for performance reasons,
-            # but because otherwise we'd get different instances every time.
-            # Mostly that would be fine, but e.g. the Wanet backdoor transform
-            # actually has state not captured by its fields
-            # (it's not a "real" dataclass)
-            self._cfg = load_config(self.path, "train_data", DatasetConfig)
-
-        return self._cfg
-
-    @property
-    def num_classes(self):
-        return self.cfg.num_classes
-
-    def _build(self) -> Dataset:
-        return self.cfg._build()
-
-    def get_transforms(self) -> list[Transform]:
-        transforms = self.cfg.get_transforms() + super().get_transforms()
-        return transforms
-
-
 class MixedData(Dataset):
     def __init__(
         self,
         normal: Dataset,
         anomalous: Dataset,
-        normal_weight: float = 0.5,
+        normal_weight: Optional[float] = 0.5,
         return_anomaly_labels: bool = True,
     ):
         self.normal_data = normal
         self.anomalous_data = anomalous
         self.normal_weight = normal_weight
         self.return_anomaly_labels = return_anomaly_labels
-        self._length = min(
-            int(len(normal) / normal_weight), int(len(anomalous) / (1 - normal_weight))
-        )
-        self.normal_len = int(self._length * normal_weight)
-        self.anomalous_len = self._length - self.normal_len
+        if normal_weight is None:
+            self.normal_len = len(normal)
+            self.anomalous_len = len(anomalous)
+            self._length = self.normal_len + self.anomalous_len
+        else:
+            self._length = min(
+                int(len(normal) / normal_weight),
+                int(len(anomalous) / (1 - normal_weight)),
+            )
+            self.normal_len = int(self._length * normal_weight)
+            self.anomalous_len = self._length - self.normal_len
 
     def __len__(self):
         return self._length

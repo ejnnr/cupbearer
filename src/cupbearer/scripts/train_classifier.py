@@ -4,6 +4,7 @@ from typing import Any
 import lightning as L
 from lightning.pytorch.callbacks import ModelCheckpoint
 
+from cupbearer.data import BackdoorDataset
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils.scripts import script
 
@@ -12,27 +13,20 @@ from .conf.train_classifier_conf import Config
 
 @script
 def main(cfg: Config) -> dict[str, Any] | L.Trainer:
-    dataset = cfg.train_data.build()
-
-    train_loader = cfg.train_config.get_dataloader(dataset)
+    train_loader = cfg.train_config.get_dataloader(cfg.train_data)
 
     val_loaders = {
-        k: cfg.train_config.get_dataloader(v.build(), train=False)
+        k: cfg.train_config.get_dataloader(v, train=False)
         for k, v in cfg.val_data.items()
     }
 
-    # Store transforms to be used in training
-    if cfg.path:
-        for trafo in cfg.train_data.get_transforms():
-            trafo.store(cfg.path)
-
-    # Dataloader returns images and labels, only images get passed to model
-    images, _ = next(iter(train_loader))
-    example_input = images[0]
+    # The WaNet backdoor (and maybe others in the future) has randomly generated state
+    # that needs to be stored if we want to load it later.
+    if isinstance(cfg.train_data, BackdoorDataset):
+        cfg.train_data.backdoor.store(cfg.path)
 
     classifier = Classifier(
         model=cfg.model,
-        input_shape=example_input.shape,
         num_classes=cfg.num_classes,
         optim_cfg=cfg.train_config.optimizer,
         val_loader_names=list(val_loaders.keys()),

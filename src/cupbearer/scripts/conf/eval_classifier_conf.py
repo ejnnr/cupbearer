@@ -1,13 +1,15 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from cupbearer.data import DatasetConfig, TrainDataFromRun
+from cupbearer.models import HookedModel
 from cupbearer.utils.scripts import ScriptConfig
+from torch.utils.data import Dataset
 
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
-    data: DatasetConfig | None = None
+    data: Dataset
+    model: HookedModel
     max_batches: Optional[int] = None
     max_batch_size: int = 2048
     save_config: bool = False
@@ -18,13 +20,6 @@ class Config(ScriptConfig):
     def __post_init__(self):
         if self.path is None:
             raise ValueError("Path must be set")
-        if self.data is None:
-            self.data = TrainDataFromRun(self.path)
-
-    @property
-    def num_classes(self):
-        assert self.data is not None
-        return self.data.num_classes
 
 
 @dataclass

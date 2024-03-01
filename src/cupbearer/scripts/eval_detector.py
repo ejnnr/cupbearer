@@ -6,18 +6,12 @@ from cupbearer.utils.scripts import script
 def main(cfg: Config):
     assert cfg.detector is not None  # make type checker happy
     # Init
-    train_data = cfg.task.trusted_data.build()
-    test_data = cfg.task.test_data.build()
-    # train_data[0] is the first sample, which is (input, ...), so we need another [0]
-    example_input = train_data[0][0]
-    model = cfg.task.build_model(input_shape=example_input.shape)
-    detector = cfg.detector.build(
-        model=model,
-        save_dir=cfg.path,
-    )
+    train_data = cfg.task.trusted_data
+    test_data = cfg.task.test_data
+    cfg.detector.set_model(cfg.task.model)
 
     # Evaluate detector
-    detector.eval(
+    cfg.detector.eval(
         train_dataset=train_data,
         test_dataset=test_data,
         pbar=cfg.pbar,

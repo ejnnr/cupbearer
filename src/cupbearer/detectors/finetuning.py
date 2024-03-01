@@ -1,20 +1,21 @@
 import copy
 import warnings
-from dataclasses import dataclass
 
 import torch
 import torch.nn.functional as F
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
-from cupbearer.detectors.config import DetectorConfig
 from cupbearer.scripts._shared import Classifier
 from cupbearer.utils import utils
 from cupbearer.utils.train import TrainConfig
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
-    def __init__(self, model, max_batch_size, save_path):
-        super().__init__(model, max_batch_size, save_path)
+    def __init__(self, max_batch_size, save_path):
+        super().__init__(max_batch_size, save_path)
+
+    def set_model(self, model):
+        super().set_model(model)
         # We might as well make a copy here already, since whether we'll train this
         # detector or load weights for inference, we'll need to copy in both cases.
         self.finetuned_model = copy.deepcopy(self.model)
@@ -92,13 +93,3 @@ class FinetuningAnomalyDetector(AnomalyDetector):
 
     def _set_trained_variables(self, variables):
         self.finetuned_model.load_state_dict(variables)
-
-
-@dataclass
-class FinetuningConfig(DetectorConfig):
-    def build(self, model, save_dir) -> FinetuningAnomalyDetector:
-        return FinetuningAnomalyDetector(
-            model=model,
-            max_batch_size=self.train.max_batch_size,
-            save_path=save_dir,
-        )

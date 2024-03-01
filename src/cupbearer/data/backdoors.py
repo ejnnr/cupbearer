@@ -6,8 +6,9 @@ from typing import Optional, Tuple
 import torch
 import torch.nn.functional as F
 from loguru import logger
+from torch.utils.data import Dataset
 
-from ._shared import Transform
+from ._shared import Transform, TransformDataset
 
 
 @dataclass
@@ -32,6 +33,15 @@ class Backdoor(Transform, ABC):
         # Do changes out of place
         img = img.clone()
         return self.inject_backdoor(img), self.target_class
+
+
+class BackdoorDataset(TransformDataset):
+    """Just a wrapper around TransformDataset with aliases and more specific types."""
+
+    def __init__(self, original: Dataset, backdoor: Backdoor):
+        super().__init__(dataset=original, transform=backdoor)
+        self.original = original
+        self.backdoor = backdoor
 
 
 @dataclass

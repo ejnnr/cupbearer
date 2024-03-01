@@ -4,14 +4,19 @@ from ._shared import (
     MixedData,
     MixedDataConfig,
     SubsetConfig,
-    TrainDataFromRun,
+    TransformDataset,
     split_dataset_cfg,
 )
-from .adversarial import AdversarialExampleConfig
-from .backdoor_data import BackdoorData
-from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
-from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
-from .toy_ambiguous_features import ToyFeaturesConfig
+from .adversarial import AdversarialExampleDataset, make_adversarial_examples
+from .backdoors import (
+    Backdoor,
+    BackdoorDataset,
+    CornerPixelBackdoor,
+    NoiseBackdoor,
+    WanetBackdoor,
+)
+from .pytorch import CIFAR10, GTSRB, MNIST, PytorchDataset
+from .toy_ambiguous_features import ToyDataset
 from .transforms import (
     GaussianNoise,
     RandomCrop,

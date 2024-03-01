@@ -1,19 +1,12 @@
 from dataclasses import dataclass
 
-from cupbearer.detectors import DetectorConfig, StoredDetector
-from cupbearer.tasks import TaskConfig
+from cupbearer.detectors import AnomalyDetector
+from cupbearer.tasks import Task
 from cupbearer.utils.scripts import ScriptConfig
 
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
-    task: TaskConfig
-    detector: DetectorConfig | None = None
-    save_config: bool = False
+    task: Task
+    detector: AnomalyDetector
     pbar: bool = False
-
-    def __post_init__(self):
-        if self.detector is None:
-            if self.path is None:
-                raise ValueError("Path or detector must be set")
-            self.detector = StoredDetector(path=self.path)
