@@ -5,7 +5,7 @@ from torch.utils.data import Dataset
 from cupbearer.data import make_adversarial_examples
 from cupbearer.models import HookedModel
 
-from ._config import Task
+from .task import Task
 
 
 def adversarial_examples(
