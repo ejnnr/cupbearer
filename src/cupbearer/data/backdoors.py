@@ -1,7 +1,8 @@
 import os
 from abc import ABC
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from pathlib import Path
+from typing import Tuple
 
 import torch
 import torch.nn.functional as F
@@ -91,28 +92,23 @@ class NoiseBackdoor(Backdoor):
         return img
 
 
-@dataclass
+@dataclass(kw_only=True)
 class WanetBackdoor(Backdoor):
     """Implements trigger transform from "Wanet - Imperceptible Warping-based
     Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021."""
 
+    # Path to load control grid from, or None to generate a new one.
+    # Deliberartely non-optional to avoid accidentally generating a new grid!
+    path: Path | str | None
     p_noise: float = 0.0  # Probability of non-backdoor warping
     control_grid_width: int = 4  # Side length of unscaled warping field
     warping_strength: float = 0.5  # Strength of warping effect
     grid_rescale: float = 1.0  # Factor to rescale grid from warping effect
-    _control_grid: Optional[
-        tuple[
-            list[list[float]],
-            list[list[float]],
-        ]
-    ] = None  # Used for reproducibility, typically not set manually
 
     def __post_init__(self):
         super().__post_init__()
         self._warping_field = None
-
-        # Init control_grid so that it is saved in config
-        self.control_grid
+        self._control_grid = None
 
         assert 0 <= self.p_noise <= 1, "Probability must be between 0 and 1"
         assert (
@@ -121,7 +117,10 @@ class WanetBackdoor(Backdoor):
 
     @property
     def control_grid(self) -> torch.Tensor:
-        if self._control_grid is None:
+        if self._control_grid is not None:
+            return self._control_grid
+
+        if self.path:
             logger.debug("Generating new control grid for warping field.")
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
             control_grid = 2 * torch.rand(*control_grid_shape) - 1
@@ -129,7 +128,14 @@ class WanetBackdoor(Backdoor):
             control_grid = control_grid * self.warping_strength
             self.control_grid = control_grid
         else:
-            control_grid = torch.tensor(self._control_grid)
+            logger.debug(
+                f"Loading control grid from {self._get_savefile_fullpath(self.path)}"
+            )
+            control_grid = torch.load(self._get_savefile_fullpath(self.path))
+            if control_grid.shape[-1] != self.control_grid_width:
+                logger.warning("Control grid width updated from load.")
+                self.control_grid_width = control_grid.shape[-1]
+            self.control_grid = control_grid
 
         control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
         assert control_grid.shape == control_grid_shape
@@ -143,8 +149,7 @@ class WanetBackdoor(Backdoor):
         if control_grid.shape != control_grid_shape:
             raise ValueError("Control grid shape is incompatible.")
 
-        # We keep self._control_grid serializable
-        self._control_grid = tuple(control_grid.tolist())
+        self._control_grid = control_grid
 
     @property
     def warping_field(self) -> torch.Tensor:
@@ -177,21 +182,9 @@ class WanetBackdoor(Backdoor):
     def _get_savefile_fullpath(basepath):
         return os.path.join(basepath, "wanet_backdoor.pt")
 
-    def store(self, basepath):
-        super().store(basepath)
-        logger.debug(f"Storing control grid to {self._get_savefile_fullpath(basepath)}")
-        torch.save(self.control_grid, self._get_savefile_fullpath(basepath))
-
-    def load(self, basepath):
-        super().load(basepath)
-        logger.debug(
-            f"Loading control grid from {self._get_savefile_fullpath(basepath)}"
-        )
-        control_grid = torch.load(self._get_savefile_fullpath(basepath))
-        if control_grid.shape[-1] != self.control_grid_width:
-            logger.warning("Control grid width updated from load.")
-            self.control_grid_width = control_grid.shape[-1]
-        self.control_grid = control_grid
+    def store(self, path: Path | str):
+        logger.debug(f"Storing control grid to {self._get_savefile_fullpath(path)}")
+        torch.save(self.control_grid, self._get_savefile_fullpath(path))
 
     def _warp(self, img: torch.Tensor, warping_field: torch.Tensor) -> torch.Tensor:
         if img.ndim == 3:

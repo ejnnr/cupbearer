@@ -37,30 +37,6 @@ def main(
     elif isinstance(val_loaders, DataLoader):
         val_loaders = {"val": val_loaders}
 
-    # arguments, this is where validation sets are set to follow train_data
-    # TODO: we could get weird bugs here if e.g. train_data is a Subset of some
-    # BackdoorDataset.
-    # if isinstance(train_data, BackdoorDataset):
-    #     for name, val_config in val_data.items():
-    #         # WanetBackdoor
-    #         if (
-    #             isinstance(train_data.backdoor, WanetBackdoor)
-    #             and isinstance(val_config, BackdoorDataset)
-    #             and isinstance(val_config.backdoor, WanetBackdoor)
-    #         ):
-    #             str_factor = (
-    #                 val_config.backdoor.warping_strength
-    #                 / train_data.backdoor.warping_strength
-    #             )
-    #             val_config.backdoor.control_grid = (
-    #                 str_factor * train_data.backdoor.control_grid
-    #             )
-
-    # # The WaNet backdoor (and maybe others in the future) has randomly generated state
-    # # that needs to be stored if we want to load it later.
-    # if isinstance(train_data, BackdoorDataset):
-    #     train_data.backdoor.store(path)
-
     classifier = Classifier(
         model=model,
         num_classes=num_classes,

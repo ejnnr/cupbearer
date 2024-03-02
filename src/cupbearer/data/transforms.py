@@ -11,14 +11,6 @@ class Transform(ABC):
     def __call__(self, sample):
         pass
 
-    def store(self, basepath):
-        """Save transform state to reproduce instance later."""
-        pass
-
-    def load(self, basepath):
-        """Load transform state to reproduce stored instance."""
-        pass
-
 
 class AdaptedTransform(Transform, ABC):
     """Adapt a transform designed to work on inputs to work on img, label pairs."""
