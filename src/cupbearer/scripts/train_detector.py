@@ -1,25 +1,36 @@
+from cupbearer.detectors import AnomalyDetector
+from cupbearer.tasks import Task
 from cupbearer.utils.scripts import script
+from cupbearer.utils.train import TrainConfig
+from cupbearer.utils.utils import BaseConfig
 
 from . import EvalDetectorConfig, eval_detector
-from .conf.train_detector_conf import Config
 
 
 @script
-def main(cfg: Config):
-    cfg.detector.set_model(cfg.task.model)
+def main(
+    task: Task,
+    detector: AnomalyDetector,
+    num_classes: int,
+    train: BaseConfig | None = None,
+    seed: int = 0,
+):
+    if train is None:
+        train = TrainConfig()
+    detector.set_model(task.model)
 
-    cfg.detector.train(
-        trusted_data=cfg.task.trusted_data,
-        untrusted_data=cfg.task.untrusted_train_data,
-        num_classes=cfg.num_classes,
-        train_config=cfg.train,
+    detector.train(
+        trusted_data=task.trusted_data,
+        untrusted_data=task.untrusted_train_data,
+        num_classes=num_classes,
+        train_config=train,
     )
-    path = cfg.detector.save_path
+    path = detector.save_path
     if path:
-        cfg.detector.save_weights(path / "detector")
+        detector.save_weights(path / "detector")
         eval_cfg = EvalDetectorConfig(
-            detector=cfg.detector,
-            task=cfg.task,
-            seed=cfg.seed,
+            detector=detector,
+            task=task,
+            seed=seed,
         )
         eval_detector(eval_cfg)

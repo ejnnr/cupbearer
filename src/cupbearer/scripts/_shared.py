@@ -3,7 +3,6 @@ import torch
 from torchmetrics.classification import Accuracy
 
 from cupbearer.models import HookedModel
-from cupbearer.utils.optimizers import OptimizerConfig
 
 
 class Classifier(L.LightningModule):
@@ -11,7 +10,7 @@ class Classifier(L.LightningModule):
         self,
         model: HookedModel,
         num_classes: int,
-        optim_cfg: OptimizerConfig,
+        lr: float,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
@@ -25,7 +24,7 @@ class Classifier(L.LightningModule):
             test_loader_names = []
 
         self.model = model
-        self.optim_cfg = optim_cfg
+        self.lr = lr
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names
         self.train_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
@@ -81,4 +80,4 @@ class Classifier(L.LightningModule):
             self.log(f"{name}/acc_epoch", self.val_accuracy[i])
 
     def configure_optimizers(self):
-        return self.optim_cfg.get_optimizer(self.parameters())
+        return torch.optim.Adam(self.parameters(), lr=self.lr)

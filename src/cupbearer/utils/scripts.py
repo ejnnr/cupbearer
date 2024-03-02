@@ -1,33 +1,19 @@
-import functools
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Callable, Optional, TypeVar
-
-from cupbearer.utils.utils import BaseConfig
-
-
-@dataclass(kw_only=True)
-class ScriptConfig(BaseConfig):
-    seed: int = 0
-    path: Optional[Path] = None
-    save_config: bool = True
-
-
-ConfigType = TypeVar("ConfigType", bound=ScriptConfig)
+from typing import Callable
 
 
 def script(
-    script_fn: Callable[[ConfigType], Any],
-) -> Callable[[ConfigType], Any]:
-    @functools.wraps(script_fn)
-    def run_script(cfg: ConfigType):
-        save_cfg(cfg, save_config=cfg.save_config)
-        return script_fn(cfg)
+    script_fn: Callable,
+) -> Callable:
+    # @functools.wraps(script_fn)
+    # def run_script(cfg: ConfigType):
+    #     save_cfg(cfg, save_config=cfg.save_config)
+    #     return script_fn(cfg)
 
-    return run_script
+    # return run_script
+    return script_fn
 
 
-def save_cfg(cfg: ScriptConfig, save_config: bool = True):
+def save_cfg(cfg, save_config: bool = True):
     # if cfg.path:
     #     cfg.path.mkdir(parents=True, exist_ok=True)
     #     if save_config:
@@ -41,6 +27,3 @@ def save_cfg(cfg: ScriptConfig, save_config: bool = True):
     #             sort_keys=False,
     #         )
     pass
-
-
-T = TypeVar("T")
