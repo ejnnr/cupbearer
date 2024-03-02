@@ -14,7 +14,6 @@ from cupbearer.detectors.abstraction.abstraction import (
 from cupbearer.detectors.anomaly_detector import (
     ActivationBasedDetector,
 )
-from cupbearer.models import HookedModel
 
 
 def per_layer(func: Callable):
@@ -60,12 +59,7 @@ def compute_cosine_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Te
 
 @per_layer
 def compute_kl_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    return F.kl_div(
-        input,
-        target,
-        reduction="none",
-        log_target=True,
-    ).sum(dim=1)
+    return F.kl_div(input, target, reduction="none", log_target=True).sum(dim=1)
 
 
 def compute_losses(
@@ -92,10 +86,9 @@ class AbstractionModule(L.LightningModule):
         self,
         get_activations: Callable[[torch.Tensor], tuple[Any, dict[str, torch.Tensor]]],
         abstraction: Abstraction,
-        lr: float = 1e-3,
+        lr: float,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["get_activations", "abstraction"])
 
         self.get_activations = get_activations
         self.abstraction = abstraction
@@ -124,7 +117,6 @@ class AbstractionDetector(ActivationBasedDetector):
 
     def __init__(
         self,
-        model: HookedModel,
         abstraction: Abstraction,
         max_batch_size: int = 4096,
         save_path: str | Path | None = None,
@@ -132,22 +124,16 @@ class AbstractionDetector(ActivationBasedDetector):
         self.abstraction = abstraction
         names = list(abstraction.tau_maps.keys())
         super().__init__(
-            model,
             activation_name_func=lambda _: names,
             max_batch_size=max_batch_size,
             save_path=save_path,
         )
-
-    @property
-    def should_train_on_clean_data(self) -> bool:
-        return True
 
     def train(
         self,
         trusted_data,
         untrusted_data,
         *,
-        num_classes: int,
         lr: float = 1e-3,
         batch_size: int = 64,
         **trainer_kwargs,
@@ -168,14 +154,6 @@ class AbstractionDetector(ActivationBasedDetector):
         )
 
         # TODO: implement validation data
-        # val_loaders = {
-        #     k: train_config.get_dataloader(v.build, train=False)
-        #     for k, v in self.val_data.items()
-        # }
-        # checkpoint_callback = ModelCheckpoint(
-        #     dirpath=self.save_path,
-        #     filename="detector",
-        # )
 
         self.model.eval()
         # We don't need gradients for base model parameters:
