@@ -4,12 +4,10 @@ import dataclasses
 import functools
 import importlib
 import pickle
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable, TypeVar, Union
 
 import torch
-from simple_parsing.helpers import serialization
 
 SUFFIX = ".pt"
 TYPE_PREFIX = "__TYPE__:"
@@ -137,27 +135,6 @@ def list_field():
 
 def dict_field():
     return dataclasses.field(default_factory=dict)
-
-
-@dataclass(kw_only=True)
-class BaseConfig(serialization.serializable.Serializable):
-    def __post_init__(self):
-        pass
-
-    def to_dict(
-        self,
-        dict_factory: type[dict] = dict,
-        recurse: bool = True,
-        save_dc_types: bool = True,
-    ) -> dict:
-        # This is the only change we make: default is for save_dc_types to be False.
-        # Instead, we always pass `True`. (We don't want the default elsewhere
-        # to get passed here and override this.)
-        # We could pass save_dc_types to `save`, but that doesn't propagate into
-        # lists of dataclasses.
-        return serialization.serializable.to_dict(
-            self, dict_factory, recurse, save_dc_types=True
-        )
 
 
 def get_object(path: str):

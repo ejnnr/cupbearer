@@ -3,22 +3,21 @@ import torch
 from cupbearer.detectors.statistical.helpers import mahalanobis
 from cupbearer.detectors.statistical.statistical import (
     ActivationCovarianceBasedDetector,
-    MahalanobisTrainConfig,
 )
 
 
 class MahalanobisDetector(ActivationCovarianceBasedDetector):
-    use_trusted: bool = True
-
-    def post_covariance_training(self, train_config: MahalanobisTrainConfig):
+    def post_covariance_training(
+        self, rcond: float = 1e-5, relative: bool = False, **kwargs
+    ):
         self.inv_covariances = {
-            k: torch.linalg.pinv(C, rcond=train_config.rcond, hermitian=True)
+            k: torch.linalg.pinv(C, rcond=rcond, hermitian=True)
             for k, C in self.covariances.items()
         }
         self.inv_diag_covariances = None
-        if train_config.relative:
+        if relative:
             self.inv_diag_covariances = {
-                k: torch.where(torch.diag(C) > train_config.rcond, 1 / torch.diag(C), 0)
+                k: torch.where(torch.diag(C) > rcond, 1 / torch.diag(C), 0)
                 for k, C in self.covariances.items()
             }
 

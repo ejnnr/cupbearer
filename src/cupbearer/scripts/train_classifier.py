@@ -84,10 +84,7 @@ def main(
     else:
         metrics_logger = None
 
-    trainer = L.Trainer(
-        default_root_dir=path,
-        **trainer_kwargs,
-    )
+    trainer = L.Trainer(default_root_dir=path, **trainer_kwargs)
 
     with warnings.catch_warnings():
         if not val_loaders:

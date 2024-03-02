@@ -43,12 +43,7 @@ class AnomalyDetector(ABC):
 
     @abstractmethod
     def train(
-        self,
-        trusted_data: Dataset | None,
-        untrusted_data: Dataset | None,
-        *,
-        num_classes: int,
-        train_config: utils.BaseConfig,
+        self, trusted_data: Dataset | None, untrusted_data: Dataset | None, **kwargs
     ):
         """Train the anomaly detector with the given datasets on the given model.
 

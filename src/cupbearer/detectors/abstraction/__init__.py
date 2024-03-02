@@ -2,8 +2,6 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 
 from cupbearer.models import HookedModel
-from cupbearer.utils.train import TrainConfig
-from cupbearer.utils.utils import BaseConfig
 
 from .abstraction import (
     Abstraction,
@@ -19,7 +17,7 @@ from .abstraction_detector import AbstractionDetector
 # let users specify a path to a python function that gets called
 # to construct the abstraction. (With get_default_abstraction being the default.)
 @dataclass
-class AbstractionConfig(BaseConfig, ABC):
+class AbstractionConfig(ABC):
     size_reduction: int = 4
 
     @abstractmethod
@@ -48,13 +46,13 @@ class AbstractionDetectorConfig:
     abstraction: AbstractionConfig = field(
         default_factory=LocallyConsistentAbstractionConfig
     )
-    train: TrainConfig = field(default_factory=TrainConfig)
+    max_batch_size: int = 4096
 
     def build(self, model, save_dir) -> AbstractionDetector:
         abstraction = self.abstraction.build(model)
         return AbstractionDetector(
             model=model,
             abstraction=abstraction,
-            max_batch_size=self.train.max_batch_size,
+            max_batch_size=self.max_batch_size,
             save_path=save_dir,
         )

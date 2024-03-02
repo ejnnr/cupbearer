@@ -15,8 +15,6 @@ from cupbearer.detectors.anomaly_detector import (
     ActivationBasedDetector,
 )
 from cupbearer.models import HookedModel
-from cupbearer.utils.optimizers import OptimizerConfig
-from cupbearer.utils.train import TrainConfig
 
 
 def per_layer(func: Callable):
@@ -94,14 +92,14 @@ class AbstractionModule(L.LightningModule):
         self,
         get_activations: Callable[[torch.Tensor], tuple[Any, dict[str, torch.Tensor]]],
         abstraction: Abstraction,
-        optim_cfg: OptimizerConfig,
+        lr: float = 1e-3,
     ):
         super().__init__()
         self.save_hyperparameters(ignore=["get_activations", "abstraction"])
 
         self.get_activations = get_activations
         self.abstraction = abstraction
-        self.optim_cfg = optim_cfg
+        self.lr = lr
 
     def _shared_step(self, batch):
         _, activations = self.get_activations(batch)
@@ -118,7 +116,7 @@ class AbstractionModule(L.LightningModule):
 
     def configure_optimizers(self):
         # Note we only optimize over the abstraction parameters, the model is frozen
-        return self.optim_cfg.get_optimizer(self.abstraction.parameters())
+        return torch.optim.Adam(self.abstraction.parameters(), lr=self.lr)
 
 
 class AbstractionDetector(ActivationBasedDetector):
@@ -150,7 +148,9 @@ class AbstractionDetector(ActivationBasedDetector):
         untrusted_data,
         *,
         num_classes: int,
-        train_config: TrainConfig,
+        lr: float = 1e-3,
+        batch_size: int = 64,
+        **trainer_kwargs,
     ):
         if trusted_data is None:
             raise ValueError("Abstraction detector requires trusted training data.")
@@ -160,10 +160,12 @@ class AbstractionDetector(ActivationBasedDetector):
         module = AbstractionModule(
             self.get_activations,
             self.abstraction,
-            optim_cfg=train_config.optimizer,
+            lr=lr,
         )
 
-        train_loader = train_config.get_dataloader(trusted_data)
+        train_loader = torch.utils.data.DataLoader(
+            trusted_data, batch_size=batch_size, shuffle=True
+        )
 
         # TODO: implement validation data
         # val_loaders = {
@@ -186,7 +188,7 @@ class AbstractionDetector(ActivationBasedDetector):
         # (which seems tricky to do manually).
         module.model = self.model
 
-        trainer = train_config.get_trainer(path=self.save_path)
+        trainer = L.Trainer(default_root_dir=self.save_path, **trainer_kwargs)
         trainer.fit(
             model=module,
             train_dataloaders=train_loader,
