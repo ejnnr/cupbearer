@@ -4,10 +4,9 @@
 *.egg-info
 .python-version
 __pycache__
-/data
-/results
-/slurm
-/logs
+data/
+logs/
+slurm/
 .venv
-/wandb
-/dist
+wandb/
+dist/
