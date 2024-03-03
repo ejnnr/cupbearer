@@ -8,7 +8,7 @@ from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from cupbearer.utils import utils
+from cupbearer import utils
 
 
 class AdversarialExampleDataset(Dataset):

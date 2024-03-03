@@ -2,10 +2,8 @@ from pathlib import Path
 
 from cupbearer.detectors import AnomalyDetector
 from cupbearer.tasks import Task
-from cupbearer.utils.scripts import script
 
 
-@script
 def main(
     task: Task,
     detector: AnomalyDetector,

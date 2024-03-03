@@ -13,9 +13,9 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
+from cupbearer import utils
 from cupbearer.data import MixedData
 from cupbearer.models.models import HookedModel
-from cupbearer.utils import utils
 
 
 class AnomalyDetector(ABC):

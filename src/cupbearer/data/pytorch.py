@@ -1,8 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from torch.utils.data import Dataset
 
-from cupbearer.utils.utils import get_object, mutable_field
+from cupbearer.utils import get_object
 
 from .transforms import (
     RandomCrop,
@@ -18,7 +18,7 @@ from .transforms import (
 class PytorchDataset(Dataset):
     name: str
     train: bool = True
-    transforms: list[Transform] = mutable_field([ToTensor()])
+    transforms: list[Transform] = field(default_factory=lambda: [ToTensor()])
     default_augmentations: bool = True
 
     def __post_init__(self):
@@ -74,8 +74,8 @@ class CIFAR10(PytorchDataset):
 class GTSRB(PytorchDataset):
     name: str = "torchvision.datasets.GTSRB"
     num_classes: int = 43
-    transforms: list[Transform] = mutable_field(
-        [
+    transforms: list[Transform] = field(
+        default_factory=lambda: [
             Resize(size=(32, 32)),
             ToTensor(),
         ]

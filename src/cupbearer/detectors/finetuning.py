@@ -9,7 +9,7 @@ from torch.utils.data import DataLoader
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils import utils
+from cupbearer.utils import inputs_from_batch
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
@@ -63,7 +63,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         )
 
     def scores(self, batch):
-        inputs = utils.inputs_from_batch(batch)
+        inputs = inputs_from_batch(batch)
         original_output = self.model(inputs)
         finetuned_output = self.finetuned_model(inputs)
 
