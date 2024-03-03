@@ -95,7 +95,16 @@ class NoiseBackdoor(Backdoor):
 @dataclass(kw_only=True)
 class WanetBackdoor(Backdoor):
     """Implements trigger transform from "Wanet - Imperceptible Warping-based
-    Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021."""
+    Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021.
+
+    WARNING: The backdoor trigger is a specific (randomly generated) warping pattern.
+    Networks are trained to only respond to this specific pattern, so evaluating
+    a network on a freshly initialized WanetBackdoor with a new trigger won't work.
+    Within a single process, just make sure you only initialize WanetBackdoor once
+    and then use that everywhere.
+    Between different processes, you need to store the trigger using the `store()`
+    method, and then later pass it in as the `path` argument to the new WanetBackdoor.
+    """
 
     # Path to load control grid from, or None to generate a new one.
     # Deliberartely non-optional to avoid accidentally generating a new grid!
