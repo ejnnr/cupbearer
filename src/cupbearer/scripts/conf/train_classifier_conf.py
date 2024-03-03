@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from typing import Literal
 
 from cupbearer.data import (
     BackdoorData,
@@ -11,6 +10,8 @@ from cupbearer.models import CNNConfig, MLPConfig, ModelConfig, TamperTransforme
 from cupbearer.utils.scripts import ScriptConfig
 from cupbearer.utils.train import DebugTrainConfig, TrainConfig
 
+from .._shared import ClassificationTask
+
 
 @dataclass(kw_only=True)
 class Config(ScriptConfig):
@@ -18,7 +19,7 @@ class Config(ScriptConfig):
     train_config: TrainConfig = field(default_factory=TrainConfig)
     train_data: DatasetConfig
     val_data: dict[str, DatasetConfig] = field(default_factory=dict)
-    task: Literal["binary", "multiclass", "multilabel"] = "multiclass"
+    task: ClassificationTask = "multiclass"
     # If True, returns the Lighting Trainer object (which has the model and a bunch
     # of other information, this may be useful when using interactively).
     # Otherwise (default), return only a dictionary of latest metrics, to avoid e.g.

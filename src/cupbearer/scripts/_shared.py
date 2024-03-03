@@ -1,12 +1,14 @@
 import lightning as L
 import torch
 from torchmetrics.classification import Accuracy
-from torchmetrics.utilities.enums import ClassificationTask
+from torchmetrics.utilities import enums as torch_enums
 from typing_extensions import Literal
 
 from cupbearer.models import HookedModel, ModelConfig
 from cupbearer.utils.data_format import DataFormat
 from cupbearer.utils.optimizers import OptimizerConfig
+
+ClassificationTask = Literal["binary", "multiclass", "multilabel"]
 
 
 class Classifier(L.LightningModule):
@@ -20,7 +22,7 @@ class Classifier(L.LightningModule):
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
-        task: Literal["binary", "multiclass", "multilabel"] = "multiclass",
+        task: ClassificationTask = "multiclass",
     ):
         super().__init__()
         if isinstance(model, HookedModel) and save_hparams:
@@ -60,15 +62,13 @@ class Classifier(L.LightningModule):
         )
         self.test_accuracy = torch.nn.ModuleList(
             [
-                Accuracy(
-                    task="multiclass", num_classes=num_classes, num_labels=num_labels
-                )
+                Accuracy(task=self.task, num_classes=num_classes, num_labels=num_labels)
                 for _ in test_loader_names
             ]
         )
 
     def _get_loss_func(self, task):
-        if self.task == ClassificationTask.MULTICLASS:
+        if self.task == torch_enums.ClassificationTask.MULTICLASS:
             return torch.nn.functional.cross_entropy
         return torch.nn.functional.binary_cross_entropy
 
