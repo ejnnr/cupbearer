@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 import sklearn.metrics
@@ -19,16 +19,9 @@ from cupbearer.utils import utils
 
 
 class AnomalyDetector(ABC):
-    def __init__(
-        self,
-        max_batch_size: int = 4096,
-        save_path: Optional[Path | str] = None,
-    ):
+    def __init__(self):
         # For storing the original detector variables when finetuning
         self._original_variables = None
-        self.max_batch_size = max_batch_size
-        self.save_path = None if save_path is None else Path(save_path)
-
         self.trained = False
 
     def set_model(self, model: HookedModel):
@@ -43,7 +36,11 @@ class AnomalyDetector(ABC):
 
     @abstractmethod
     def train(
-        self, trusted_data: Dataset | None, untrusted_data: Dataset | None, **kwargs
+        self,
+        trusted_data: Dataset | None,
+        untrusted_data: Dataset | None,
+        save_path: Path | str | None,
+        **kwargs,
     ):
         """Train the anomaly detector with the given datasets on the given model.
 
@@ -100,7 +97,9 @@ class AnomalyDetector(ABC):
         # to untrusted data then).
         train_dataset: Dataset,
         test_dataset: MixedData,
+        batch_size: int = 1024,
         histogram_percentile: float = 95,
+        save_path: Path | str | None = None,
         num_bins: int = 100,
         pbar: bool = False,
     ):
@@ -110,7 +109,7 @@ class AnomalyDetector(ABC):
 
         test_loader = DataLoader(
             test_dataset,
-            batch_size=self.max_batch_size,
+            batch_size=batch_size,
             # For some methods, such as adversarial abstractions, it might matter how
             # normal/anomalous data is distributed into batches. In that case, we want
             # to mix them by default.
@@ -153,14 +152,16 @@ class AnomalyDetector(ABC):
 
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
-        if not self.save_path:
+        if not save_path:
             return
 
-        self.save_path.mkdir(parents=True, exist_ok=True)
+        save_path = Path(save_path)
+
+        save_path.mkdir(parents=True, exist_ok=True)
 
         # Everything from here is just saving metrics and creating figures
         # (which we skip if they aren't going to be saved anyway).
-        with open(self.save_path / "eval.json", "w") as f:
+        with open(save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
 
         # Visualizations for anomaly scores
@@ -176,7 +177,7 @@ class AnomalyDetector(ABC):
         plt.xlabel("Anomaly score")
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
-        plt.savefig(self.save_path / "histogram.pdf")
+        plt.savefig(save_path / "histogram.pdf")
 
     @abstractmethod
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
@@ -240,10 +241,8 @@ class ActivationBasedDetector(AnomalyDetector):
         activation_name_func: str
         | Callable[[HookedModel], Collection[str]]
         | None = None,
-        max_batch_size: int = 4096,
-        save_path: Path | str | None = None,
     ):
-        super().__init__(max_batch_size=max_batch_size, save_path=save_path)
+        super().__init__()
 
         if activation_name_func is None:
             activation_name_func = default_activation_name_func

@@ -1,5 +1,6 @@
 import copy
 import warnings
+from pathlib import Path
 
 import lightning as L
 import torch
@@ -12,9 +13,6 @@ from cupbearer.utils import utils
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
-    def __init__(self, max_batch_size, save_path):
-        super().__init__(max_batch_size, save_path)
-
     def set_model(self, model):
         super().set_model(model)
         # We might as well make a copy here already, since whether we'll train this
@@ -25,6 +23,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         self,
         trusted_data,
         untrusted_data,
+        save_path: Path | str,
         *,
         num_classes: int,
         lr: float = 1e-3,
@@ -44,7 +43,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         clean_loader = DataLoader(trusted_data, batch_size=batch_size, shuffle=True)
 
         # Finetune the model on the clean dataset
-        trainer = L.Trainer(default_root_dir=self.save_path, **trainer_kwargs)
+        trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
         with warnings.catch_warnings():
             warnings.filterwarnings(
                 "ignore",

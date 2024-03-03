@@ -115,24 +115,16 @@ class AbstractionModule(L.LightningModule):
 class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
 
-    def __init__(
-        self,
-        abstraction: Abstraction,
-        max_batch_size: int = 4096,
-        save_path: str | Path | None = None,
-    ):
+    def __init__(self, abstraction: Abstraction):
         self.abstraction = abstraction
         names = list(abstraction.tau_maps.keys())
-        super().__init__(
-            activation_name_func=lambda _: names,
-            max_batch_size=max_batch_size,
-            save_path=save_path,
-        )
+        super().__init__(activation_name_func=lambda _: names)
 
     def train(
         self,
         trusted_data,
         untrusted_data,
+        save_path: Path | str,
         *,
         lr: float = 1e-3,
         batch_size: int = 64,
@@ -166,7 +158,7 @@ class AbstractionDetector(ActivationBasedDetector):
         # (which seems tricky to do manually).
         module.model = self.model
 
-        trainer = L.Trainer(default_root_dir=self.save_path, **trainer_kwargs)
+        trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
         trainer.fit(
             model=module,
             train_dataloaders=train_loader,

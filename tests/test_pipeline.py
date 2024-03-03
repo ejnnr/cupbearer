@@ -80,10 +80,10 @@ def test_train_abstraction_corner_backdoor(model, backdoor_task, tmp_path):
             abstraction=detectors.abstraction.LocallyConsistentAbstraction.get_default(
                 model, size_reduction=2
             ),
-            max_batch_size=2,
-            save_path=tmp_path,
         ),
+        save_path=tmp_path,
         batch_size=2,
+        eval_batch_size=2,
         max_steps=1,
     )
     assert (tmp_path / "detector.pt").is_file()
@@ -99,11 +99,11 @@ def test_train_autoencoder_corner_backdoor(model, backdoor_task, tmp_path):
         detector=detectors.AbstractionDetector(
             abstraction=detectors.abstraction.AutoencoderAbstraction.get_default(
                 model, size_reduction=2
-            ),
-            max_batch_size=2,
-            save_path=tmp_path,
+            )
         ),
         batch_size=2,
+        eval_batch_size=2,
+        save_path=tmp_path,
         max_steps=1,
     )
     assert (tmp_path / "detector.pt").is_file()
@@ -127,11 +127,10 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
             success_threshold=1.0,
             steps=1,
         ),
-        detector=detectors.MahalanobisDetector(
-            max_batch_size=2,
-            save_path=tmp_path,
-        ),
+        detector=detectors.MahalanobisDetector(),
+        save_path=tmp_path,
         batch_size=2,
+        eval_batch_size=2,
         max_steps=1,
     )
     # Note: we don't expect train samples to exist since we have no untrusted train data
@@ -157,8 +156,10 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
 def test_train_statistical_backdoor(tmp_path, backdoor_task, detector_type):
     train_detector(
         task=backdoor_task,
-        detector=detector_type(max_batch_size=2, save_path=tmp_path),
+        detector=detector_type(),
         batch_size=2,
+        eval_batch_size=2,
+        save_path=tmp_path,
         max_steps=1,
     )
 
@@ -172,11 +173,11 @@ def test_train_statistical_backdoor(tmp_path, backdoor_task, detector_type):
 def test_finetuning_detector(backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
-        detector=detectors.FinetuningAnomalyDetector(
-            max_batch_size=2, save_path=tmp_path
-        ),
+        detector=detectors.FinetuningAnomalyDetector(),
+        save_path=tmp_path,
         num_classes=10,
         batch_size=2,
+        eval_batch_size=2,
         max_steps=1,
     )
     assert (tmp_path / "detector.pt").is_file()
