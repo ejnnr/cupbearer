@@ -25,7 +25,7 @@ def adversarial_examples(
         anomaly_func=lambda dataset, train: make_adversarial_examples(
             model,
             dataset,
-            cache_path / f"advexes_{'train' if train else 'test'}",
+            cache_path / f"adversarial_examples_{'train' if train else 'test'}",
             **kwargs,
         ),
         trusted_fraction=trusted_fraction,

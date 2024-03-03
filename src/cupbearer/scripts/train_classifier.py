@@ -9,10 +9,8 @@ from torch.utils.data import DataLoader
 
 from cupbearer.models import HookedModel
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import script
 
 
-@script
 def main(
     model: HookedModel,
     train_loader: DataLoader,
@@ -49,9 +47,8 @@ def main(
     # TODO: once we do longer training runs we'll want to have multiple
     # checkpoints, potentially based on validation loss
     if (
-        path
         # If the user already provided a custom checkpoint config, we'll use that:
-        and not any(isinstance(c, ModelCheckpoint) for c in callbacks)
+        not any(isinstance(c, ModelCheckpoint) for c in callbacks)
         # If the user explicitly disabled checkpointing, we don't want to override that:
         and trainer_kwargs.get("enable_checkpointing", True)
     ):
@@ -62,27 +59,31 @@ def main(
             )
         )
 
+    trainer_kwargs["callbacks"] = callbacks
+
     # Define metrics logger
     # TODO: make adjustable and set config correctly
-    if wandb:
-        metrics_logger = loggers.WandbLogger(project="cupbearer")
-        metrics_logger.experiment.config.update(trainer_kwargs)
-        metrics_logger.experiment.config.update(
-            {
-                "model": repr(model),
-                "train_data": repr(train_loader.dataset),
-                "batch_size": train_loader.batch_size,
-            }
-        )
-    if path:
-        metrics_logger = loggers.TensorBoardLogger(
-            save_dir=path,
-            name="",
-            version="",
-            sub_dir="tensorboard",
-        )
-    else:
-        metrics_logger = None
+    if "logger" not in trainer_kwargs:
+        if wandb:
+            metrics_logger = loggers.WandbLogger(project="cupbearer")
+            metrics_logger.experiment.config.update(trainer_kwargs)
+            metrics_logger.experiment.config.update(
+                {
+                    "model": repr(model),
+                    "train_data": repr(train_loader.dataset),
+                    "batch_size": train_loader.batch_size,
+                }
+            )
+        elif path:
+            metrics_logger = loggers.TensorBoardLogger(
+                save_dir=path,
+                name="",
+                version="",
+                sub_dir="tensorboard",
+            )
+        else:
+            metrics_logger = None
+        trainer_kwargs["logger"] = metrics_logger
 
     trainer = L.Trainer(default_root_dir=path, **trainer_kwargs)
 

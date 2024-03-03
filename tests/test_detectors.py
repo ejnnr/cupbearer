@@ -4,7 +4,6 @@ import pytest
 import torch
 from cupbearer.detectors.statistical import (
     MahalanobisDetector,
-    MahalanobisTrainConfig,
     QuantumEntropyDetector,
     SpectralSignatureDetector,
 )
@@ -39,23 +38,22 @@ from cupbearer.models import CNN, MLP
     ],
 )
 class TestTrainedStatisticalDetectors:
-    # Currently MahalanobisTrainConfig works for all statistical detectors
-    train_config = MahalanobisTrainConfig(
-        batch_size=16,
-        rcond=1e-5,
-    )
+    rcond: float = 1e-5
 
     def train_detector(self, dataset, Model, Detector, **kwargs):
         example_input, _ = next(iter(dataset))
+        detector = Detector()
         model = Model(input_shape=example_input.shape, output_dim=7)
-        detector = Detector(model=model)
+        detector.set_model(model)
 
         detector.train(
             # Just make sure all detectors get the data they need:
             trusted_data=dataset,
             untrusted_data=dataset,
             num_classes=7,
-            train_config=self.train_config,
+            batch_size=16,
+            rcond=self.rcond,
+            max_steps=1,
         )
         return detector
 
@@ -87,10 +85,8 @@ class TestTrainedStatisticalDetectors:
             assert inv_cov.size() == cov.size()
 
             # Check that inverse is (pseudo) inverse
-            rank = torch.linalg.matrix_rank(cov, rtol=self.train_config.rcond)
-            assert (
-                torch.linalg.matrix_rank(inv_cov, rtol=self.train_config.rcond) == rank
-            )
+            rank = torch.linalg.matrix_rank(cov, rtol=self.rcond)
+            assert torch.linalg.matrix_rank(inv_cov, rtol=self.rcond) == rank
 
             # TODO I'm uncertain which tolerances to use here, this is a
             # guesstimate based on some of the computations that are done and
@@ -111,12 +107,10 @@ class TestTrainedStatisticalDetectors:
             assert W.size() == cov.size()
 
             # Check that Whitening matrix computes (pseudo) inverse
-            rank = torch.linalg.matrix_rank(cov, rtol=self.train_config.rcond)
-            assert torch.linalg.matrix_rank(W, rtol=self.train_config.rcond) == rank
+            rank = torch.linalg.matrix_rank(cov, rtol=self.rcond)
+            assert torch.linalg.matrix_rank(W, rtol=self.rcond) == rank
             inv_cov = W @ W.mT
-            assert (
-                torch.linalg.matrix_rank(inv_cov, rtol=self.train_config.rcond) == rank
-            )
+            assert torch.linalg.matrix_rank(inv_cov, rtol=self.rcond) == rank
 
             # TODO I'm uncertain which tolerances to use here, this is a
             # guesstimate based on some of the computations that are done and

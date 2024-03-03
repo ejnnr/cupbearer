@@ -195,7 +195,7 @@ class LocallyConsistentAbstraction(Abstraction):
         return cls(tau_maps, steps)
 
 
-class AutoencoderAbstraction(nn.Module):
+class AutoencoderAbstraction(Abstraction):
     def __init__(
         self,
         tau_maps: dict[str, nn.Module],  # encoders

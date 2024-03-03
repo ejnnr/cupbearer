@@ -7,22 +7,20 @@ from torch.utils.data import DataLoader, Dataset
 
 from cupbearer.models import HookedModel
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import script
 
 
-@script
 def main(
     data: Dataset,
     model: HookedModel,
     path: Path | str,
     max_batches: Optional[int] = None,
-    max_batch_size: int = 2048,
+    batch_size: int = 2048,
 ):
     path = Path(path)
 
     dataloader = DataLoader(
         data,
-        batch_size=max_batch_size,
+        batch_size=batch_size,
         shuffle=False,
     )
 

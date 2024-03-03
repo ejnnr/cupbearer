@@ -26,7 +26,7 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         *,
         batch_size: int = 1024,
         pbar: bool = True,
-        max_batches: int | None = None,
+        max_steps: int | None = None,
         **kwargs,
     ):
         # Common for statistical methods is that the training does not require
@@ -58,7 +58,7 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
                 data_loader = tqdm(data_loader)
 
             for i, batch in enumerate(data_loader):
-                if max_batches and i >= max_batches:
+                if max_steps and i >= max_steps:
                     break
                 _, activations = self.get_activations(batch)
                 self.batch_update(activations)

@@ -110,6 +110,11 @@ class WanetBackdoor(Backdoor):
         self._warping_field = None
         self._control_grid = None
 
+        # Load or generate control grid; important to do this now before we might
+        # create multiple workers---we wouldn't want to generate different random
+        # control grids in each one.
+        self.control_grid
+
         assert 0 <= self.p_noise <= 1, "Probability must be between 0 and 1"
         assert (
             0 <= self.p_noise + self.p_backdoor <= 1
@@ -120,7 +125,7 @@ class WanetBackdoor(Backdoor):
         if self._control_grid is not None:
             return self._control_grid
 
-        if self.path:
+        if self.path is None:
             logger.debug("Generating new control grid for warping field.")
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
             control_grid = 2 * torch.rand(*control_grid_shape) - 1

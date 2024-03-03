@@ -1,11 +1,9 @@
 from cupbearer.detectors import AnomalyDetector
 from cupbearer.tasks import Task
-from cupbearer.utils.scripts import script
 
 from . import eval_detector
 
 
-@script
 def main(
     task: Task,
     detector: AnomalyDetector,
