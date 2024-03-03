@@ -1,6 +1,7 @@
 import codecs
 import importlib
 import pickle
+from datetime import datetime
 from pathlib import Path
 from typing import Union
 
@@ -117,3 +118,11 @@ def inputs_from_batch(batch):
         return batch[0]
     else:
         return batch
+
+
+def log_path(base="logs", time=True):
+    if time:
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    else:
+        timestamp = datetime.now().strftime("%Y-%m-%d")
+    return Path(base) / timestamp
