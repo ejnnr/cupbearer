@@ -20,11 +20,6 @@ def backdoor_detection(
         "this is probably unintentional."
     )
 
-    # TODO: for WaNet, we currently expect the user to load the control grid.
-    # (Otherwise we'd have to always take in a path here, and also when working
-    # in a notebook it might just be easier to pass in the existing backdoor object.)
-    # But we should somehow check somewhere that it's loaded to avoid silent errors.
-
     return Task.from_base_data(
         model=model,
         train_data=train_data,

@@ -14,8 +14,7 @@ def main(
     detector.set_model(task.model)
 
     detector.eval(
-        train_dataset=task.trusted_data,
-        test_dataset=task.test_data,
+        dataset=task.test_data,
         pbar=pbar,
         save_path=save_path,
         batch_size=batch_size,

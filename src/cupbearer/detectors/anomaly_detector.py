@@ -92,11 +92,7 @@ class AnomalyDetector(ABC):
         self,
         # Don't need train_dataset here, but e.g. adversarial abstractions need it,
         # and in general there's no reason to deny detectors access to it during eval.
-        # TODO: I think we can/should remove this and require detectors to handle
-        # anything involving training data during training (now that they get access
-        # to untrusted data then).
-        train_dataset: Dataset,
-        test_dataset: MixedData,
+        dataset: MixedData,
         batch_size: int = 1024,
         histogram_percentile: float = 95,
         save_path: Path | str | None = None,
@@ -105,10 +101,10 @@ class AnomalyDetector(ABC):
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
-        assert isinstance(test_dataset, MixedData), type(test_dataset)
+        assert isinstance(dataset, MixedData), type(dataset)
 
         test_loader = DataLoader(
-            test_dataset,
+            dataset,
             batch_size=batch_size,
             # For some methods, such as adversarial abstractions, it might matter how
             # normal/anomalous data is distributed into batches. In that case, we want

@@ -62,7 +62,6 @@ def main(
     trainer_kwargs["callbacks"] = callbacks
 
     # Define metrics logger
-    # TODO: make adjustable and set config correctly
     if "logger" not in trainer_kwargs:
         if wandb:
             metrics_logger = loggers.WandbLogger(project="cupbearer")
@@ -72,6 +71,7 @@ def main(
                     "model": repr(model),
                     "train_data": repr(train_loader.dataset),
                     "batch_size": train_loader.batch_size,
+                    "lr": lr,
                 }
             )
         elif path:
