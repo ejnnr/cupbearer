@@ -1,18 +1,19 @@
 import warnings
+from typing import Any
 
+import lightning as L
 import torch
 from lightning.pytorch.callbacks import ModelCheckpoint
 
-from cupbearer.data import TensorDataFormat
-from cupbearer.data.data_format import TextDataFormat
 from cupbearer.scripts._shared import Classifier
+from cupbearer.utils.data_format import TensorDataFormat, TextDataFormat
 from cupbearer.utils.scripts import script
 
 from .conf.train_classifier_conf import Config
 
 
 @script
-def main(cfg: Config):
+def main(cfg: Config) -> dict[str, Any] | L.Trainer:
     dataset = cfg.train_data.build()
 
     train_loader = cfg.train_config.get_dataloader(dataset)
@@ -42,9 +43,9 @@ def main(cfg: Config):
         input_format=input_format,
         num_classes=cfg.num_classes,
         num_labels=cfg.num_labels,
-        optim_cfg=cfg.train_config,
+        optim_cfg=cfg.train_config.optimizer,
         val_loader_names=list(val_loaders.keys()),
-        task=cfg.task
+        task=cfg.task,
     )
 
     # TODO: once we do longer training runs we'll want to have multiple
@@ -73,3 +74,8 @@ def main(cfg: Config):
             # since pytorch lightning would interpret that as an empty dataloader!
             val_dataloaders=list(val_loaders.values()) or None,
         )
+
+    if cfg.return_trainer:
+        return trainer
+    else:
+        return trainer.logged_metrics

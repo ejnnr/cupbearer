@@ -230,7 +230,6 @@ class AutoencoderAbstraction(nn.Module):
             """Help method for MLP models"""
             tau_maps = {}
             decoders = {}
-            model.hidden_dims + [model.output_dim]
             abstract_dims = [
                 reduce_size(dim, size_reduction) for dim in model.hidden_dims
             ] + [model.output_dim]

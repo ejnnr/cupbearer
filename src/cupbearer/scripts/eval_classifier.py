@@ -1,10 +1,11 @@
 import json
 
 import lightning as L
-from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import script
 from loguru import logger
 from torch.utils.data import DataLoader
+
+from cupbearer.scripts._shared import Classifier
+from cupbearer.utils.scripts import script
 
 from .conf.eval_classifier_conf import Config
 

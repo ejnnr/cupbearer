@@ -4,8 +4,9 @@ from pathlib import Path
 from typing import Any, Callable, Optional, Type, TypeVar
 
 import simple_parsing
-from cupbearer.utils.utils import BaseConfig
 from loguru import logger
+
+from cupbearer.utils.utils import BaseConfig
 
 
 @dataclass(kw_only=True)

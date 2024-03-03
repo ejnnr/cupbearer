@@ -3,17 +3,17 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import torch
+from transformers.modeling_utils import PreTrainedModel
+from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
-from cupbearer.data import DataFormat, TensorDataFormat, TextDataFormat
+from cupbearer.utils.data_format import DataFormat, TensorDataFormat, TextDataFormat
 from cupbearer.utils.scripts import load_config
 from cupbearer.utils.utils import BaseConfig, mutable_field
 
 from .hooked_model import HookedModel
-from .models import CNN, MLP
+from .models import CNN, MLP, PreActBlock, PreActResNet
 from .transformers import ClassifierTransformer
 from .transformers_hf import TamperingPredictionTransformer, load_transformer
-from transformers.modeling_utils import PreTrainedModel
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 
 @dataclass(kw_only=True)
@@ -27,7 +27,7 @@ class ModelConfig(BaseConfig, ABC):
 class StoredModel(ModelConfig):
     path: Path
 
-    def build_model(self, input_format) -> HookedModel:
+    def build_model(self, input_format: DataFormat) -> HookedModel:
         model_cfg = load_config(self.path, "model", ModelConfig)
         model = model_cfg.build_model(input_format)
 
@@ -97,6 +97,7 @@ class TransformerConfig(ModelConfig):
             )
         return ClassifierTransformer(self.model, self.num_classes, device=self.device)
 
+
 @dataclass
 class TamperTransformerConfig(ModelConfig):
     name: str
@@ -110,14 +111,33 @@ class TamperTransformerConfig(ModelConfig):
             )
         transformer, tokenizer, emd_dim, max_len = self._load_transformer()
         return TamperingPredictionTransformer(
-            model=transformer, tokenizer=tokenizer, embed_dim=emd_dim, 
-            max_length=max_len, n_sensors=self.n_sensors, sensor_token=self.sensor_token
+            model=transformer,
+            tokenizer=tokenizer,
+            embed_dim=emd_dim,
+            max_length=max_len,
+            n_sensors=self.n_sensors,
+            sensor_token=self.sensor_token,
         )
-    def _load_transformer(self) -> tuple[PreTrainedModel, PreTrainedTokenizerBase, int, int]:
-       return load_transformer(self.name)
+
+    def _load_transformer(
+        self,
+    ) -> tuple[PreTrainedModel, PreTrainedTokenizerBase, int, int]:
+        return load_transformer(self.name)
 
 
 @dataclass
 class DebugCNNConfig(CNNConfig):
     channels: list[int] = mutable_field([2])
     dense_dims: list[int] = mutable_field([2])
+
+
+@dataclass
+class ResnetConfig(ModelConfig):
+    output_dim: int = 10
+    # ResNet18 default:
+    num_blocks: list[int] = mutable_field([2, 2, 2, 2])
+
+    def build_model(self, input_format: DataFormat) -> HookedModel:
+        if not isinstance(input_format, TensorDataFormat):
+            raise ValueError(f"CNN only supports tensor input, got {input_format}")
+        return PreActResNet(PreActBlock, self.num_blocks, num_classes=self.output_dim)

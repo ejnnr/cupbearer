@@ -1,31 +1,41 @@
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import lightning as L
-from lightning.pytorch import loggers
+from lightning.pytorch import callbacks, loggers
 from torch.utils.data import DataLoader
 
-from cupbearer.utils.optimizers import OptimizerConfigMixin
+from cupbearer.utils.optimizers import OptimizerConfig
 from cupbearer.utils.utils import BaseConfig
 
 
 @dataclass(kw_only=True)
-class TrainConfig(BaseConfig, OptimizerConfigMixin):
+class TrainConfig(BaseConfig):
     num_epochs: int = 10
     batch_size: int = 128
     max_batch_size: int = 2048
+    optimizer: OptimizerConfig = field(default_factory=OptimizerConfig)
     num_workers: int = 0
+    pin_memory: bool = True
     max_steps: int = -1
     check_val_every_n_epoch: int = 1
     pbar: bool = False
     log_every_n_steps: Optional[int] = None
     wandb: bool = False
-    device: str = "auto"
+    devices: int | list[int] | str = "auto"
+    accelerator: str = "auto"
+    precision: int | str = 32
+    monitor_device_stats: bool = False
+    profiler: Optional[str] = None
 
     @property
     def callbacks(self):
-        return []
+        callback_list = []
+        if self.monitor_device_stats:
+            callback_list.append(callbacks.DeviceStatsMonitor(cpu_stats=True))
+
+        return callback_list
 
     def get_dataloader(self, dataset, train=True):
         if train:
@@ -35,6 +45,7 @@ class TrainConfig(BaseConfig, OptimizerConfigMixin):
                 shuffle=True,
                 num_workers=self.num_workers,
                 persistent_workers=self.num_workers > 0,
+                pin_memory=self.pin_memory,
             )
         else:
             return DataLoader(
@@ -70,7 +81,10 @@ class TrainConfig(BaseConfig, OptimizerConfigMixin):
             check_val_every_n_epoch=self.check_val_every_n_epoch,
             enable_progress_bar=self.pbar,
             log_every_n_steps=self.log_every_n_steps,
-            accelerator=self.device,
+            devices=self.devices,
+            accelerator=self.accelerator,
+            precision=self.precision,
+            profiler=self.profiler,
         )
         trainer_kwargs.update(kwargs)  # override defaults if given
         return L.Trainer(**trainer_kwargs)

@@ -23,7 +23,7 @@ class DatasetConfig(BaseConfig, ABC):
     @abstractproperty
     def num_classes(self) -> int | None:  # type: ignore
         pass
-    
+
     @property
     def num_labels(self) -> int | None:
         return None

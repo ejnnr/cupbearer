@@ -9,7 +9,6 @@ from ._shared import (
 from .adversarial import AdversarialExampleConfig
 from .backdoor_data import BackdoorData
 from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
-from .data_format import DataFormat, TensorDataFormat, TextDataFormat
 from .huggingface import IMDBDatasetConfig
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
 from .tampering import TamperingDataConfig

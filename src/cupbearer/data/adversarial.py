@@ -9,9 +9,9 @@ from loguru import logger
 from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset, Subset
 
-from cupbearer.data import TensorDataFormat
 from cupbearer.models import StoredModel
 from cupbearer.utils import utils
+from cupbearer.utils.data_format import TensorDataFormat
 
 from . import DatasetConfig, TrainDataFromRun
 

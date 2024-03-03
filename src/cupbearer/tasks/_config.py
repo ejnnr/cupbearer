@@ -13,6 +13,7 @@ from cupbearer.data import (
 )
 from cupbearer.models import ModelConfig
 from cupbearer.models.models import HookedModel
+from cupbearer.utils.data_format import TensorDataFormat
 from cupbearer.utils.utils import BaseConfig
 
 
