@@ -29,7 +29,7 @@ dependencies = [
     "datasets",
     "tqdm",
     "loguru",
-    "matplotlib"
+    "matplotlib",
 ]
 
 requires-python = ">=3.10"

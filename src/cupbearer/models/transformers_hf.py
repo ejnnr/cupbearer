@@ -75,7 +75,7 @@ class TransformerBaseHF(HookedModel):
         self.tokenizer.pad_token = tokenizer.eos_token
 
     @property
-    def defeault_names(self) -> list[str]:
+    def default_names(self) -> list[str]:
         return ["final_layer_embeddings"]
 
     def process_input(self, x) -> TokenDict:
