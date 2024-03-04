@@ -63,7 +63,6 @@ def make_adversarial_examples(
 
     if max_examples:
         dataset = Subset(dataset, range(max_examples))
-
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,

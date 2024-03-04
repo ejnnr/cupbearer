@@ -8,15 +8,17 @@ from lightning.pytorch.callbacks import ModelCheckpoint
 from torch.utils.data import DataLoader
 
 from cupbearer.models import HookedModel
-from cupbearer.scripts._shared import Classifier
+from cupbearer.scripts._shared import ClassificationTask, Classifier
 
 
 def main(
     model: HookedModel,
     train_loader: DataLoader,
-    num_classes: int,
     path: Path | str,
     lr: float = 1e-3,
+    num_classes: int | None = None,
+    num_labels: int | None = None,
+    task: ClassificationTask = "multiclass",
     val_loaders: DataLoader | dict[str, DataLoader] | None = None,
     # If True, returns the Lighting Trainer object (which has the model and a bunch
     # of other information, this may be useful when using interactively).
@@ -38,8 +40,10 @@ def main(
     classifier = Classifier(
         model=model,
         num_classes=num_classes,
+        num_labels=num_labels,
         lr=lr,
         val_loader_names=list(val_loaders.keys()),
+        task=task,
     )
 
     callbacks = trainer_kwargs.pop("callbacks", [])

@@ -1,19 +1,24 @@
 import lightning as L
 import torch
 from torchmetrics.classification import Accuracy
+from typing_extensions import Literal
 
 from cupbearer.models import HookedModel
+
+ClassificationTask = Literal["binary", "multiclass", "multilabel"]
 
 
 class Classifier(L.LightningModule):
     def __init__(
         self,
         model: HookedModel,
-        num_classes: int,
         lr: float,
+        num_classes: int | None = None,
+        num_labels: int | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
+        task: ClassificationTask = "multiclass",
     ):
         super().__init__()
         if save_hparams:
@@ -27,24 +32,33 @@ class Classifier(L.LightningModule):
         self.lr = lr
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names
-        self.train_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        self.task = task
+        self.loss_func = self._get_loss_func(self.task)
+        self.train_accuracy = Accuracy(
+            task=self.task, num_classes=num_classes, num_labels=num_labels
+        )
         self.val_accuracy = torch.nn.ModuleList(
             [
-                Accuracy(task="multiclass", num_classes=num_classes)
+                Accuracy(task=self.task, num_classes=num_classes, num_labels=num_labels)
                 for _ in val_loader_names
             ]
         )
         self.test_accuracy = torch.nn.ModuleList(
             [
-                Accuracy(task="multiclass", num_classes=num_classes)
+                Accuracy(task=self.task, num_classes=num_classes, num_labels=num_labels)
                 for _ in test_loader_names
             ]
         )
 
+    def _get_loss_func(self, task):
+        if task == "multiclass":
+            return torch.nn.functional.cross_entropy
+        return torch.nn.functional.binary_cross_entropy
+
     def _shared_step(self, batch):
         x, y = batch
         logits = self.model(x)
-        loss = torch.nn.functional.cross_entropy(logits, y)
+        loss = self.loss_func(logits, y)
         return loss, logits, y
 
     def training_step(self, batch, batch_idx):

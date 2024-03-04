@@ -8,7 +8,9 @@ from .backdoors import (
     NoiseBackdoor,
     WanetBackdoor,
 )
+from .huggingface import IMDBDatasetConfig
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchDataset
+from .tampering import TamperingDataConfig
 from .toy_ambiguous_features import ToyDataset
 from .transforms import (
     GaussianNoise,

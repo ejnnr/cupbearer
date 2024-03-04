@@ -23,6 +23,7 @@ dependencies = [
     "torchattacks~=3.5.1",
     "lightning~=2.1.0",
     "torchmetrics~=1.2.0",
+    "transformer_lens~=1.14.0",
     "tensorboard",
     "datasets",
     "tqdm",
@@ -33,7 +34,7 @@ dependencies = [
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
-dev = ["pytest", "pre-commit"]
+dev = ["pytest", "pre-commit", "ipykernel"]
 wandb = ["wandb"]
 
 [project.urls]
