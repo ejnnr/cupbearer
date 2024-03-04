@@ -54,6 +54,8 @@ def assert_acyclic(graph: dict[str, list[str]]):
 
 
 class Abstraction(nn.Module):
+    # TODO: I think we should likely get rid of get_default and instead just have some
+    # informal collection of helper functions for building reasonable abstractions.
     @classmethod
     @abstractmethod
     def get_default(cls, model: HookedModel, size_reduction: int) -> Abstraction:
@@ -193,7 +195,7 @@ class LocallyConsistentAbstraction(Abstraction):
         return cls(tau_maps, steps)
 
 
-class AutoencoderAbstraction(nn.Module):
+class AutoencoderAbstraction(Abstraction):
     def __init__(
         self,
         tau_maps: dict[str, nn.Module],  # encoders

@@ -5,25 +5,13 @@ from typing import Optional
 import torch
 import torchvision.transforms.functional as F
 
-from cupbearer.utils.utils import BaseConfig
 
-
-@dataclass
-class Transform(BaseConfig, ABC):
+class Transform(ABC):
     @abstractmethod
     def __call__(self, sample):
         pass
 
-    def store(self, basepath):
-        """Save transform state to reproduce instance later."""
-        pass
 
-    def load(self, basepath):
-        """Load transform state to reproduce stored instance."""
-        pass
-
-
-@dataclass
 class AdaptedTransform(Transform, ABC):
     """Adapt a transform designed to work on inputs to work on img, label pairs."""
 
@@ -51,8 +39,6 @@ class AdaptedTransform(Transform, ABC):
         return (img, *rest)
 
 
-# Needs to be a dataclass to make simple_parsing's serialization work correctly.
-@dataclass
 class ToTensor(AdaptedTransform):
     def __img_call__(self, img):
         out = F.to_tensor(img)

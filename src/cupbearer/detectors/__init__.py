@@ -1,12 +1,9 @@
 # ruff: noqa: F401
-from .abstraction import AbstractionDetectorConfig
-from .config import DetectorConfig, StoredDetector
-from .finetuning import FinetuningConfig
+from .abstraction import AbstractionDetector
+from .anomaly_detector import AnomalyDetector
+from .finetuning import FinetuningAnomalyDetector
 from .statistical import (
-    DebugMahalanobisConfig,
-    DebugQuantumEntropyConfig,
-    DebugSpectralSignatureConfig,
-    MahalanobisConfig,
-    QuantumEntropyConfig,
-    SpectralSignatureConfig,
+    MahalanobisDetector,
+    QuantumEntropyDetector,
+    SpectralSignatureDetector,
 )

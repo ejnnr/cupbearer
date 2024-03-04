@@ -1,36 +1,33 @@
-from copy import deepcopy
-from dataclasses import dataclass
-from pathlib import Path
+from torch.utils.data import Dataset
 
-from cupbearer.data import Backdoor
-from cupbearer.data.backdoor_data import BackdoorData
-from cupbearer.models import StoredModel
-from cupbearer.utils.scripts import load_config
+from cupbearer.data import Backdoor, BackdoorDataset
+from cupbearer.models import HookedModel
 
-from ._config import DebugTaskConfig, TaskConfig
+from .task import Task
 
 
-@dataclass(kw_only=True)
-class BackdoorDetection(TaskConfig):
-    path: Path
-    backdoor: Backdoor
-    no_load: bool = False
+def backdoor_detection(
+    model: HookedModel,
+    train_data: Dataset,
+    test_data: Dataset,
+    backdoor: Backdoor,
+    trusted_fraction: float = 1.0,
+    clean_train_weight: float = 0.5,
+    clean_test_weight: float = 0.5,
+):
+    assert backdoor.p_backdoor == 1.0, (
+        "Your anomalous data is not pure backdoor data, "
+        "this is probably unintentional."
+    )
 
-    def _init_train_data(self):
-        data_cfg = load_config(self.path, "train_data", BackdoorData)
-        # Remove the backdoor
-        self._train_data = data_cfg.original
-
-    def _get_anomalous_test_data(self):
-        copy = deepcopy(self._train_data)
-        if not self.no_load:
-            self.backdoor.load(self.path)
-        return BackdoorData(original=copy, backdoor=self.backdoor)
-
-    def _init_model(self):
-        self._model = StoredModel(path=self.path)
-
-
-@dataclass
-class DebugBackdoorDetection(DebugTaskConfig, BackdoorDetection):
-    pass
+    return Task.from_base_data(
+        model=model,
+        train_data=train_data,
+        test_data=test_data,
+        anomaly_func=lambda dataset, _: BackdoorDataset(
+            original=dataset, backdoor=backdoor
+        ),
+        trusted_fraction=trusted_fraction,
+        clean_train_weight=clean_train_weight,
+        clean_test_weight=clean_test_weight,
+    )

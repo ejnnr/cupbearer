@@ -1,46 +1,34 @@
-import math
-from dataclasses import dataclass
 from pathlib import Path
 
-from cupbearer.data._shared import TrainDataFromRun
-from cupbearer.data.adversarial import AdversarialExampleConfig
-from cupbearer.models import StoredModel
+from torch.utils.data import Dataset
 
-from ._config import DebugTaskConfig, TaskConfig
+from cupbearer.data import make_adversarial_examples
+from cupbearer.models import HookedModel
 
-
-@dataclass
-class AdversarialExampleTask(TaskConfig):
-    path: Path
-    attack_batch_size: int = 128
-    success_threshold: float = 0.1
-    steps: int = 40
-    eps: float = 8 / 255
-
-    def _init_train_data(self):
-        self._train_data = TrainDataFromRun(path=self.path)
-
-    def _get_anomalous_test_data(self):
-        max_size = None
-        if self.max_test_size:
-            # This isn't strictly necessary, but it lets us avoid generating more
-            # adversarial examples than needed.
-            max_size = math.ceil(self.max_test_size * (1 - self.normal_weight))
-        return AdversarialExampleConfig(
-            path=self.path,
-            max_size=max_size,
-            attack_batch_size=self.attack_batch_size,
-            success_threshold=self.success_threshold,
-            steps=self.steps,
-            eps=self.eps,
-        )
-
-    def _init_model(self):
-        self._model = StoredModel(path=self.path)
+from .task import Task
 
 
-@dataclass(kw_only=True)
-class DebugAdversarialExampleTask(DebugTaskConfig, AdversarialExampleTask):
-    attack_batch_size: int = 1
-    success_threshold: float = 1.0
-    steps: int = 1
+def adversarial_examples(
+    model: HookedModel,
+    train_data: Dataset,
+    test_data: Dataset,
+    cache_path: Path,
+    trusted_fraction: float = 1.0,
+    clean_train_weight: float = 0.5,
+    clean_test_weight: float = 0.5,
+    **kwargs,
+) -> Task:
+    return Task.from_base_data(
+        model=model,
+        train_data=train_data,
+        test_data=test_data,
+        anomaly_func=lambda dataset, train: make_adversarial_examples(
+            model,
+            dataset,
+            cache_path / f"adversarial_examples_{'train' if train else 'test'}",
+            **kwargs,
+        ),
+        trusted_fraction=trusted_fraction,
+        clean_train_weight=clean_train_weight,
+        clean_test_weight=clean_test_weight,
+    )

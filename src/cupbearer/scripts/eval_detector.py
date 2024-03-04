@@ -1,24 +1,21 @@
-from cupbearer.scripts.conf.eval_detector_conf import Config
-from cupbearer.utils.scripts import script
+from pathlib import Path
+
+from cupbearer.detectors import AnomalyDetector
+from cupbearer.tasks import Task
 
 
-@script
-def main(cfg: Config):
-    assert cfg.detector is not None  # make type checker happy
-    # Init
-    train_data = cfg.task.build_train_data()
-    test_data = cfg.task.build_test_data()
-    # train_data[0] is the first sample, which is (input, ...), so we need another [0]
-    example_input = train_data[0][0]
-    model = cfg.task.build_model(input_shape=example_input.shape)
-    detector = cfg.detector.build(
-        model=model,
-        save_dir=cfg.path,
-    )
+def main(
+    task: Task,
+    detector: AnomalyDetector,
+    save_path: Path | str | None,
+    pbar: bool = False,
+    batch_size: int = 1024,
+):
+    detector.set_model(task.model)
 
-    # Evaluate detector
     detector.eval(
-        train_dataset=train_data,
-        test_dataset=test_data,
-        pbar=cfg.pbar,
+        dataset=task.test_data,
+        pbar=pbar,
+        save_path=save_path,
+        batch_size=batch_size,
     )

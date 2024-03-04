@@ -1,40 +1,40 @@
 import json
+from pathlib import Path
+from typing import Optional
 
 import lightning as L
-from loguru import logger
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Dataset
 
+from cupbearer.models import HookedModel
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils.scripts import script
-
-from .conf.eval_classifier_conf import Config
 
 
-@script
-def main(cfg: Config):
-    assert cfg.data is not None  # make type checker happy
-    assert cfg.path is not None  # make type checker happy
+def main(
+    data: Dataset,
+    model: HookedModel,
+    path: Path | str,
+    max_batches: Optional[int] = None,
+    batch_size: int = 2048,
+):
+    path = Path(path)
 
-    for trafo in cfg.data.get_transforms():
-        logger.debug(f"Loading transform: {trafo}")
-        trafo.load(cfg.path)
-
-    dataset = cfg.data.build()
     dataloader = DataLoader(
-        dataset,
-        batch_size=cfg.max_batch_size,
+        data,
+        batch_size=batch_size,
         shuffle=False,
     )
 
     classifier = Classifier.load_from_checkpoint(
-        cfg.path / "checkpoints" / "last.ckpt", test_loader_names=["test"]
+        path / "checkpoints" / "last.ckpt",
+        model=model,
+        test_loader_names=["test"],
     )
     trainer = L.Trainer(
         logger=False,
-        default_root_dir=cfg.path,
-        limit_test_batches=cfg.max_batches,
+        default_root_dir=path,
+        limit_test_batches=max_batches,
     )
     metrics = trainer.test(classifier, [dataloader])
 
-    with open(cfg.path / "eval.json", "w") as f:
+    with open(path / "eval.json", "w") as f:
         json.dump(metrics, f)

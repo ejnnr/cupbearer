@@ -14,9 +14,6 @@ from cupbearer.detectors.abstraction.abstraction import (
 from cupbearer.detectors.anomaly_detector import (
     ActivationBasedDetector,
 )
-from cupbearer.models import HookedModel
-from cupbearer.utils.optimizers import OptimizerConfig
-from cupbearer.utils.train import TrainConfig
 
 
 def per_layer(func: Callable):
@@ -62,12 +59,7 @@ def compute_cosine_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Te
 
 @per_layer
 def compute_kl_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    return F.kl_div(
-        input,
-        target,
-        reduction="none",
-        log_target=True,
-    ).sum(dim=1)
+    return F.kl_div(input, target, reduction="none", log_target=True).sum(dim=1)
 
 
 def compute_losses(
@@ -94,14 +86,13 @@ class AbstractionModule(L.LightningModule):
         self,
         get_activations: Callable[[torch.Tensor], tuple[Any, dict[str, torch.Tensor]]],
         abstraction: Abstraction,
-        optim_cfg: OptimizerConfig,
+        lr: float,
     ):
         super().__init__()
-        self.save_hyperparameters(ignore=["get_activations", "abstraction"])
 
         self.get_activations = get_activations
         self.abstraction = abstraction
-        self.optim_cfg = optim_cfg
+        self.lr = lr
 
     def _shared_step(self, batch):
         _, activations = self.get_activations(batch)
@@ -118,59 +109,43 @@ class AbstractionModule(L.LightningModule):
 
     def configure_optimizers(self):
         # Note we only optimize over the abstraction parameters, the model is frozen
-        return self.optim_cfg.get_optimizer(self.abstraction.parameters())
+        return torch.optim.Adam(self.abstraction.parameters(), lr=self.lr)
 
 
 class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
 
-    def __init__(
-        self,
-        model: HookedModel,
-        abstraction: Abstraction,
-        max_batch_size: int = 4096,
-        save_path: str | Path | None = None,
-    ):
+    def __init__(self, abstraction: Abstraction):
         self.abstraction = abstraction
         names = list(abstraction.tau_maps.keys())
-        super().__init__(
-            model,
-            activation_name_func=lambda _: names,
-            max_batch_size=max_batch_size,
-            save_path=save_path,
-        )
-
-    @property
-    def should_train_on_clean_data(self) -> bool:
-        return True
+        super().__init__(activation_name_func=lambda _: names)
 
     def train(
         self,
-        dataset,
+        trusted_data,
+        untrusted_data,
+        save_path: Path | str,
         *,
-        num_classes: int,
-        train_config: TrainConfig,
+        lr: float = 1e-3,
+        batch_size: int = 64,
+        **trainer_kwargs,
     ):
+        if trusted_data is None:
+            raise ValueError("Abstraction detector requires trusted training data.")
         # Possibly we should store this as a submodule to save optimizers and continue
         # training later. But as long as we don't actually make use of that,
         # this is easiest.
         module = AbstractionModule(
             self.get_activations,
             self.abstraction,
-            optim_cfg=train_config.optimizer,
+            lr=lr,
         )
 
-        train_loader = train_config.get_dataloader(dataset)
+        train_loader = torch.utils.data.DataLoader(
+            trusted_data, batch_size=batch_size, shuffle=True
+        )
 
         # TODO: implement validation data
-        # val_loaders = {
-        #     k: train_config.get_dataloader(v.build, train=False)
-        #     for k, v in self.val_data.items()
-        # }
-        # checkpoint_callback = ModelCheckpoint(
-        #     dirpath=self.save_path,
-        #     filename="detector",
-        # )
 
         self.model.eval()
         # We don't need gradients for base model parameters:
@@ -183,7 +158,7 @@ class AbstractionDetector(ActivationBasedDetector):
         # (which seems tricky to do manually).
         module.model = self.model
 
-        trainer = train_config.get_trainer(path=self.save_path)
+        trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
         trainer.fit(
             model=module,
             train_dataloaders=train_loader,

@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable, Optional
+from typing import Callable
 
 import numpy as np
 import sklearn.metrics
@@ -13,38 +13,39 @@ from matplotlib import pyplot as plt
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
-from cupbearer.data import TestDataMix
+from cupbearer import utils
+from cupbearer.data import MixedData
 from cupbearer.models.models import HookedModel
-from cupbearer.utils import utils
 
 
 class AnomalyDetector(ABC):
-    def __init__(
-        self,
-        model: HookedModel,
-        max_batch_size: int = 4096,
-        save_path: Optional[Path | str] = None,
-    ):
-        self.model = model
+    def __init__(self):
         # For storing the original detector variables when finetuning
         self._original_variables = None
-        self.max_batch_size = max_batch_size
-        self.save_path = None if save_path is None else Path(save_path)
-
         self.trained = False
 
-    @property
-    @abstractmethod
-    def should_train_on_clean_data(self) -> bool:
-        pass
+    def set_model(self, model: HookedModel):
+        # This is separate from __init__ because we want to be able to set the model
+        # automatically based on the task, instead of letting the user pass it in.
+        # On the other hand, it's separate from train() because we might need to set
+        # the model even when just using the detector for inference.
+        #
+        # Subclasses can implement more complex logic here.
+        self.model = model
+        self.trained = False
 
-    @property
-    def should_train_on_poisoned_data(self) -> bool:
-        return not self.should_train_on_clean_data
-
     @abstractmethod
-    def train(self, dataset, *, num_classes: int, train_config: utils.BaseConfig):
-        """Train the anomaly detector with the given dataset as "normal" data."""
+    def train(
+        self,
+        trusted_data: Dataset | None,
+        untrusted_data: Dataset | None,
+        save_path: Path | str | None,
+        **kwargs,
+    ):
+        """Train the anomaly detector with the given datasets on the given model.
+
+        At least one of trusted_data or untrusted_data must be provided.
+        """
 
     @contextmanager
     def finetune(self, **kwargs):
@@ -91,19 +92,20 @@ class AnomalyDetector(ABC):
         self,
         # Don't need train_dataset here, but e.g. adversarial abstractions need it,
         # and in general there's no reason to deny detectors access to it during eval.
-        train_dataset: Dataset,
-        test_dataset: TestDataMix,
+        dataset: MixedData,
+        batch_size: int = 1024,
         histogram_percentile: float = 95,
+        save_path: Path | str | None = None,
         num_bins: int = 100,
         pbar: bool = False,
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
-        assert isinstance(test_dataset, TestDataMix), type(test_dataset)
+        assert isinstance(dataset, MixedData), type(dataset)
 
         test_loader = DataLoader(
-            test_dataset,
-            batch_size=self.max_batch_size,
+            dataset,
+            batch_size=batch_size,
             # For some methods, such as adversarial abstractions, it might matter how
             # normal/anomalous data is distributed into batches. In that case, we want
             # to mix them by default.
@@ -146,12 +148,16 @@ class AnomalyDetector(ABC):
 
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
-        if not self.save_path:
+        if not save_path:
             return
+
+        save_path = Path(save_path)
+
+        save_path.mkdir(parents=True, exist_ok=True)
 
         # Everything from here is just saving metrics and creating figures
         # (which we skip if they aren't going to be saved anyway).
-        with open(self.save_path / "eval.json", "w") as f:
+        with open(save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
 
         # Visualizations for anomaly scores
@@ -167,7 +173,7 @@ class AnomalyDetector(ABC):
         plt.xlabel("Anomaly score")
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
-        plt.savefig(self.save_path / "histogram.pdf")
+        plt.savefig(save_path / "histogram.pdf")
 
     @abstractmethod
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
@@ -219,25 +225,33 @@ class AnomalyDetector(ABC):
         self._set_trained_variables(utils.load(path))
 
 
+def default_activation_name_func(model):
+    return model.default_names
+
+
 class ActivationBasedDetector(AnomalyDetector):
     """AnomalyDetector using activations."""
 
     def __init__(
         self,
-        model: HookedModel,
-        activation_name_func: Callable[[HookedModel], Collection[str]] | None = None,
-        max_batch_size: int = 4096,
-        save_path: Path | str | None = None,
+        activation_name_func: str
+        | Callable[[HookedModel], Collection[str]]
+        | None = None,
     ):
-        super().__init__(
-            model=model, max_batch_size=max_batch_size, save_path=save_path
-        )
+        super().__init__()
+
         if activation_name_func is None:
+            activation_name_func = default_activation_name_func
+        elif isinstance(activation_name_func, str):
+            activation_name_func = utils.get_object(activation_name_func)
 
-            def activation_name_func(model):
-                return model.default_names
+        assert callable(activation_name_func)  # make type checker happy
 
-        self.activation_names = activation_name_func(model)
+        self.activation_name_func = activation_name_func
+
+    def set_model(self, model: HookedModel):
+        super().set_model(model)
+        self.activation_names = self.activation_name_func(model)
 
     def get_activations(self, batch):
         inputs = utils.inputs_from_batch(batch)

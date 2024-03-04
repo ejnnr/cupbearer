@@ -1,13 +1,17 @@
+from __future__ import annotations
+
 import os
 from abc import ABC
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 from loguru import logger
+from torch.utils.data import Dataset
 
-from ._shared import Transform
+from ._shared import Transform, TransformDataset
 
 
 @dataclass
@@ -32,6 +36,15 @@ class Backdoor(Transform, ABC):
         # Do changes out of place
         img = img.clone()
         return self.inject_backdoor(img), self.target_class
+
+
+class BackdoorDataset(TransformDataset):
+    """Just a wrapper around TransformDataset with aliases and more specific types."""
+
+    def __init__(self, original: Dataset, backdoor: Backdoor):
+        super().__init__(dataset=original, transform=backdoor)
+        self.original = original
+        self.backdoor = backdoor
 
 
 @dataclass
@@ -81,27 +94,36 @@ class NoiseBackdoor(Backdoor):
         return img
 
 
-@dataclass
+@dataclass(kw_only=True)
 class WanetBackdoor(Backdoor):
     """Implements trigger transform from "Wanet - Imperceptible Warping-based
-    Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021."""
+    Backdoor Attack" by Anh Tuan Nguyen and Anh Tuan Tran, ICLR, 2021.
 
+    WARNING: The backdoor trigger is a specific (randomly generated) warping pattern.
+    Networks are trained to only respond to this specific pattern, so evaluating
+    a network on a freshly initialized WanetBackdoor with a new trigger won't work.
+    Within a single process, just make sure you only initialize WanetBackdoor once
+    and then use that everywhere.
+    Between different processes, you need to store the trigger using the `store()`
+    method, and then later pass it in as the `path` argument to the new WanetBackdoor.
+    """
+
+    # Path to load control grid from, or None to generate a new one.
+    # Deliberartely non-optional to avoid accidentally generating a new grid!
+    path: Path | str | None
     p_noise: float = 0.0  # Probability of non-backdoor warping
     control_grid_width: int = 4  # Side length of unscaled warping field
     warping_strength: float = 0.5  # Strength of warping effect
     grid_rescale: float = 1.0  # Factor to rescale grid from warping effect
-    _control_grid: Optional[
-        tuple[
-            list[list[float]],
-            list[list[float]],
-        ]
-    ] = None  # Used for reproducibility, typically not set manually
 
     def __post_init__(self):
         super().__post_init__()
         self._warping_field = None
+        self._control_grid = None
 
-        # Init control_grid so that it is saved in config
+        # Load or generate control grid; important to do this now before we might
+        # create multiple workers---we wouldn't want to generate different random
+        # control grids in each one.
         self.control_grid
 
         assert 0 <= self.p_noise <= 1, "Probability must be between 0 and 1"
@@ -111,7 +133,10 @@ class WanetBackdoor(Backdoor):
 
     @property
     def control_grid(self) -> torch.Tensor:
-        if self._control_grid is None:
+        if self._control_grid is not None:
+            return self._control_grid
+
+        if self.path is None:
             logger.debug("Generating new control grid for warping field.")
             control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
             control_grid = 2 * torch.rand(*control_grid_shape) - 1
@@ -119,7 +144,14 @@ class WanetBackdoor(Backdoor):
             control_grid = control_grid * self.warping_strength
             self.control_grid = control_grid
         else:
-            control_grid = torch.tensor(self._control_grid)
+            logger.debug(
+                f"Loading control grid from {self._get_savefile_fullpath(self.path)}"
+            )
+            control_grid = torch.load(self._get_savefile_fullpath(self.path))
+            if control_grid.shape[-1] != self.control_grid_width:
+                logger.warning("Control grid width updated from load.")
+                self.control_grid_width = control_grid.shape[-1]
+            self.control_grid = control_grid
 
         control_grid_shape = (2, self.control_grid_width, self.control_grid_width)
         assert control_grid.shape == control_grid_shape
@@ -133,8 +165,41 @@ class WanetBackdoor(Backdoor):
         if control_grid.shape != control_grid_shape:
             raise ValueError("Control grid shape is incompatible.")
 
-        # We keep self._control_grid serializable
-        self._control_grid = tuple(control_grid.tolist())
+        self._control_grid = control_grid
+
+    def clone(
+        self,
+        *,
+        target_class: Optional[int] = None,
+        p_backdoor: Optional[float] = None,
+        p_noise: Optional[float] = None,
+        warping_strength: Optional[float] = None,
+        grid_rescale: Optional[float] = None,
+    ) -> WanetBackdoor:
+        """Create a new instance but with the same control_grid as current instance."""
+        other = type(self)(
+            path=self.path,
+            p_backdoor=(p_backdoor if p_backdoor is not None else self.p_backdoor),
+            p_noise=(p_noise if p_noise is not None else self.p_noise),
+            target_class=(
+                target_class if target_class is not None else self.target_class
+            ),
+            control_grid_width=self.control_grid_width,
+            warping_strength=(
+                warping_strength
+                if warping_strength is not None
+                else self.warping_strength
+            ),
+            grid_rescale=(
+                grid_rescale if grid_rescale is not None else self.grid_rescale
+            ),
+        )
+        logger.debug("Setting control grid of clone from instance.")
+        assert self._warping_field is None
+        other.control_grid = (
+            self.control_grid * other.warping_strength / self.warping_strength
+        )
+        return other
 
     @property
     def warping_field(self) -> torch.Tensor:
@@ -167,21 +232,9 @@ class WanetBackdoor(Backdoor):
     def _get_savefile_fullpath(basepath):
         return os.path.join(basepath, "wanet_backdoor.pt")
 
-    def store(self, basepath):
-        super().store(basepath)
-        logger.debug(f"Storing control grid to {self._get_savefile_fullpath(basepath)}")
-        torch.save(self.control_grid, self._get_savefile_fullpath(basepath))
-
-    def load(self, basepath):
-        super().load(basepath)
-        logger.debug(
-            f"Loading control grid from {self._get_savefile_fullpath(basepath)}"
-        )
-        control_grid = torch.load(self._get_savefile_fullpath(basepath))
-        if control_grid.shape[-1] != self.control_grid_width:
-            logger.warning("Control grid width updated from load.")
-            self.control_grid_width = control_grid.shape[-1]
-        self.control_grid = control_grid
+    def store(self, path: Path | str):
+        logger.debug(f"Storing control grid to {self._get_savefile_fullpath(path)}")
+        torch.save(self.control_grid, self._get_savefile_fullpath(path))
 
     def _warp(self, img: torch.Tensor, warping_field: torch.Tensor) -> torch.Tensor:
         if img.ndim == 3:

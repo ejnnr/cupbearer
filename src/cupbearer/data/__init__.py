@@ -1,18 +1,17 @@
 # ruff: noqa: F401
-from ._shared import (
-    DatasetConfig,
-    RemoveMixLabelDataset,
-    TestDataConfig,
-    TestDataMix,
-    TrainDataFromRun,
+from ._shared import MixedData, TransformDataset
+from .adversarial import AdversarialExampleDataset, make_adversarial_examples
+from .backdoors import (
+    Backdoor,
+    BackdoorDataset,
+    CornerPixelBackdoor,
+    NoiseBackdoor,
+    WanetBackdoor,
 )
-from .adversarial import AdversarialExampleConfig
-from .backdoor_data import BackdoorData
-from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
-from .huggingface import IMDBDatasetConfig
-from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
-from .tampering import TamperingDataConfig
-from .toy_ambiguous_features import ToyFeaturesConfig
+from .huggingface import IMDBDataset
+from .pytorch import CIFAR10, GTSRB, MNIST, PytorchDataset
+from .tampering import TamperingDataset
+from .toy_ambiguous_features import ToyDataset
 from .transforms import (
     GaussianNoise,
     RandomCrop,

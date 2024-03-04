@@ -5,11 +5,14 @@
 .python-version
 __pycache__
 /data
-/results
-/slurm
+/notebooks/data
 /logs
-.venv
+/notebooks/logs
+/slurm
+/notebooks/slurm
+/.venv
 /wandb
+/notebooks/wandb
 /dist
 /build
 /misc

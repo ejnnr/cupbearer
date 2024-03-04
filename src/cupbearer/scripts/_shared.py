@@ -1,12 +1,9 @@
 import lightning as L
 import torch
 from torchmetrics.classification import Accuracy
-from torchmetrics.utilities import enums as torch_enums
 from typing_extensions import Literal
 
-from cupbearer.models import HookedModel, ModelConfig
-from cupbearer.utils.data_format import DataFormat
-from cupbearer.utils.optimizers import OptimizerConfig
+from cupbearer.models import HookedModel
 
 ClassificationTask = Literal["binary", "multiclass", "multilabel"]
 
@@ -14,39 +11,25 @@ ClassificationTask = Literal["binary", "multiclass", "multilabel"]
 class Classifier(L.LightningModule):
     def __init__(
         self,
-        model: ModelConfig | HookedModel,
-        optim_cfg: OptimizerConfig,
+        model: HookedModel,
+        lr: float,
         num_classes: int | None = None,
         num_labels: int | None = None,
-        input_format: DataFormat | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
         task: ClassificationTask = "multiclass",
     ):
         super().__init__()
-        if isinstance(model, HookedModel) and save_hparams:
-            raise ValueError(
-                "Cannot save hyperparameters when model is already instantiated. "
-                "Either pass a ModelConfig or set save_hparams=False."
-            )
         if save_hparams:
-            self.save_hyperparameters()
+            self.save_hyperparameters(ignore=["model"])
         if val_loader_names is None:
             val_loader_names = []
         if test_loader_names is None:
             test_loader_names = []
 
-        if isinstance(model, HookedModel):
-            self.model = model
-        elif input_format is None:
-            raise ValueError(
-                "Must provide input_format when passing a ModelConfig "
-                "instead of an instantiated model."
-            )
-        else:
-            self.model = model.build_model(input_format=input_format)
-        self.optim_cfg = optim_cfg
+        self.model = model
+        self.lr = lr
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names
         self.task = task
@@ -68,7 +51,7 @@ class Classifier(L.LightningModule):
         )
 
     def _get_loss_func(self, task):
-        if self.task == "multiclass":
+        if task == "multiclass":
             return torch.nn.functional.cross_entropy
         return torch.nn.functional.binary_cross_entropy
 
@@ -111,4 +94,4 @@ class Classifier(L.LightningModule):
             self.log(f"{name}/acc_epoch", self.val_accuracy[i])
 
     def configure_optimizers(self):
-        return self.optim_cfg.get_optimizer(self.parameters())
+        return torch.optim.Adam(self.parameters(), lr=self.lr)

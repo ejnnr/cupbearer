@@ -31,13 +31,13 @@ installing `cupbearer`, in particular if you want to control CUDA version etc.
 
 ## Running experiments
 We provide scripts in `cupbearer.scripts` for more easily running experiments.
-See [demo.ipynb](demo.ipynb) for a quick example of how to use them---this is likely
+See [the demo notebook](notebooks/simple_demo.ipynb) for a quick example of how to use them---this is likely
 also the best way to get an overview of how the components of `cupbearer` fit together.
 
 These "scripts" are Python functions and designed to be used from within Python,
 e.g. in a Jupyter notebook or via [submitit](https://github.com/facebookincubator/submitit/tree/main)
 if on Slurm. But of course you could also write a simple Python wrapper and then use
-them from the CLI. Their configuration interface is designed to be very general,
+them from the CLI. The scripts are designed to be pretty general,
 which sometimes comes at the cost of being a bit verbose---we recommend writing helper
 functions for your specific use case on top of the general script interface.
 Of course you can also use the components of `cupbearer` directly without going through
