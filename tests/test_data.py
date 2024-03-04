@@ -1,4 +1,5 @@
 import functools
+import itertools
 from dataclasses import dataclass
 
 import numpy as np
@@ -154,29 +155,26 @@ def test_wanet_backdoor(clean_image_dataset):
     # Pick a target class outside the actual range so we can later tell whether it
     # was set correctly.
     target_class = 10_000
+    backdoor = data.backdoors.WanetBackdoor(
+        path=None,
+        p_backdoor=0.0,
+        target_class=target_class,
+    )
     clean_data = data.BackdoorDataset(
         original=clean_image_dataset,
-        backdoor=data.backdoors.WanetBackdoor(
-            path=None,
-            p_backdoor=0.0,
-            target_class=target_class,
-        ),
+        backdoor=backdoor,
     )
     anomalous_data = data.BackdoorDataset(
         original=clean_image_dataset,
-        backdoor=data.backdoors.WanetBackdoor(
-            path=None,
+        backdoor=backdoor.clone(
             p_backdoor=1.0,
-            target_class=target_class,
         ),
     )
     noise_data = data.BackdoorDataset(
         original=clean_image_dataset,
-        backdoor=data.backdoors.WanetBackdoor(
-            path=None,
+        backdoor=backdoor.clone(
             p_backdoor=0.0,
             p_noise=1.0,
-            target_class=target_class,
         ),
     )
     for (
@@ -202,6 +200,14 @@ def test_wanet_backdoor(clean_image_dataset):
         assert torch.max(clean_img) <= 1
         assert torch.max(anoma_img) <= 1
         assert torch.max(noise_img) <= 1
+    for ds1, ds2 in itertools.combinations(
+        [clean_data, anomalous_data, noise_data],
+        r=2,
+    ):
+        assert torch.allclose(
+            ds1.backdoor.warping_field,
+            ds2.backdoor.warping_field,
+        )
 
 
 def test_wanet_backdoor_on_multiple_workers(
