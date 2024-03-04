@@ -171,7 +171,6 @@ class WanetBackdoor(Backdoor):
         self,
         *,
         target_class: Optional[int] = None,
-        path: Optional[Path | str] = None,
         p_backdoor: Optional[float] = None,
         p_noise: Optional[float] = None,
         warping_strength: Optional[float] = None,
@@ -179,7 +178,7 @@ class WanetBackdoor(Backdoor):
     ) -> WanetBackdoor:
         """Create a new instance but with the same control_grid as current instance."""
         other = type(self)(
-            path=(path if path is not None else self.path),
+            path=self.path,
             p_backdoor=(p_backdoor if p_backdoor is not None else self.p_backdoor),
             p_noise=(p_noise if p_noise is not None else self.p_noise),
             target_class=(
@@ -201,12 +200,6 @@ class WanetBackdoor(Backdoor):
             self.control_grid * other.warping_strength / self.warping_strength
         )
         return other
-
-    path: Path | str | None
-    p_noise: float = 0.0  # Probability of non-backdoor warping
-    control_grid_width: int = 4  # Side length of unscaled warping field
-    warping_strength: float = 0.5  # Strength of warping effect
-    grid_rescale: float = 1.0  # Factor to rescale grid from warping effect
 
     @property
     def warping_field(self) -> torch.Tensor:
