@@ -1,8 +1,10 @@
+from __future__ import annotations
+
 import os
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Tuple
+from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
@@ -164,6 +166,40 @@ class WanetBackdoor(Backdoor):
             raise ValueError("Control grid shape is incompatible.")
 
         self._control_grid = control_grid
+
+    def clone(
+        self,
+        *,
+        target_class: Optional[int] = None,
+        p_backdoor: Optional[float] = None,
+        p_noise: Optional[float] = None,
+        warping_strength: Optional[float] = None,
+        grid_rescale: Optional[float] = None,
+    ) -> WanetBackdoor:
+        """Create a new instance but with the same control_grid as current instance."""
+        other = type(self)(
+            path=self.path,
+            p_backdoor=(p_backdoor if p_backdoor is not None else self.p_backdoor),
+            p_noise=(p_noise if p_noise is not None else self.p_noise),
+            target_class=(
+                target_class if target_class is not None else self.target_class
+            ),
+            control_grid_width=self.control_grid_width,
+            warping_strength=(
+                warping_strength
+                if warping_strength is not None
+                else self.warping_strength
+            ),
+            grid_rescale=(
+                grid_rescale if grid_rescale is not None else self.grid_rescale
+            ),
+        )
+        logger.debug("Setting control grid of clone from instance.")
+        assert self._warping_field is None
+        other.control_grid = (
+            self.control_grid * other.warping_strength / self.warping_strength
+        )
+        return other
 
     @property
     def warping_field(self) -> torch.Tensor:
