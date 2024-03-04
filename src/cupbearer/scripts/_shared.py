@@ -68,7 +68,7 @@ class Classifier(L.LightningModule):
         )
 
     def _get_loss_func(self, task):
-        if self.task == torch_enums.ClassificationTask.MULTICLASS:
+        if self.task == "multiclass":
             return torch.nn.functional.cross_entropy
         return torch.nn.functional.binary_cross_entropy
 
