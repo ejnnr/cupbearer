@@ -1,21 +1,28 @@
 import lightning as L
 import torch
 from torchmetrics.classification import Accuracy
+from torchmetrics.utilities import enums as torch_enums
+from typing_extensions import Literal
 
 from cupbearer.models import HookedModel, ModelConfig
+from cupbearer.utils.data_format import DataFormat
 from cupbearer.utils.optimizers import OptimizerConfig
+
+ClassificationTask = Literal["binary", "multiclass", "multilabel"]
 
 
 class Classifier(L.LightningModule):
     def __init__(
         self,
         model: ModelConfig | HookedModel,
-        num_classes: int,
         optim_cfg: OptimizerConfig,
-        input_shape: tuple[int, ...] | None = None,
+        num_classes: int | None = None,
+        num_labels: int | None = None,
+        input_format: DataFormat | None = None,
         val_loader_names: list[str] | None = None,
         test_loader_names: list[str] | None = None,
         save_hparams: bool = True,
+        task: ClassificationTask = "multiclass",
     ):
         super().__init__()
         if isinstance(model, HookedModel) and save_hparams:
@@ -32,34 +39,43 @@ class Classifier(L.LightningModule):
 
         if isinstance(model, HookedModel):
             self.model = model
-        elif input_shape is None:
+        elif input_format is None:
             raise ValueError(
-                "Must provide input_shape when passing a ModelConfig "
+                "Must provide input_format when passing a ModelConfig "
                 "instead of an instantiated model."
             )
         else:
-            self.model = model.build_model(input_shape=input_shape)
+            self.model = model.build_model(input_format=input_format)
         self.optim_cfg = optim_cfg
         self.val_loader_names = val_loader_names
         self.test_loader_names = test_loader_names
-        self.train_accuracy = Accuracy(task="multiclass", num_classes=num_classes)
+        self.task = task
+        self.loss_func = self._get_loss_func(self.task)
+        self.train_accuracy = Accuracy(
+            task=self.task, num_classes=num_classes, num_labels=num_labels
+        )
         self.val_accuracy = torch.nn.ModuleList(
             [
-                Accuracy(task="multiclass", num_classes=num_classes)
+                Accuracy(task=self.task, num_classes=num_classes, num_labels=num_labels)
                 for _ in val_loader_names
             ]
         )
         self.test_accuracy = torch.nn.ModuleList(
             [
-                Accuracy(task="multiclass", num_classes=num_classes)
+                Accuracy(task=self.task, num_classes=num_classes, num_labels=num_labels)
                 for _ in test_loader_names
             ]
         )
 
+    def _get_loss_func(self, task):
+        if self.task == "multiclass":
+            return torch.nn.functional.cross_entropy
+        return torch.nn.functional.binary_cross_entropy
+
     def _shared_step(self, batch):
         x, y = batch
         logits = self.model(x)
-        loss = torch.nn.functional.cross_entropy(logits, y)
+        loss = self.loss_func(logits, y)
         return loss, logits, y
 
     def training_step(self, batch, batch_idx):

@@ -26,6 +26,11 @@ class Config(ScriptConfig):
         assert self.data is not None
         return self.data.num_classes
 
+    @property
+    def num_labels(self):
+        assert self.data is not None
+        return self.data.num_labels
+
 
 @dataclass
 class DebugConfig(Config):

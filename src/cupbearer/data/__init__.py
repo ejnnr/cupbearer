@@ -9,7 +9,9 @@ from ._shared import (
 from .adversarial import AdversarialExampleConfig
 from .backdoor_data import BackdoorData
 from .backdoors import Backdoor, CornerPixelBackdoor, NoiseBackdoor, WanetBackdoor
+from .huggingface import IMDBDatasetConfig
 from .pytorch import CIFAR10, GTSRB, MNIST, PytorchConfig
+from .tampering import TamperingDataConfig
 from .toy_ambiguous_features import ToyFeaturesConfig
 from .transforms import (
     GaussianNoise,

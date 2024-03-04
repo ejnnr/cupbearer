@@ -2,9 +2,11 @@ import warnings
 from typing import Any
 
 import lightning as L
+import torch
 from lightning.pytorch.callbacks import ModelCheckpoint
 
 from cupbearer.scripts._shared import Classifier
+from cupbearer.utils.data_format import TensorDataFormat, TextDataFormat
 from cupbearer.utils.scripts import script
 
 from .conf.train_classifier_conf import Config
@@ -26,16 +28,24 @@ def main(cfg: Config) -> dict[str, Any] | L.Trainer:
         for trafo in cfg.train_data.get_transforms():
             trafo.store(cfg.path)
 
-    # Dataloader returns images and labels, only images get passed to model
-    images, _ = next(iter(train_loader))
-    example_input = images[0]
+    # Dataloader returns inputs and labels, only inputs get passed to model
+    inputs, _ = next(iter(train_loader))
+    example_input = inputs[0]
+    if isinstance(example_input, torch.Tensor):
+        input_format = TensorDataFormat(example_input.shape)
+    elif isinstance(example_input, str):
+        input_format = TextDataFormat()
+    else:
+        raise ValueError(f"Unknown input type {type(example_input)}")
 
     classifier = Classifier(
         model=cfg.model,
-        input_shape=example_input.shape,
+        input_format=input_format,
         num_classes=cfg.num_classes,
+        num_labels=cfg.num_labels,
         optim_cfg=cfg.train_config.optimizer,
         val_loader_names=list(val_loaders.keys()),
+        task=cfg.task,
     )
 
     # TODO: once we do longer training runs we'll want to have multiple

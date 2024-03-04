@@ -33,7 +33,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         classifier = Classifier(
             self.finetuned_model,
             num_classes=num_classes,
-            optim_cfg=train_config,
+            optim_cfg=train_config.optimizer,
             save_hparams=False,
         )
 

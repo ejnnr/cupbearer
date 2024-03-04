@@ -11,6 +11,7 @@ from torch.utils.data import DataLoader, Dataset, Subset
 
 from cupbearer.models import StoredModel
 from cupbearer.utils import utils
+from cupbearer.utils.data_format import TensorDataFormat
 
 from . import DatasetConfig, TrainDataFromRun
 
@@ -35,7 +36,7 @@ def make_adversarial_example(
     if max_examples:
         dataset = Subset(dataset, range(max_examples))
     image, _ = dataset[0]
-    model = model_cfg.build_model(input_shape=image.shape)
+    model = model_cfg.build_model(input_format=TensorDataFormat(image.shape))
     dataloader = DataLoader(
         dataset,
         batch_size=batch_size,
