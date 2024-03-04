@@ -2,11 +2,10 @@
 from pathlib import Path
 
 import torch
-from transformers.modeling_utils import PreTrainedModel
-from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
 from .hooked_model import HookedModel
 from .models import CNN, MLP, PreActResNet
+from .transformers_hf import TamperingPredictionTransformer
 
 
 def load(model: HookedModel, path: Path | str):
