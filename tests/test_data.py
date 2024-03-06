@@ -7,6 +7,7 @@ import pytest
 import torch
 from cupbearer import data
 from torch.utils.data import DataLoader, Dataset
+from torchvision.transforms import Normalize
 from torchvision.transforms.functional import InterpolationMode
 
 
@@ -205,6 +206,33 @@ class TestBackdoors(DatasetFixtures):
             assert torch.allclose(
                 ds1.backdoor.warping_field,
                 ds2.backdoor.warping_field,
+            )
+
+    @staticmethod
+    def test_wanet_backdoor_scale_invariance(clean_image_dataset):
+        backdoor = data.backdoors.WanetBackdoor(
+            path=None,
+            p_backdoor=1.0,
+        )
+        mean = np.array([1, 2, 3])
+        std = np.array([1 / 2, 1 / 4, 1 / 8])
+        normalize = Normalize(mean=mean, std=std)
+        denormalize = Normalize(
+            mean=-mean * std**-1,
+            std=std**-1,
+        )
+        for img, label in clean_image_dataset:
+            torch.testing.assert_close(img, denormalize(normalize(img)))
+            torch.testing.assert_close(
+                backdoor((img, label))[0],
+                denormalize(
+                    backdoor(
+                        (
+                            normalize(img),
+                            label,
+                        )
+                    )[0]
+                ),
             )
 
     @staticmethod

@@ -49,6 +49,20 @@ class ToTensor(AdaptedTransform):
 
 
 @dataclass
+class Normalize(AdaptedTransform):
+    mean: list[float]
+    std: list[float]
+
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+        return F.normalize(
+            img,
+            mean=self.mean,
+            std=self.std,
+            inplace=False,
+        )
+
+
+@dataclass
 class Resize(AdaptedTransform):
     size: tuple[int, ...]
     interpolation: F.InterpolationMode = F.InterpolationMode.BILINEAR
