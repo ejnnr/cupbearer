@@ -1,9 +1,11 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Optional
+from typing import Any, Optional
 
 import torch
 import torchvision.transforms.functional as F
+
+Sample = tuple[torch.Tensor, *tuple[Any, ...]]
 
 
 class Transform(ABC):
@@ -16,13 +18,13 @@ class AdaptedTransform(Transform, ABC):
     """Adapt a transform designed to work on inputs to work on img, label pairs."""
 
     @abstractmethod
-    def __img_call__(self, img):
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
         pass
 
-    def __rest_call__(self, *rest):
+    def __rest_call__(self, *rest: tuple[Any, ...]) -> tuple[Any, ...]:
         return (*rest,)
 
-    def __call__(self, sample):
+    def __call__(self, sample: Sample) -> torch.Tensor | Sample:
         if isinstance(sample, tuple):
             img, *rest = sample
         else:
@@ -40,7 +42,7 @@ class AdaptedTransform(Transform, ABC):
 
 
 class ToTensor(AdaptedTransform):
-    def __img_call__(self, img):
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
         out = F.to_tensor(img)
         if out.ndim == 2:
             # Add a channel dimension. (Using pytorch's CHW convention)
@@ -64,12 +66,12 @@ class Normalize(AdaptedTransform):
 
 @dataclass
 class Resize(AdaptedTransform):
-    size: tuple[int, ...]
+    size: list[int]
     interpolation: F.InterpolationMode = F.InterpolationMode.BILINEAR
     max_size: Optional[int] = None
     antialias: bool = True
 
-    def __img_call__(self, img):
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
         return F.resize(
             img,
             size=self.size,
@@ -86,7 +88,7 @@ class ProbabilisticTransform(AdaptedTransform, ABC):
     def __post_init__(self):
         assert 0 <= self.p <= 1.0, "Probability `p` not in [0, 1]"
 
-    def __call__(self, sample) -> torch.Tensor:
+    def __call__(self, sample: Sample) -> torch.Tensor | Sample:
         if torch.rand(()) <= self.p:
             return super().__call__(sample)
         return sample
@@ -103,15 +105,15 @@ class RandomCrop(ProbabilisticTransform):
         # Pad image first
         img = F.pad(
             img,
-            padding=self.padding,
+            padding=[self.padding],
             fill=self.fill,
             padding_mode=self.padding_mode,
         )
         # Do random crop
         img = F.crop(
             img,
-            top=torch.randint(0, self.padding, ()),
-            left=torch.randint(0, self.padding, ()),
+            top=int(torch.randint(0, self.padding, ())),
+            left=int(torch.randint(0, self.padding, ())),
             height=size[-2],
             width=size[-1],
         )
@@ -147,7 +149,7 @@ class RandomHorizontalFlip(ProbabilisticTransform):
 
 
 @dataclass
-class GaussianNoise(Transform):
+class GaussianNoise(AdaptedTransform):
     """Adds Gaussian noise to the image.
 
     Note that this expects to_tensor to have been applied already.
@@ -158,8 +160,5 @@ class GaussianNoise(Transform):
 
     std: float
 
-    def __call__(self, sample: tuple[torch.Tensor, ...]):
-        img, *rest = sample
-        noise = torch.randn_like(img) * self.std
-        img = img + noise
-        return img, *rest
+    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+        return img + self.std * torch.randn_like(img)

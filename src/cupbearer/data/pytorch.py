@@ -106,7 +106,7 @@ class GTSRB(PytorchDataset):
     num_classes: int = 43
     transforms: list[Transform] = field(
         default_factory=lambda: [
-            Resize(size=(32, 32)),
+            Resize(size=[32, 32]),
             ToTensor(),
         ]
     )
