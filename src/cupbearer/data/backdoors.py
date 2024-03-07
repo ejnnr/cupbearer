@@ -223,7 +223,7 @@ class WanetBackdoor(Backdoor):
         ys = torch.linspace(-1, 1, steps=py)
         yy, xx = torch.meshgrid(ys, xs, indexing="ij")
         identity_grid = torch.stack((yy, xx), 2)
-        field = field + identity_grid
+        field = identity_grid + field / torch.tensor([py, px]).reshape(1, 1, 2)
 
         self._warping_field = field
         assert self._warping_field.shape == (py, px, 2)
@@ -248,9 +248,7 @@ class WanetBackdoor(Backdoor):
 
         # Rescale and clip to not have values outside image
         if self.grid_rescale != 1.0:
-            warping_field = warping_field * self.grid_rescale + (
-                1 - self.grid_rescale
-            ) / torch.tensor([py, px]).reshape(2, 1, 1)
+            warping_field = warping_field * self.grid_rescale
         warping_field = torch.clip(warping_field, -1, 1)
 
         # Perform warping. Need to add a batch dimension for grid_sample
@@ -281,6 +279,7 @@ class WanetBackdoor(Backdoor):
             if rand_sample < self.p_noise:
                 # If noise mode
                 noise = 2 * torch.rand(*warping_field.shape) - 1
+                noise = noise / torch.tensor([py, px]).reshape(1, 1, 2)
                 warping_field = warping_field + noise
             else:
                 # If adversary mode
