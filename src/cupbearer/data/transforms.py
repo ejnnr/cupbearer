@@ -5,7 +5,11 @@ from typing import Any, Optional
 import torch
 import torchvision.transforms.functional as F
 
-Sample = tuple[torch.Tensor, *tuple[Any, ...]]
+try:
+    # *tuple typing added in Python 3.11
+    Sample = tuple[torch.Tensor, *tuple[Any, ...]]
+except SyntaxError:
+    Sample = tuple[torch.Tensor] | tuple[torch.Tensor, Any]
 
 
 class Transform(ABC):
