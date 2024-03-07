@@ -236,27 +236,6 @@ class WanetBackdoor(Backdoor):
         logger.debug(f"Storing control grid to {self._get_savefile_fullpath(path)}")
         torch.save(self.control_grid, self._get_savefile_fullpath(path))
 
-    def _warp(self, img: torch.Tensor, warping_field: torch.Tensor) -> torch.Tensor:
-        if img.ndim == 3:
-            cs, py, px = img.shape
-        else:
-            raise ValueError(
-                "Images are expected to have two spatial dimensions and channels first."
-            )
-        if warping_field.shape != (py, px, 2):
-            raise ValueError("Incompatible shape of warping field and image.")
-
-        # Rescale and clip to not have values outside image
-        if self.grid_rescale != 1.0:
-            warping_field = warping_field * self.grid_rescale
-        warping_field = torch.clip(warping_field, -1, 1)
-
-        # Perform warping. Need to add a batch dimension for grid_sample
-        img = F.grid_sample(img[None], warping_field[None], align_corners=True)[0]
-
-        assert img.shape == (cs, py, px)
-        return img
-
     def __call__(self, sample: Tuple[torch.Tensor, int]):
         img, target = sample
 
@@ -275,18 +254,24 @@ class WanetBackdoor(Backdoor):
 
         rand_sample = torch.rand(1)
         if rand_sample <= self.p_noise + self.p_backdoor:
-            warping_field = self.warping_field
+            warping_field = torch.clip(self.warping_field * self.grid_rescale, -1, 1)
             if rand_sample < self.p_noise:
                 # If noise mode
                 noise = 2 * torch.rand(*warping_field.shape) - 1
-                noise = noise / torch.tensor([py, px]).reshape(1, 1, 2)
+                noise = (
+                    self.grid_rescale * noise / torch.tensor([py, px]).reshape(1, 1, 2)
+                )
+
                 warping_field = warping_field + noise
+                warping_field = torch.clip(warping_field, -1, 1)
             else:
                 # If adversary mode
                 target = self.target_class
 
             # Warp image
-            img = self._warp(img, warping_field)
+            img = F.grid_sample(
+                img[None], warping_field[None], align_corners=True
+            ).squeeze(0)
 
         assert img.shape == (cs, py, px)
 
