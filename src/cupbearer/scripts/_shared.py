@@ -53,7 +53,7 @@ class Classifier(L.LightningModule):
     def _get_loss_func(self, task):
         if task == "multiclass":
             return torch.nn.functional.cross_entropy
-        return torch.nn.functional.binary_cross_entropy
+        return torch.nn.functional.binary_cross_entropy_with_logits
 
     def _shared_step(self, batch):
         x, y = batch

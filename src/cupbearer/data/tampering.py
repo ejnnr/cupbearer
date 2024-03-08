@@ -27,7 +27,10 @@ class TamperingDataset(torch.utils.data.Dataset):
         sample = self.dataset[idx]
         return (
             sample["text"],
-            torch.tensor([*sample["measurements"], all(sample["measurements"])]),
+            torch.tensor(
+                [*sample["measurements"], all(sample["measurements"])],
+                dtype=torch.float32,
+            ),
         )
         # sample["is_correct"], sample["is_clean"])
 

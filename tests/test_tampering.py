@@ -6,6 +6,15 @@ from cupbearer.scripts import (
     train_classifier,
 )
 
+# Ignore warnings about num_workers
+pytestmark = pytest.mark.filterwarnings(
+    "ignore"
+    ":The '[a-z]*_dataloader' does not have many workers which may be a bottleneck. "
+    "Consider increasing the value of the `num_workers` argument` to "
+    "`num_workers=[0-9]*` in the `DataLoader` to improve performance."
+    ":UserWarning"
+)
+
 
 @pytest.fixture(scope="module")
 def pythia():
@@ -38,6 +47,7 @@ def measurement_predictor_path(pythia, diamond, module_tmp_path):
         path=module_tmp_path,
         max_steps=1,
         logger=False,
+        log_every_n_steps=3,
     )
 
     assert (module_tmp_path / "checkpoints" / "last.ckpt").is_file()
