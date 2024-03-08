@@ -1,5 +1,6 @@
 from dataclasses import dataclass, field
 
+from loguru import logger
 from torch.utils.data import Dataset
 
 from cupbearer.utils import get_object
@@ -21,7 +22,7 @@ class PytorchDataset(Dataset):
     train: bool = True
     transforms: list[Transform] = field(default_factory=lambda: [ToTensor()])
     default_augmentations: bool = True
-    normalize: bool = False
+    normalize: bool = False  # N.B. may give unexpected results on some tasks
 
     @property
     def raw_mean(self):
@@ -33,6 +34,9 @@ class PytorchDataset(Dataset):
 
     def __post_init__(self):
         if self.normalize:
+            logger.debug(
+                "Normalization added, beware that this may mess up some tasks."
+            )
             self.transforms.append(Normalize(mean=self.raw_mean, std=self.raw_std))
         if self.default_augmentations and self.train:
             # Defaults from WaNet https://openreview.net/pdf?id=eEn8KTtJOx
@@ -69,7 +73,6 @@ class PytorchDataset(Dataset):
 class MNIST(PytorchDataset):
     name: str = "torchvision.datasets.MNIST"
     num_classes: int = 10
-    normalize: bool = True
 
     @property
     def raw_mean(self):
@@ -84,7 +87,6 @@ class MNIST(PytorchDataset):
 class CIFAR10(PytorchDataset):
     name: str = "torchvision.datasets.CIFAR10"
     num_classes: int = 10
-    normalize: bool = True
 
     @property
     def raw_mean(self):
@@ -110,7 +112,6 @@ class GTSRB(PytorchDataset):
             ToTensor(),
         ]
     )
-    normalize: bool = True
 
     @property
     def raw_mean(self):
