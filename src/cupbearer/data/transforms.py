@@ -4,8 +4,10 @@ from typing import Any, Optional
 
 import torch
 import torchvision.transforms.functional as F
+from numpy import ndarray
+from PIL.Image import Image as PILImage
 
-Sample = tuple[torch.Tensor] | tuple[torch.Tensor, Any]
+ImageLike = torch.Tensor | PILImage | ndarray
 
 
 class Transform(ABC):
@@ -18,13 +20,15 @@ class AdaptedTransform(Transform, ABC):
     """Adapt a transform designed to work on inputs to work on img, label pairs."""
 
     @abstractmethod
-    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+    def __img_call__(self, img: ImageLike) -> torch.Tensor:
         pass
 
-    def __rest_call__(self, *rest: tuple[Any, ...]) -> tuple[Any, ...]:
+    def __rest_call__(self, *rest: Any) -> tuple[Any, ...]:
         return (*rest,)
 
-    def __call__(self, sample: Sample) -> torch.Tensor | Sample:
+    def __call__(self, sample: ImageLike | tuple) -> torch.Tensor | tuple:
+        # sample: ImageLike | tuple[ImageLike, *tuple[Any]]
+        # returns: torch.Tensor | tuple[torch.Tensor, *tuple[Any]]
         if isinstance(sample, tuple):
             img, *rest = sample
         else:
@@ -42,7 +46,7 @@ class AdaptedTransform(Transform, ABC):
 
 
 class ToTensor(AdaptedTransform):
-    def __img_call__(self, img: torch.Tensor) -> torch.Tensor:
+    def __img_call__(self, img: PILImage | ndarray) -> torch.Tensor:
         out = F.to_tensor(img)
         if out.ndim == 2:
             # Add a channel dimension. (Using pytorch's CHW convention)
@@ -88,7 +92,9 @@ class ProbabilisticTransform(AdaptedTransform, ABC):
     def __post_init__(self):
         assert 0 <= self.p <= 1.0, "Probability `p` not in [0, 1]"
 
-    def __call__(self, sample: Sample) -> torch.Tensor | Sample:
+    def __call__(self, sample: ImageLike | tuple) -> torch.Tensor | tuple:
+        # sample: ImageLike | tuple[ImageLike, *tuple[Any]]
+        # returns: torch.Tensor | tuple[torch.Tensor, *tuple[Any]]
         if torch.rand(()) <= self.p:
             return super().__call__(sample)
         return sample
