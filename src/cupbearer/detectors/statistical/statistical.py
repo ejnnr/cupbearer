@@ -12,7 +12,7 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
     use_trusted: bool = True
 
     @abstractmethod
-    def init_variables(self, activation_sizes: dict[str, torch.Size]):
+    def init_variables(self, activation_sizes: dict[str, torch.Size], device):
         pass
 
     @abstractmethod
@@ -48,19 +48,21 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
             # No reason to shuffle, we're just computing statistics
             data_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
             example_batch = next(iter(data_loader))
-            _, example_activations = self.get_activations(example_batch)
+            example_activations = self.get_activations(example_batch)
 
             # v is an entire batch, v[0] are activations for a single input
             activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
-            self.init_variables(activation_sizes)
+            self.init_variables(
+                activation_sizes, device=next(iter(example_activations.values())).device
+            )
 
             if pbar:
-                data_loader = tqdm(data_loader)
+                data_loader = tqdm(data_loader, total=max_steps or len(data_loader))
 
             for i, batch in enumerate(data_loader):
                 if max_steps and i >= max_steps:
                     break
-                _, activations = self.get_activations(batch)
+                activations = self.get_activations(batch)
                 self.batch_update(activations)
 
 
@@ -68,12 +70,13 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
     """Generic abstract detector that learns means and covariance matrices
     during training."""
 
-    def init_variables(self, activation_sizes: dict[str, torch.Size]):
+    def init_variables(self, activation_sizes: dict[str, torch.Size], device):
         self._means = {
-            k: torch.zeros(size.numel()) for k, size in activation_sizes.items()
+            k: torch.zeros(size.numel(), device=device)
+            for k, size in activation_sizes.items()
         }
         self._Cs = {
-            k: torch.zeros((size.numel(), size.numel()))
+            k: torch.zeros((size.numel(), size.numel()), device=device)
             for k, size in activation_sizes.items()
         }
         self._ns = {k: 0 for k in activation_sizes.keys()}

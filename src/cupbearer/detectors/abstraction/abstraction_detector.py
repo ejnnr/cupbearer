@@ -169,7 +169,7 @@ class AbstractionDetector(ActivationBasedDetector):
             param.requires_grad = required_grad[name]
 
     def layerwise_scores(self, batch):
-        _, activations = self.get_activations(batch)
+        activations = self.get_activations(batch)
         return compute_losses(self.abstraction, activations, layerwise=True)
 
     def _get_trained_variables(self, saving: bool = False):

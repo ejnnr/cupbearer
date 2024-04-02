@@ -1,9 +1,8 @@
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Collection
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 
 import numpy as np
 import sklearn.metrics
@@ -225,34 +224,38 @@ class AnomalyDetector(ABC):
         self._set_trained_variables(utils.load(path))
 
 
-def default_activation_name_func(model):
-    return model.default_names
-
-
 class ActivationBasedDetector(AnomalyDetector):
-    """AnomalyDetector using activations."""
+    """AnomalyDetector using activations.
+
+    Args:
+        activation_names: The names of the activations to use for anomaly detection.
+        activation_processing_func: A function to process the activations before
+            computing the anomaly scores. The function should take the activations,
+            the input data, and the name of the activations as arguments and return
+            the processed activations.
+    """
 
     def __init__(
         self,
-        activation_name_func: str
-        | Callable[[HookedModel], Collection[str]]
+        activation_names: list[str],
+        activation_processing_func: Callable[[torch.Tensor, Any, str], torch.Tensor]
         | None = None,
     ):
         super().__init__()
-
-        if activation_name_func is None:
-            activation_name_func = default_activation_name_func
-        elif isinstance(activation_name_func, str):
-            activation_name_func = utils.get_object(activation_name_func)
-
-        assert callable(activation_name_func)  # make type checker happy
-
-        self.activation_name_func = activation_name_func
-
-    def set_model(self, model: HookedModel):
-        super().set_model(model)
-        self.activation_names = self.activation_name_func(model)
+        self.activation_names = activation_names
+        self.activation_processing_func = activation_processing_func
 
     def get_activations(self, batch):
         inputs = utils.inputs_from_batch(batch)
-        return self.model.get_activations(inputs, self.activation_names)
+        device = next(self.model.parameters()).device
+        inputs = utils.inputs_to_device(inputs, device)
+        acts = utils.get_activations(self.model, self.activation_names, inputs)
+
+        # Can be used to for example select activations at specific token positions
+        if self.activation_processing_func is not None:
+            acts = {
+                k: self.activation_processing_func(v, inputs, k)
+                for k, v in acts.items()
+            }
+
+        return acts

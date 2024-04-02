@@ -69,7 +69,7 @@ def mahalanobis(
         activation = activation.view(batch_size, -1)
         delta = activation - means[k]
         assert delta.ndim == 2 and delta.shape[0] == batch_size
-        # Compute log likelihood under a Gaussian:
+        # Compute unnormalized negative log likelihood under a Gaussian:
         distance = torch.einsum("bi,ij,bj->b", delta, inv_covariances[k], delta)
         if inv_diag_covariances is not None:
             distance -= torch.einsum("bi,i->b", delta**2, inv_diag_covariances[k])

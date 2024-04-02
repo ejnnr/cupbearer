@@ -7,6 +7,8 @@ from typing import Union
 
 import torch
 
+from .get_activations import get_activations  # noqa: F401
+
 SUFFIX = ".pt"
 TYPE_PREFIX = "__TYPE__:"
 PICKLE_PREFIX = "__PICKLE__:"
@@ -126,3 +128,13 @@ def log_path(base="logs", time=True):
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d")
     return Path(base) / timestamp
+
+
+def _try_to_device(x, device):
+    if isinstance(x, torch.Tensor):
+        return x.to(device)
+    return x
+
+
+def inputs_to_device(batch, device):
+    return tree_map(lambda x: _try_to_device(x, device), batch)

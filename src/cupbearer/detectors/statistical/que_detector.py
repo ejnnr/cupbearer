@@ -28,7 +28,7 @@ class QuantumEntropyDetector(ActivationCovarianceBasedDetector):
         self.whitening_matrices = whitening_matrices
 
     def layerwise_scores(self, batch):
-        _, activations = self.get_activations(batch)
+        activations = self.get_activations(batch)
         whitened_activations = {
             k: torch.einsum(
                 "bi,ij->bj",

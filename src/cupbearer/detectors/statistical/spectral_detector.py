@@ -23,7 +23,7 @@ class SpectralSignatureDetector(ActivationCovarianceBasedDetector):
 
     def layerwise_scores(self, batch):
         # ((R(x_i) - \hat{R}) * v) ** 2
-        _, activations = self.get_activations(batch)
+        activations = self.get_activations(batch)
         outlier_scores = {
             k: torch.einsum(
                 "bi,i->b",

@@ -22,7 +22,7 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
             }
 
     def layerwise_scores(self, batch):
-        _, activations = self.get_activations(batch)
+        activations = self.get_activations(batch)
         return mahalanobis(
             activations,
             self.means,
