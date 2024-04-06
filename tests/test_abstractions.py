@@ -23,7 +23,7 @@ class ABCTestMLPAbstraction(ABC):
     @abstractproperty
     def get_default_abstraction(
         self,
-    ) -> Callable[[models.HookedModel, int], Abstraction]:
+    ) -> Callable[[nn.Module, int], Abstraction]:
         pass
 
     def test_default_abstraction_shapes(self):
@@ -76,7 +76,7 @@ class ABCTestCNNAbstraction(ABC):
     @abstractproperty
     def get_default_abstraction(
         self,
-    ) -> Callable[[models.HookedModel, int], Abstraction]:
+    ) -> Callable[[nn.Module, int], Abstraction]:
         pass
 
     def test_default_abstraction_shapes(self):

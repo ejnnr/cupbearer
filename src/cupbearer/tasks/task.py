@@ -1,10 +1,10 @@
 from dataclasses import dataclass
 from typing import Callable, Optional
 
+from torch import nn
 from torch.utils.data import Dataset, random_split
 
 from cupbearer.data import MixedData
-from cupbearer.models.models import HookedModel
 
 
 @dataclass(kw_only=True)
@@ -12,12 +12,12 @@ class Task:
     trusted_data: Dataset
     untrusted_train_data: Optional[MixedData] = None
     test_data: MixedData
-    model: HookedModel
+    model: nn.Module
 
     @classmethod
     def from_separate_data(
         cls,
-        model: HookedModel,
+        model: nn.Module,
         trusted_data: Dataset,
         clean_test_data: Dataset,
         anomalous_test_data: Dataset,
@@ -50,7 +50,7 @@ class Task:
     @classmethod
     def from_base_data(
         cls,
-        model: HookedModel,
+        model: nn.Module,
         train_data: Dataset,
         test_data: Dataset,
         anomaly_func: Callable[[Dataset, bool], Dataset],

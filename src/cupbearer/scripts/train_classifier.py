@@ -3,16 +3,16 @@ from pathlib import Path
 from typing import Any
 
 import lightning as L
+import torch
 from lightning.pytorch import loggers
 from lightning.pytorch.callbacks import ModelCheckpoint
 from torch.utils.data import DataLoader
 
-from cupbearer.models import HookedModel
 from cupbearer.scripts._shared import ClassificationTask, Classifier
 
 
 def main(
-    model: HookedModel,
+    model: torch.nn.Module,
     train_loader: DataLoader,
     path: Path | str,
     lr: float = 1e-3,

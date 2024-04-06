@@ -11,8 +11,6 @@ from transformers.models.gpt_neox.configuration_gpt_neox import GPTNeoXConfig
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 from transformers.tokenization_utils_base import PreTrainedTokenizerBase
 
-from cupbearer.models import HookedModel
-
 
 class TokenDict(TypedDict):
     input_ids: torch.Tensor
@@ -57,7 +55,7 @@ def load_transformer(
     return transformer, tokenizer, emb_dim, max_len
 
 
-class TransformerBaseHF(HookedModel):
+class TransformerBaseHF(nn.Module):
     def __init__(
         self,
         model: PreTrainedModel,
@@ -73,10 +71,6 @@ class TransformerBaseHF(HookedModel):
 
         # setup
         self.tokenizer.pad_token = tokenizer.eos_token
-
-    @property
-    def default_names(self) -> list[str]:
-        return ["final_layer_embeddings"]
 
     def process_input(self, x) -> TokenDict:
         tokens = self.tokenizer(
@@ -95,7 +89,6 @@ class TransformerBaseHF(HookedModel):
         out: BaseModelOutputWithPast = self.model(**tokens)
         embeddings = out.last_hidden_state
         assert embeddings.shape == (b, s, self.embed_dim), embeddings.shape
-        self.store("last_hidden_state", embeddings)
         return embeddings
 
 
@@ -162,8 +155,6 @@ class TamperingPredictionTransformer(TransformerBaseHF):
         tokens = self.process_input(x)
         embeddings = self.get_embeddings(tokens)
         b = embeddings.shape[0]
-
-        # TODO (odk) use store
 
         # sensor embeddings
         batch_inds, seq_ids = torch.where(

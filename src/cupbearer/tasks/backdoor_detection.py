@@ -1,13 +1,13 @@
+import torch
 from torch.utils.data import Dataset
 
 from cupbearer.data import Backdoor, BackdoorDataset
-from cupbearer.models import HookedModel
 
 from .task import Task
 
 
 def backdoor_detection(
-    model: HookedModel,
+    model: torch.nn.Module,
     train_data: Dataset,
     test_data: Dataset,
     backdoor: Backdoor,

@@ -14,7 +14,6 @@ from tqdm.auto import tqdm
 
 from cupbearer import utils
 from cupbearer.data import MixedData
-from cupbearer.models.models import HookedModel
 
 
 class AnomalyDetector(ABC):
@@ -23,7 +22,7 @@ class AnomalyDetector(ABC):
         self._original_variables = None
         self.trained = False
 
-    def set_model(self, model: HookedModel):
+    def set_model(self, model: torch.nn.Module):
         # This is separate from __init__ because we want to be able to set the model
         # automatically based on the task, instead of letting the user pass it in.
         # On the other hand, it's separate from train() because we might need to set

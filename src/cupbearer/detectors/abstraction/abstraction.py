@@ -1,14 +1,13 @@
-from __future__ import annotations  # for postponed evaluation of annotations
+from __future__ import annotations
 
 import math
-from abc import abstractmethod
+from abc import abstractmethod  # for postponed evaluation of annotations
 from typing import overload
 
 import torch
 from torch import nn
 
 from cupbearer import models
-from cupbearer.models.hooked_model import HookedModel
 
 
 @overload
@@ -58,7 +57,7 @@ class Abstraction(nn.Module):
     # informal collection of helper functions for building reasonable abstractions.
     @classmethod
     @abstractmethod
-    def get_default(cls, model: HookedModel, size_reduction: int) -> Abstraction:
+    def get_default(cls, model: torch.nn.Module, size_reduction: int) -> Abstraction:
         pass
 
 
@@ -103,7 +102,7 @@ class LocallyConsistentAbstraction(Abstraction):
     @classmethod
     def get_default(
         cls,
-        model: HookedModel,
+        model: torch.nn.Module,
         size_reduction: int,
     ) -> LocallyConsistentAbstraction:
         def get_mlp_abstraction(
@@ -245,7 +244,7 @@ class AutoencoderAbstraction(Abstraction):
     @classmethod
     def get_default(
         cls,
-        model: HookedModel,
+        model: torch.nn.Module,
         size_reduction: int,
     ) -> AutoencoderAbstraction:
         def get_mlp_abstraction(

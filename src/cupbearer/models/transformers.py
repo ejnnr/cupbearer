@@ -4,10 +4,8 @@ from loguru import logger
 from torch import nn
 from transformer_lens import HookedTransformer
 
-from .hooked_model import HookedModel
 
-
-class TransformerBase(HookedModel):
+class TransformerBase(nn.Module):
     def __init__(
         self,
         model: str | HookedTransformer,
