@@ -202,19 +202,41 @@ class AutoencoderAbstraction(Abstraction):
         decoders: dict[str, nn.Module],  # decoders
     ):
         super().__init__()
+        assert tau_maps.keys() == decoders.keys()
+        for name in tau_maps:
+            if "/" in name:
+                raise ValueError(
+                    f"For technical reasons, names cant't contain '/', got {name}"
+                )
+        # Pytorch's ModuleDict doesn't allow '.' in keys, so we replace them with '/'
+        tau_maps = {
+            name.replace(".", "/"): tau_map for name, tau_map in tau_maps.items()
+        }
+        decoders = {
+            name.replace(".", "/"): decoder for name, decoder in decoders.items()
+        }
         self.tau_maps = nn.ModuleDict(tau_maps)
         self.decoders = nn.ModuleDict(decoders)
-        assert tau_maps.keys() == self.decoders.keys()
 
     def forward(
         self, activations: dict[str, torch.Tensor]
     ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor | None]]:
+        # Same name replacement as in __init__, to make user-facing names consistent.
+        activations = {
+            name.replace(".", "/"): activation
+            for name, activation in activations.items()
+        }
         abstractions = {
             name: tau_map(activations[name]) for name, tau_map in self.tau_maps.items()
         }
 
         reconstructed_activations: dict[str, torch.Tensor | None] = {
-            name: self.decoders[name](abstraction)
+            name.replace("/", "."): self.decoders[name](abstraction)
+            for name, abstraction in abstractions.items()
+        }
+
+        abstractions = {
+            name.replace("/", "."): abstraction
             for name, abstraction in abstractions.items()
         }
 
