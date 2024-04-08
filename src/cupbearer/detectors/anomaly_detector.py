@@ -1,5 +1,6 @@
 import json
 from abc import ABC, abstractmethod
+from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Callable
@@ -223,6 +224,118 @@ class AnomalyDetector(ABC):
         self._set_trained_variables(utils.load(path))
 
 
+def model_checksum(model: torch.nn.Module) -> float:
+    """Hacky but fast way to get a checksum of the model parameters.
+    Just sums the absolute values.
+    """
+    device = next(model.parameters()).device
+    # Using float64 to get some more bits and make collisions less likely.
+    param_sum = torch.tensor(0.0, dtype=torch.float64, device=device)
+    for param in model.parameters():
+        param_sum += param.abs().sum()
+    return param_sum.item()
+
+
+class ActivationCache:
+    def __init__(self):
+        self.cache: dict[tuple[Any, str], torch.Tensor] = {}
+        self.model_checksum = None
+        # Just for debugging purposes:
+        self.hits = 0
+        self.misses = 0
+
+    def __len__(self):
+        return len(self.cache)
+
+    def __contains__(self, key):
+        return key in self.cache
+
+    def store(self, path: str | Path):
+        utils.save((self.model_checksum, self.cache), path)
+
+    @classmethod
+    def load(cls, path: str | Path):
+        cache = cls()
+        cache.model_checksum, cache.cache = utils.load(path)
+        return cache
+
+    def get_activations(
+        self,
+        inputs,
+        activation_names: list[str],
+        activation_func: Callable[[Any], dict[str, torch.Tensor]],
+        model: torch.nn.Module,
+    ) -> dict[str, torch.Tensor]:
+        # We want to make sure that we don't accidentally use a cache from a different
+        # model, which is why we force passing in a model whenever the cache is used.
+        if self.model_checksum is None:
+            self.model_checksum = model_checksum(model)
+        else:
+            new_checksum = model_checksum(model)
+            if new_checksum != self.model_checksum:
+                raise ValueError(
+                    "Model has changed since the cache was created. "
+                    "This is likely unintended, only one model per cache is supported."
+                )
+
+        # Now we deal with the case where the cache is not empty. In particular,
+        # we want to handle cases where some but not all elements are in the cache.
+        missing_indices = []
+        results: dict[str, list[torch.Tensor | None]] = defaultdict(
+            lambda: [None] * len(inputs)
+        )
+
+        for i, input in enumerate(inputs):
+            # The keys into the cache contain the input and the name of the activation.
+            keys = [(input, name) for name in activation_names]
+            # In principle we could support the case where some but not all activations
+            # for a given input are already in the cache. If the missing activations
+            # are early in the model, this might save some time since we wouldn't
+            # have to do the full forward pass. But that seems like a niche use case
+            # and not worth the added complexity. So for now, we recompute all
+            # activations on inputs where some activations are missing.
+            if all(key in self.cache for key in keys):
+                self.hits += 1
+                for name in activation_names:
+                    results[name][i] = self.cache[(input, name)]
+            else:
+                missing_indices.append(i)
+
+        if not missing_indices:
+            return {name: torch.stack(results[name]) for name in activation_names}
+
+        # Select the missing input elements, but make sure to keep the type.
+        # Input could be a list/tuple of strings (for language models)
+        # or tensors for images. (Unclear whether supporting tensors is important,
+        # language models are the main case where having a cache is useful.)
+        if isinstance(inputs, torch.Tensor):
+            inputs = inputs[missing_indices]
+        elif isinstance(inputs, list):
+            inputs = [inputs[i] for i in missing_indices]
+        elif isinstance(inputs, tuple):
+            inputs = tuple(inputs[i] for i in missing_indices)
+        else:
+            raise NotImplementedError(
+                f"Unsupported input type: {type(inputs)} of {inputs}"
+            )
+
+        new_acts = activation_func(inputs)
+        self.misses += len(inputs)
+
+        # Fill in the missing activations
+        for name, act in new_acts.items():
+            for i, idx in enumerate(missing_indices):
+                results[name][idx] = act[i]
+                self.cache[(inputs[i], name)] = act[i]
+
+        assert all(
+            all(result is not None for result in results[name])
+            for name in activation_names
+        )
+
+        return {name: torch.stack(results[name]) for name in activation_names}
+
+
 class ActivationBasedDetector(AnomalyDetector):
     """AnomalyDetector using activations.
 
@@ -239,13 +352,14 @@ class ActivationBasedDetector(AnomalyDetector):
         activation_names: list[str],
         activation_processing_func: Callable[[torch.Tensor, Any, str], torch.Tensor]
         | None = None,
+        cache: ActivationCache | None = None,
     ):
         super().__init__()
         self.activation_names = activation_names
         self.activation_processing_func = activation_processing_func
+        self.cache = cache
 
-    def get_activations(self, batch):
-        inputs = utils.inputs_from_batch(batch)
+    def _get_activations_no_cache(self, inputs) -> dict[str, torch.Tensor]:
         device = next(self.model.parameters()).device
         inputs = utils.inputs_to_device(inputs, device)
         acts = utils.get_activations(self.model, self.activation_names, inputs)
@@ -258,3 +372,13 @@ class ActivationBasedDetector(AnomalyDetector):
             }
 
         return acts
+
+    def get_activations(self, batch) -> dict[str, torch.Tensor]:
+        inputs = utils.inputs_from_batch(batch)
+
+        if self.cache is None:
+            return self._get_activations_no_cache(inputs)
+
+        return self.cache.get_activations(
+            inputs, self.activation_names, self._get_activations_no_cache, self.model
+        )

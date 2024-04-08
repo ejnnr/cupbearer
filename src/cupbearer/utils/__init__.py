@@ -38,6 +38,7 @@ def validate_and_convert_leaf(leaf):
     if isinstance(leaf, type):
         return TYPE_PREFIX + leaf.__module__ + "." + leaf.__name__
 
+    # TODO (erik): is any of this still necessary? torch.save should handle this I think
     try:
         pickled = pickle.dumps(leaf)
     except Exception as e:
