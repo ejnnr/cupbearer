@@ -13,7 +13,7 @@ def main(
 ):
     detector.set_model(task.model)
 
-    detector.eval(
+    return detector.eval(
         dataset=task.test_data,
         pbar=pbar,
         save_path=save_path,

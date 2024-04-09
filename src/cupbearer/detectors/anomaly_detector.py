@@ -148,7 +148,7 @@ class AnomalyDetector(ABC):
         bins = np.linspace(lower_lim, upper_lim, num_bins)
 
         if not save_path:
-            return
+            return metrics
 
         save_path = Path(save_path)
 
@@ -173,6 +173,8 @@ class AnomalyDetector(ABC):
         plt.ylabel("Frequency")
         plt.title("Anomaly score distribution")
         plt.savefig(save_path / "histogram.pdf")
+
+        return metrics
 
     @abstractmethod
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:

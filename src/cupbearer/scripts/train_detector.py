@@ -24,10 +24,10 @@ def main(
     if save_path:
         save_path = Path(save_path)
         detector.save_weights(save_path / "detector")
-        eval_detector(
-            detector=detector,
-            task=task,
-            pbar=True,
-            batch_size=eval_batch_size,
-            save_path=save_path,
-        )
+    return eval_detector(
+        detector=detector,
+        task=task,
+        pbar=True,
+        batch_size=eval_batch_size,
+        save_path=save_path,
+    )
