@@ -127,7 +127,9 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
             success_threshold=1.0,
             steps=1,
         ),
-        detector=detectors.MahalanobisDetector(),
+        detector=detectors.MahalanobisDetector(
+            activation_names=["layers.linear_0.output"]
+        ),
         save_path=tmp_path,
         batch_size=2,
         eval_batch_size=2,
@@ -156,7 +158,7 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
 def test_train_statistical_backdoor(tmp_path, backdoor_task, detector_type):
     train_detector(
         task=backdoor_task,
-        detector=detector_type(),
+        detector=detector_type(activation_names=["layers.linear_0.output"]),
         batch_size=2,
         eval_batch_size=2,
         save_path=tmp_path,

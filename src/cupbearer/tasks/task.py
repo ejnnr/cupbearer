@@ -22,17 +22,18 @@ class Task:
         clean_test_data: Dataset,
         anomalous_test_data: Dataset,
         clean_untrusted_data: Optional[Dataset] = None,
-        anomalous_data: Optional[Dataset] = None,
+        anomalous_untrusted_data: Optional[Dataset] = None,
         clean_train_weight: Optional[float] = 0.5,
         clean_test_weight: Optional[float] = 0.5,
+        untrusted_labels: bool = False,
     ):
         untrusted_train_data = None
-        if clean_untrusted_data and anomalous_data:
+        if clean_untrusted_data and anomalous_untrusted_data:
             untrusted_train_data = MixedData(
                 normal=clean_untrusted_data,
-                anomalous=anomalous_data,
+                anomalous=anomalous_untrusted_data,
                 normal_weight=clean_train_weight,
-                return_anomaly_labels=False,
+                return_anomaly_labels=untrusted_labels,
             )
 
         test_data = MixedData(
@@ -58,6 +59,7 @@ class Task:
         trusted_fraction: float = 1.0,
         clean_train_weight: float = 0.5,
         clean_test_weight: float = 0.5,
+        untrusted_labels: bool = False,
     ):
         if trusted_fraction == 1.0:
             trusted_data = train_data
@@ -89,7 +91,8 @@ class Task:
             model=model,
             trusted_data=trusted_data,
             clean_untrusted_data=clean_untrusted_data,
-            anomalous_data=anomalous_data,
+            anomalous_untrusted_data=anomalous_data,
             clean_test_data=clean_test_data,
             anomalous_test_data=anomalous_test_data,
+            untrusted_labels=untrusted_labels,
         )

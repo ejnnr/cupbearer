@@ -12,6 +12,11 @@ from cupbearer.detectors.statistical.statistical import (
 )
 from cupbearer.models import CNN, MLP
 
+names = {
+    MLP: ["layers.linear_0.input", "layers.linear_1.output"],
+    CNN: ["conv_layers.conv_0.input", "conv_layers.conv_1.output"],
+}
+
 
 @pytest.mark.parametrize(
     "dataset",
@@ -42,8 +47,8 @@ class TestTrainedStatisticalDetectors:
 
     def train_detector(self, dataset, Model, Detector, **kwargs):
         example_input, _ = next(iter(dataset))
-        detector = Detector()
         model = Model(input_shape=example_input.shape, output_dim=7)
+        detector = Detector(activation_names=names[type(model)])
         detector.set_model(model)
 
         detector.train(

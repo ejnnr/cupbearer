@@ -122,7 +122,10 @@ class AnomalyDetector(ABC):
         with torch.inference_mode():
             for batch in test_loader:
                 inputs, new_labels = batch
-                scores.append(self.scores(inputs).cpu().numpy())
+                new_scores = self.scores(inputs)
+                if isinstance(new_scores, torch.Tensor):
+                    new_scores = new_scores.cpu().numpy()
+                scores.append(new_scores)
                 labels.append(new_labels)
         scores = np.concatenate(scores)
         labels = np.concatenate(labels)

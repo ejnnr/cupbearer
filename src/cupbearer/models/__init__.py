@@ -3,6 +3,7 @@ from pathlib import Path
 
 import torch
 
+from .huggingface import HuggingfaceLM
 from .models import CNN, MLP, PreActResNet
 from .transformers_hf import TamperingPredictionTransformer
 

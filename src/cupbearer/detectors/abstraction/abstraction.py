@@ -119,15 +119,19 @@ class LocallyConsistentAbstraction(Abstraction):
             for i, (in_features, out_features) in enumerate(
                 zip(abstract_dims[:-1], abstract_dims[1:])
             ):
-                tau_maps[f"post_linear_{i}"] = nn.Linear(full_dims[i], in_features)
+                tau_maps[f"layers.linear_{i}.output"] = nn.Linear(
+                    full_dims[i], in_features
+                )
                 # TODO: should potentially include ReLU here, but want to try
                 # this version The i + 1 is needed because steps[name]
                 # describes how to compute the *output* of the layer with name
                 # `name`, which is the next one relative to the one we're
                 # currently looking at.
-                steps[f"post_linear_{i + 1}"] = nn.Linear(in_features, out_features)
+                steps[f"layers.linear_{i + 1}.output"] = nn.Linear(
+                    in_features, out_features
+                )
 
-            tau_maps[f"post_linear_{len(abstract_dims) - 1}"] = nn.Identity()
+            tau_maps[f"layers.linear_{len(abstract_dims) - 1}.output"] = nn.Identity()
 
             return tau_maps, steps
 
@@ -140,7 +144,7 @@ class LocallyConsistentAbstraction(Abstraction):
             for i, (in_features, out_features) in enumerate(
                 zip(abstract_dims[:-1], abstract_dims[1:])
             ):
-                tau_maps[f"conv_post_conv_{i}"] = nn.Conv2d(
+                tau_maps[f"conv_layers.conv_{i}.output"] = nn.Conv2d(
                     model.channels[i],
                     in_features,
                     model.kernel_sizes[i],
@@ -148,7 +152,7 @@ class LocallyConsistentAbstraction(Abstraction):
                 )
                 if i < len(abstract_dims) - 1:
                     # TODO: should potentially include ReLU here, but want to try this
-                    steps[f"conv_post_conv_{i + 1}"] = nn.Sequential(
+                    steps[f"conv_layers.conv_{i + 1}.output"] = nn.Sequential(
                         nn.MaxPool2d(2),
                         nn.Conv2d(
                             in_features,
@@ -157,7 +161,7 @@ class LocallyConsistentAbstraction(Abstraction):
                             padding="same",
                         ),
                     )
-            tau_maps[f"conv_post_conv_{len(abstract_dims) - 1}"] = nn.Conv2d(
+            tau_maps[f"conv_layers.conv_{len(abstract_dims) - 1}.output"] = nn.Conv2d(
                 model.channels[-1],
                 abstract_dims[-1],
                 model.kernel_sizes[-1],
@@ -166,15 +170,15 @@ class LocallyConsistentAbstraction(Abstraction):
 
             mlp_tau_maps, mlp_steps = get_mlp_abstraction(model.mlp, size_reduction)
             for k, v in mlp_tau_maps.items():
-                tau_maps[f"mlp_{k}"] = v
-                if k == "post_linear_0":
+                tau_maps[f"mlp.{k}"] = v
+                if k == "layers.linear_0.output":
                     next_mlp_dim = (
                         model.mlp.hidden_dims[0]
                         if model.mlp.hidden_dims
                         else model.mlp.output_dim
                     )
                     # Need to include a global pooling step here first
-                    steps[f"mlp_{k}"] = nn.Sequential(
+                    steps[f"mlp.{k}"] = nn.Sequential(
                         nn.AdaptiveMaxPool2d((1, 1)),
                         nn.Flatten(),
                         # Need to create a Linear layer here since from the perspective
@@ -186,11 +190,10 @@ class LocallyConsistentAbstraction(Abstraction):
                         ),
                     )
                 else:
-                    steps[f"mlp_{k}"] = mlp_steps[k]
+                    steps[f"mlp.{k}"] = mlp_steps[k]
         else:
             raise ValueError(f"Unknown model type: {type(model)}")
 
-        assert all(n1 == n2 for n1, n2 in zip(tau_maps.keys(), model.default_names))
         return cls(tau_maps, steps)
 
 
@@ -260,13 +263,17 @@ class AutoencoderAbstraction(Abstraction):
             for i, (activation_dim, abstract_dim) in enumerate(
                 zip(model.hidden_dims, abstract_dims)
             ):
-                tau_maps[f"post_linear_{i}"] = nn.Linear(activation_dim, abstract_dim)
-                decoders[f"post_linear_{i}"] = nn.Linear(abstract_dim, activation_dim)
+                tau_maps[f"layers.linear_{i}.output"] = nn.Linear(
+                    activation_dim, abstract_dim
+                )
+                decoders[f"layers.linear_{i}.output"] = nn.Linear(
+                    abstract_dim, activation_dim
+                )
                 # TODO: this is a bit too basic probably
 
             # Let autoencoder be trivial for output layer
-            tau_maps[f"post_linear_{i + 1}"] = nn.Identity()
-            decoders[f"post_linear_{i + 1}"] = nn.Identity()
+            tau_maps[f"layers.linear_{i + 1}.output"] = nn.Identity()
+            decoders[f"layers.linear_{i + 1}.output"] = nn.Identity()
 
             return tau_maps, decoders
 
@@ -279,13 +286,13 @@ class AutoencoderAbstraction(Abstraction):
             for i, (activation_dim, abstract_dim) in enumerate(
                 zip(model.channels, abstract_dims)
             ):
-                tau_maps[f"conv_post_conv_{i}"] = nn.Conv2d(
+                tau_maps[f"conv_layers.conv_{i}.output"] = nn.Conv2d(
                     activation_dim,
                     abstract_dim,
                     model.kernel_sizes[i],
                     padding="same",
                 )
-                decoders[f"conv_post_conv_{i}"] = nn.Conv2d(
+                decoders[f"conv_layers.conv_{i}.output"] = nn.Conv2d(
                     abstract_dim,
                     activation_dim,
                     model.kernel_sizes[i],
@@ -295,10 +302,9 @@ class AutoencoderAbstraction(Abstraction):
 
             mlp_tau_maps, mlp_decoders = get_mlp_abstraction(model.mlp, size_reduction)
             for k, v in mlp_tau_maps.items():
-                tau_maps[f"mlp_{k}"] = v
-                decoders[f"mlp_{k}"] = mlp_decoders[k]
+                tau_maps[f"mlp.{k}"] = v
+                decoders[f"mlp.{k}"] = mlp_decoders[k]
         else:
             raise ValueError(f"Unknown model type: {type(model)}")
 
-        assert all(n1 == n2 for n1, n2 in zip(tau_maps.keys(), model.default_names))
         return cls(tau_maps, decoders)

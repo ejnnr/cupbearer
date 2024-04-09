@@ -7,3 +7,4 @@ from .statistical import (
     QuantumEntropyDetector,
     SpectralSignatureDetector,
 )
+from .supervised_probe import SupervisedLinearProbe
