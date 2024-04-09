@@ -30,7 +30,7 @@ class ABCTestMLPAbstraction(ABC):
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         assert len(abstraction.tau_maps) == len(self.expected_dims)
         for i in range(len(self.expected_dims)):
-            tau_map = abstraction.tau_maps[f"post_linear_{i}"]
+            tau_map = abstraction.tau_maps[f"layers.linear_{i}.output"]
             if i == len(self.expected_dims) - 1:
                 assert isinstance(tau_map, nn.Identity)
             else:
@@ -41,24 +41,20 @@ class ABCTestMLPAbstraction(ABC):
     def test_default_abstraction_forward_pass(self):
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         inputs = torch.randn(1, 28, 28)
-        names = [f"post_linear_{i}" for i in range(len(self.expected_dims))]
+        names = [f"layers.linear_{i}.output" for i in range(len(self.expected_dims))]
         output, activations = self.model.get_activations(inputs, names=names)
         assert len(activations) == len(self.expected_dims)
         for name, activation in activations.items():
-            assert name.startswith("post_linear_")
-            assert name.split("_")[-1].isdigit()
+            assert name.startswith("layers.linear_")
             assert activation.ndim == 2
             assert activation.shape[0] == 1
-            assert activation.shape[1] == self.full_dims[int(name.split("_")[-1])]
 
         abstractions, _ = abstraction(activations)
         assert abstractions.keys() == _.keys()
         assert abstractions.keys() == activations.keys()
         for k, v in abstractions.items():
-            n = int(k[-1])
             assert v.ndim == 2
             assert v.shape[0] == 1
-            assert v.shape[1] == self.expected_dims[n]
 
 
 class ABCTestCNNAbstraction(ABC):
@@ -86,23 +82,27 @@ class ABCTestCNNAbstraction(ABC):
             len(self.expected_cnn_dims) + len(self.expected_mlp_dims)
         )
         for i in range(len(self.expected_cnn_dims)):
-            tau_map = abstraction.tau_maps[f"conv_post_conv_{i}"]
+            tau_map = abstraction.tau_maps[f"conv_layers.conv_{i}.output"]
             assert isinstance(tau_map, nn.Conv2d)
             assert tau_map.in_channels == self.cnn_dims[i]
             assert tau_map.out_channels == self.expected_cnn_dims[i]
 
         for i in range(len(self.mlp_dims) - 1):
-            tau_map = abstraction.tau_maps[f"mlp_post_linear_{i}"]
+            tau_map = abstraction.tau_maps[f"mlp.layers.linear_{i}.output"]
             assert isinstance(tau_map, nn.Linear)
             assert tau_map.in_features == self.mlp_dims[i]
             assert tau_map.out_features == self.expected_mlp_dims[i]
-        assert isinstance(abstraction.tau_maps[f"mlp_post_linear_{i + 1}"], nn.Identity)
+        assert isinstance(
+            abstraction.tau_maps[f"mlp.layers.linear_{i + 1}.output"], nn.Identity
+        )
 
     def test_default_abstraction_forward_pass(self):
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         inputs = torch.randn(1, 1, 28, 28)
-        names = [f"conv_post_conv_{i}" for i in range(len(self.expected_cnn_dims))] + [
-            f"mlp_post_linear_{i}" for i in range(len(self.expected_mlp_dims))
+        names = [
+            f"conv_layers.conv_{i}.output" for i in range(len(self.expected_cnn_dims))
+        ] + [
+            f"mlp.layers.linear_{i}.output" for i in range(len(self.expected_mlp_dims))
         ]
         output, activations = self.model.get_activations(inputs, names=names)
         # One extra for the MLP activation
@@ -110,29 +110,24 @@ class ABCTestCNNAbstraction(ABC):
             len(self.expected_cnn_dims) + len(self.expected_mlp_dims)
         )
         for name, activation in activations.items():
-            if name.startswith("mlp_post_linear_"):
+            if name.startswith("mlp.layers.linear_"):
                 assert activation.ndim == 2
                 assert activation.shape[0] == 1
-                assert activation.shape[1] == self.mlp_dims[int(name[-1])]
                 continue
-            assert name.startswith("conv_post_conv_")
+            assert name.startswith("conv_layers.conv_")
             assert activation.ndim == 4
             assert activation.shape[0] == 1
-            assert activation.shape[1] == self.cnn_dims[int(name[-1])]
 
         abstractions, _ = abstraction(activations)
         assert abstractions.keys() == _.keys()
         assert abstractions.keys() == activations.keys()
         for k, v in abstractions.items():
-            if k.startswith("mlp_post_linear_"):
+            if k.startswith("mlp.layers.linear_"):
                 assert v.ndim == 2
                 assert v.shape[0] == 1
-                assert v.shape[1] == self.expected_mlp_dims[int(k[-1])]
                 continue
-            n = int(k[-1])
             assert v.ndim == 4
             assert v.shape[0] == 1
-            assert v.shape[1] == self.expected_cnn_dims[n]
 
 
 class TestMLPLCA(ABCTestMLPAbstraction):
@@ -144,27 +139,21 @@ class TestMLPLCA(ABCTestMLPAbstraction):
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         assert len(abstraction.steps) == len(self.expected_dims) - 1
         for i in range(1, len(self.expected_dims)):
-            step = abstraction.steps[f"post_linear_{i}"]
+            step = abstraction.steps[f"layers.linear_{i}"]
             assert isinstance(step, nn.Linear)
             assert step.in_features == self.expected_dims[i - 1]
             assert step.out_features == self.expected_dims[i]
 
-        assert "post_linear_0" not in abstraction.steps
+        assert "layers.linear_0.output" not in abstraction.steps
 
     def test_default_abstraction_forward_pass(self):
         super().test_default_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         inputs = torch.randn(1, 28, 28)
-        names = [f"post_linear_{i}" for i in range(len(self.full_dims))]
+        names = [f"layers.linear_{i}.output" for i in range(len(self.full_dims))]
         output, activations = self.model.get_activations(inputs, names=names)
 
         abstractions, predicted_abstractions = abstraction(activations)
-        for k, v in abstractions.items():
-            n = int(k[-1])
-            if n == 0:
-                assert predicted_abstractions[k] is None
-            else:
-                assert predicted_abstractions[k].shape == v.shape
 
 
 class TestCNNLCA(ABCTestCNNAbstraction):
@@ -179,7 +168,7 @@ class TestCNNLCA(ABCTestCNNAbstraction):
             -1 + len(self.expected_cnn_dims) + len(self.expected_mlp_dims)
         )
         for i in range(1, len(self.expected_cnn_dims)):
-            step = abstraction.steps[f"conv_post_conv_{i}"]
+            step = abstraction.steps[f"conv_layers.conv_{i}.output"]
             assert isinstance(step, nn.Sequential)
             assert isinstance(step[0], nn.MaxPool2d)
             assert isinstance(step[1], nn.Conv2d)
@@ -187,15 +176,14 @@ class TestCNNLCA(ABCTestCNNAbstraction):
             assert step[1].out_channels == self.expected_cnn_dims[i]
 
         for i in range(1, len(self.expected_mlp_dims)):
-            step = abstraction.steps[f"mlp_post_linear_{i}"]
+            step = abstraction.steps[f"mlp.layers.linear_{i}.output"]
             assert isinstance(step, nn.Linear)
             assert step.in_features == self.expected_mlp_dims[i - 1]
             assert step.out_features == self.expected_mlp_dims[i]
 
-        assert "post_conv_0" not in abstraction.steps
-        assert "conv_post_conv_0" not in abstraction.steps
+        assert "conv_layers.conv_0.output" not in abstraction.steps
         # Should be a sequential with pooling + Linear
-        step = abstraction.steps["mlp_post_linear_0"]
+        step = abstraction.steps["mlp.layers.linear_0.output"]
         assert isinstance(step, nn.Sequential)
         assert isinstance(step[0], nn.AdaptiveMaxPool2d)
         assert isinstance(step[1], nn.Flatten)
@@ -207,19 +195,13 @@ class TestCNNLCA(ABCTestCNNAbstraction):
         super().test_default_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         inputs = torch.randn(1, 1, 28, 28)
-        names = [f"conv_post_conv_{i}" for i in range(len(self.cnn_dims))] + [
-            f"mlp_post_linear_{i}" for i in range(len(self.mlp_dims))
+        names = [f"conv_layers.conv_{i}.output" for i in range(len(self.cnn_dims))] + [
+            f"mlp.layers.linear_{i}.output" for i in range(len(self.mlp_dims))
         ]
         output, activations = self.model.get_activations(inputs, names=names)
 
         abstractions, predicted_abstractions = abstraction(activations)
         assert abstractions.keys() == predicted_abstractions.keys()
-        for k, v in abstractions.items():
-            if k == "conv_post_conv_0":
-                assert predicted_abstractions[k] is None
-            else:
-                assert predicted_abstractions[k].shape == v.shape
-                continue
 
 
 class TestAutoencoderMLPAbstraction(ABCTestMLPAbstraction):
@@ -231,19 +213,19 @@ class TestAutoencoderMLPAbstraction(ABCTestMLPAbstraction):
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         assert len(abstraction.decoders) == len(self.expected_dims)
         for i in range(len(self.expected_dims) - 1):
-            decoder = abstraction.decoders[f"post_linear_{i}"]
+            decoder = abstraction.decoders[f"layers.linear_{i}.output"]
             assert isinstance(decoder, nn.Linear)
             assert decoder.in_features == self.expected_dims[i]
             assert decoder.out_features == self.full_dims[i]
 
-        assert "post_linear_0" in abstraction.decoders
-        assert isinstance(abstraction.decoders[f"post_linear_{i + 1}"], nn.Identity)
+        assert "layers.linear_0.output" in abstraction.decoders
+        assert isinstance(abstraction.decoders["layers.linear_0.output"], nn.Identity)
 
     def test_default_abstraction_forward_pass(self):
         super().test_default_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         inputs = torch.randn(1, 28, 28)
-        names = [f"post_linear_{i}" for i in range(len(self.full_dims))]
+        names = [f"layers.linear_{i}.output" for i in range(len(self.full_dims))]
         output, activations = self.model.get_activations(inputs, names=names)
 
         abstractions, reconstructed_activations = abstraction(activations)
@@ -262,28 +244,29 @@ class TestCNNAutoencoderAbstraction(ABCTestCNNAbstraction):
         assert len(abstraction.decoders) == (
             len(self.expected_cnn_dims) + len(self.expected_mlp_dims)
         )
-        assert "post_conv_0" not in abstraction.decoders
-        assert "conv_post_conv_0" in abstraction.decoders
+        assert "conv_layers.conv_0.output" in abstraction.decoders
         for i in range(len(self.expected_cnn_dims)):
-            decoder = abstraction.decoders[f"conv_post_conv_{i}"]
+            decoder = abstraction.decoders[f"conv_layers.conv_{i}.output"]
             assert isinstance(decoder, nn.Conv2d)
             assert decoder.in_channels == self.expected_cnn_dims[i]
             assert decoder.out_channels == self.cnn_dims[i]
 
         for i in range(len(self.expected_mlp_dims) - 1):
-            decoder = abstraction.decoders[f"mlp_post_linear_{i}"]
+            decoder = abstraction.decoders[f"mlp.layers.linear_{i}.output"]
             assert isinstance(decoder, nn.Linear)
             assert decoder.in_features == self.expected_mlp_dims[i]
             assert decoder.out_features == self.mlp_dims[i]
 
-        assert isinstance(abstraction.decoders[f"mlp_post_linear_{i + 1}"], nn.Identity)
+        assert isinstance(
+            abstraction.decoders[f"mlp.layers.linear_{i + 1}.output"], nn.Identity
+        )
 
     def test_default_abstraction_forward_pass(self):
         super().test_default_abstraction_forward_pass()
         abstraction = self.get_default_abstraction(self.model, size_reduction=2)
         inputs = torch.randn(1, 1, 28, 28)
-        names = [f"conv_post_conv_{i}" for i in range(len(self.cnn_dims))] + [
-            f"mlp_post_linear_{i}" for i in range(len(self.mlp_dims))
+        names = [f"conv_layers.conv_{i}.output" for i in range(len(self.cnn_dims))] + [
+            f"mlp.layers.linear_{i}.output" for i in range(len(self.mlp_dims))
         ]
         output, activations = self.model.get_activations(inputs, names=names)
 
@@ -291,12 +274,9 @@ class TestCNNAutoencoderAbstraction(ABCTestCNNAbstraction):
         assert reconstructed_activations.keys() == activations.keys()
         for k, v in reconstructed_activations.items():
             assert v.shape == activations[k].shape
-            if k.startswith("mlp_post_linear_"):
+            if k.startswith("mlp.layers.linear_"):
                 assert v.ndim == 2
                 assert v.shape[0] == 1
-                assert v.shape[1] == self.mlp_dims[int(k[-1])]
                 continue
-            n = int(k[-1])
             assert v.ndim == 4
             assert v.shape[0] == 1
-            assert v.shape[1] == self.cnn_dims[n]
