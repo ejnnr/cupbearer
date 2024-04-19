@@ -4,11 +4,8 @@ import torch
 from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
 
-from cupbearer import utils
 from cupbearer.data import MixedData
-from cupbearer.detectors.anomaly_detector import (
-    ActivationBasedDetector,
-)
+from cupbearer.detectors.activation_based import ActivationBasedDetector
 
 
 class SupervisedLinearProbe(ActivationBasedDetector):
@@ -53,8 +50,7 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         self.clf.fit(activations.cpu().numpy(), anomaly_labels.cpu().numpy())
 
     def layerwise_scores(self, batch):
-        inputs = utils.inputs_from_batch(batch)
-        activations = self.get_activations(inputs)
+        activations = self.get_activations(batch)
         if len(activations) > 1:
             raise NotImplementedError(
                 "The supervised probe only supports a single layer right now."

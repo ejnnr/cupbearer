@@ -2,16 +2,46 @@ import torch
 
 
 class HuggingfaceLM(torch.nn.Module):
-    def __init__(self, hf_model, tokenizer, device="cuda"):
+    def __init__(
+        self,
+        tokenizer=None,
+        model=None,
+        device="cuda",
+    ):
+        """A wrapper around a HF model that handles tokenization and device placement.
+
+        Args:
+            model: The HF model to use. May be None, in which case the model can't
+                actually be used. This may be desirable if all activations are
+                coming from a cache anyway.
+            tokenizer: The tokenizer to use for tokenization. May be None if model
+                is None.
+            device: The device to place the model on.
+        """
         super().__init__()
-        self.hf_model = hf_model
+        self.hf_model = model
         self.tokenizer = tokenizer
         self.device = device
 
+        # HACK: We often use next(model.parameters()).device to figure out which
+        # device a model is on. We'd like that to still work even if there's no model.
+        self.dummy_param = torch.nn.Parameter(torch.tensor(0.0, device=device))
+
+    def set_checksum(self, checksum: float):
+        # This is a hack to make a fake model work with caching.
+        # Needs to be float64 because that's what the checksums use.
+        self.dummy_param.data = torch.tensor(
+            checksum, device=self.device, dtype=torch.float64
+        )
+
     def tokenize(self, inputs: list[str] | str):
+        if self.tokenizer is None:
+            raise ValueError("No tokenizer is set, so inputs can't be tokenized.")
         return self.tokenizer(inputs, padding=True, return_tensors="pt").to(self.device)
 
     def forward(self, inputs: list[str] | str):
+        if self.hf_model is None:
+            raise ValueError("No model is set, so forward pass can't be run.")
         tokens = self.tokenize(inputs)
         return self.hf_model(**tokens)
 

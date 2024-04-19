@@ -11,8 +11,9 @@ from cupbearer.detectors.abstraction.abstraction import (
     AutoencoderAbstraction,
     LocallyConsistentAbstraction,
 )
-from cupbearer.detectors.anomaly_detector import (
+from cupbearer.detectors.activation_based import (
     ActivationBasedDetector,
+    ActivationCache,
 )
 
 
@@ -84,7 +85,7 @@ def compute_losses(
 class AbstractionModule(L.LightningModule):
     def __init__(
         self,
-        get_activations: Callable[[torch.Tensor], tuple[Any, dict[str, torch.Tensor]]],
+        get_activations: Callable[[Any], dict[str, torch.Tensor]],
         abstraction: Abstraction,
         lr: float,
     ):
@@ -95,7 +96,7 @@ class AbstractionModule(L.LightningModule):
         self.lr = lr
 
     def _shared_step(self, batch):
-        _, activations = self.get_activations(batch)
+        activations = self.get_activations(batch)
         losses = compute_losses(self.abstraction, activations)
         assert isinstance(losses, torch.Tensor)
         assert losses.ndim == 1 and len(losses) == len(batch[0])
@@ -115,10 +116,19 @@ class AbstractionModule(L.LightningModule):
 class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
 
-    def __init__(self, abstraction: Abstraction):
+    def __init__(
+        self,
+        abstraction: Abstraction,
+        activation_processing_func: Callable | None = None,
+        cache: ActivationCache | None = None,
+    ):
         self.abstraction = abstraction
         names = list(abstraction.tau_maps.keys())
-        super().__init__(activation_name_func=lambda _: names)
+        super().__init__(
+            activation_names=names,
+            activation_processing_func=activation_processing_func,
+            cache=cache,
+        )
 
     def train(
         self,
