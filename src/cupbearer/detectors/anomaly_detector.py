@@ -16,8 +16,9 @@ from cupbearer.data import MixedData
 
 
 class AnomalyDetector(ABC):
-    def __init__(self):
+    def __init__(self, layer_aggregation: str = "mean"):
         # For storing the original detector variables when finetuning
+        self.layer_aggregation = layer_aggregation
         self._original_variables = None
         self.trained = False
 
@@ -210,7 +211,12 @@ class AnomalyDetector(ABC):
         assert len(scores) > 0
         # Type checker doesn't take into account that scores is non-empty,
         # so thinks this might be a float.
-        return sum(v for v in scores) / len(scores)  # type: ignore
+        if self.layer_aggregation == "mean":
+            return sum(scores) / len(scores)  # type: ignore
+        elif self.layer_aggregation == "max":
+            return torch.amax(torch.stack(list(scores)), dim=0)
+        else:
+            raise ValueError(f"Unknown layer aggregation: {self.layer_aggregation}")
 
     def _get_trained_variables(self, saving: bool = False):
         return {}

@@ -6,6 +6,7 @@ import lightning as L
 import torch
 import torch.nn.functional as F
 
+from cupbearer import utils
 from cupbearer.detectors.abstraction.abstraction import (
     Abstraction,
     AutoencoderAbstraction,
@@ -65,18 +66,19 @@ def compute_kl_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor
 
 def compute_losses(
     abstraction: Abstraction,
+    inputs,
     activations: dict[str, torch.Tensor],
     layerwise: bool = False,
 ):
     # TODO this is a bit rigid, possibly this should be configurable
     if isinstance(abstraction, LocallyConsistentAbstraction):
-        abstractions, predicted_abstractions = abstraction(activations)
+        abstractions, predicted_abstractions = abstraction(inputs, activations)
         losses = compute_cosine_losses(
             predicted_abstractions, abstractions, layerwise=layerwise
         )
     elif isinstance(abstraction, AutoencoderAbstraction):
-        abstractions, reconstructed_activations = abstraction(activations)
-        losses = compute_kl_losses(
+        abstractions, reconstructed_activations = abstraction(inputs, activations)
+        losses = compute_cosine_losses(
             reconstructed_activations, activations, layerwise=layerwise
         )
     return losses
@@ -96,8 +98,9 @@ class AbstractionModule(L.LightningModule):
         self.lr = lr
 
     def _shared_step(self, batch):
+        inputs = utils.inputs_from_batch(batch)
         activations = self.get_activations(batch)
-        losses = compute_losses(self.abstraction, activations)
+        losses = compute_losses(self.abstraction, inputs, activations)
         assert isinstance(losses, torch.Tensor)
         assert losses.ndim == 1 and len(losses) == len(batch[0])
         loss = losses.mean(0)
@@ -158,7 +161,9 @@ class AbstractionDetector(ActivationBasedDetector):
         # TODO: implement validation data
 
         self.model.eval()
-        # We don't need gradients for base model parameters:
+        # We don't need gradients for base model parameters.
+        # TODO: I think this should be unnecessary since `get_activations` uses
+        # `torch.no_grad()` anyway.
         required_grad = {}
         for name, param in self.model.named_parameters():
             required_grad[name] = param.requires_grad
@@ -179,8 +184,9 @@ class AbstractionDetector(ActivationBasedDetector):
             param.requires_grad = required_grad[name]
 
     def layerwise_scores(self, batch):
+        inputs = utils.inputs_from_batch(batch)
         activations = self.get_activations(batch)
-        return compute_losses(self.abstraction, activations, layerwise=True)
+        return compute_losses(self.abstraction, inputs, activations, layerwise=True)
 
     def _get_trained_variables(self, saving: bool = False):
         # TODO: for saving=False we should return optimizer here if we want to make

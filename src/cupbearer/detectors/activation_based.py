@@ -152,8 +152,9 @@ class ActivationBasedDetector(AnomalyDetector):
         activation_processing_func: Callable[[torch.Tensor, Any, str], torch.Tensor]
         | None = None,
         cache: ActivationCache | None = None,
+        layer_aggregation: str = "mean",
     ):
-        super().__init__()
+        super().__init__(layer_aggregation=layer_aggregation)
         self.activation_names = activation_names
         self.activation_processing_func = activation_processing_func
         self.cache = cache
