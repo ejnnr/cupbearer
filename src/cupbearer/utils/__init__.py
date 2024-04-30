@@ -1,9 +1,10 @@
 import codecs
 import importlib
+import math
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import Union
+from typing import Union, overload
 
 import torch
 
@@ -139,3 +140,21 @@ def _try_to_device(x, device):
 
 def inputs_to_device(batch, device):
     return tree_map(lambda x: _try_to_device(x, device), batch)
+
+
+@overload
+def reduce_size(shape: int, size_reduction: int) -> int:
+    ...
+
+
+@overload
+def reduce_size(shape: tuple[int, ...], size_reduction: int) -> tuple[int, ...]:
+    ...
+
+
+def reduce_size(
+    shape: int | tuple[int, ...], size_reduction: int
+) -> int | tuple[int, ...]:
+    if isinstance(shape, int):
+        return math.ceil(shape / size_reduction)
+    return tuple(math.ceil(x / size_reduction) for x in shape)

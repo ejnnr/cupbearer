@@ -1,10 +1,8 @@
-import functools
 from pathlib import Path
 from typing import Any, Callable
 
 import lightning as L
 import torch
-import torch.nn.functional as F
 
 from cupbearer import utils
 from cupbearer.detectors.abstraction.abstraction import (
@@ -18,70 +16,44 @@ from cupbearer.detectors.activation_based import (
 )
 
 
-def per_layer(func: Callable):
-    @functools.wraps(func)
-    def wrapper(
-        inputs: dict[str, torch.Tensor | None],
-        targets: dict[str, torch.Tensor],
-        layerwise: bool,
-        *args,
-        **kwargs,
-    ):
-        layer_losses: dict[str, torch.Tensor] = {}
-        assert inputs.keys() == targets.keys()
-        for k in inputs.keys():
-            if inputs[k] is None:
-                # No prediction was made for this layer
-                continue
-            input = inputs[k].flatten(start_dim=1)
-            target = targets[k].flatten(start_dim=1)
-
-            losses = func(input, target, *args, **kwargs)
-            assert losses.ndim == 1
-            layer_losses[k] = losses
-
-        if layerwise:
-            return layer_losses
-
-        n = len(layer_losses)
-        assert n > 0
-        return sum(x for x in layer_losses.values()) / n
-
-    return wrapper
-
-
-@per_layer
-def compute_cosine_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    # Cosine distance can be NaN if one of the inputs is exactly zero
-    # which is why we need the eps (which sets cosine distance to 1 in that case).
-    # This doesn't happen in realistic scenarios, but in tests with very small
-    # hidden dimensions and ReLUs, it's possible.
-    return 1 - F.cosine_similarity(input, target, eps=1e-6)
-
-
-@per_layer
-def compute_kl_losses(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-    return F.kl_div(input, target, reduction="none", log_target=True).sum(dim=1)
-
-
 def compute_losses(
     abstraction: Abstraction,
     inputs,
     activations: dict[str, torch.Tensor],
     layerwise: bool = False,
 ):
-    # TODO this is a bit rigid, possibly this should be configurable
     if isinstance(abstraction, LocallyConsistentAbstraction):
-        abstractions, predicted_abstractions = abstraction(inputs, activations)
-        losses = compute_cosine_losses(
-            predicted_abstractions, abstractions, layerwise=layerwise
-        )
+        # LocallyConsistentAbstraction returns (abstractions, predicted_abstractions),
+        # where abstractions are the output of tau maps and function as our prediction
+        # targets.
+        targets, predictions = abstraction(inputs, activations)
     elif isinstance(abstraction, AutoencoderAbstraction):
-        abstractions, reconstructed_activations = abstraction(inputs, activations)
-        losses = compute_cosine_losses(
-            reconstructed_activations, activations, layerwise=layerwise
-        )
-    return losses
+        # AutoencoderAbstraction returns (abstractions, reconstructed_activations).
+        # We don't care about abstractions, our target are the full model's activations.
+        _, predictions = abstraction(inputs, activations)
+        targets = activations
+    else:
+        raise ValueError(f"Unsupported abstraction type: {type(abstraction)}")
+
+    layer_losses: dict[str, torch.Tensor] = {}
+    assert predictions.keys() == targets.keys()
+    for k in predictions.keys():
+        if predictions[k] is None:
+            # No prediction was made for this layer
+            continue
+        # prediction = predictions[k].flatten(start_dim=1)
+        # target = targets[k].flatten(start_dim=1)
+
+        losses = abstraction.loss_fn(k)(predictions[k], targets[k])
+        assert losses.ndim == 1
+        layer_losses[k] = losses
+
+    if layerwise:
+        return layer_losses
+
+    n = len(layer_losses)
+    assert n > 0
+    return sum(x for x in layer_losses.values()) / n
 
 
 class AbstractionModule(L.LightningModule):
@@ -168,6 +140,12 @@ class AbstractionDetector(ActivationBasedDetector):
         for name, param in self.model.named_parameters():
             required_grad[name] = param.requires_grad
             param.requires_grad = False
+
+        # Pytorch lightning moves the model to the CPU after it's done training.
+        # We don't want to expose that behavior to the user, since it's really annoying
+        # when not using Lightning.
+        original_device = next(self.model.parameters()).device
+
         # HACK: by adding the model as a submodule to the LightningModule, it gets
         # transferred to the same device Lightning uses for everything else
         # (which seems tricky to do manually).
@@ -178,6 +156,8 @@ class AbstractionDetector(ActivationBasedDetector):
             model=module,
             train_dataloaders=train_loader,
         )
+
+        module.to(original_device)
 
         # Restore original requires_grad values:
         for name, param in self.model.named_parameters():
