@@ -10,6 +10,7 @@ def main(
     save_path: Path | str | None,
     pbar: bool = False,
     batch_size: int = 1024,
+    layerwise: bool = False,
 ):
     detector.set_model(task.model)
 
@@ -18,4 +19,5 @@ def main(
         pbar=pbar,
         save_path=save_path,
         batch_size=batch_size,
+        layerwise=layerwise,
     )
