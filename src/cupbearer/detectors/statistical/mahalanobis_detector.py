@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+from einops import rearrange
 
 from cupbearer.detectors.statistical.helpers import mahalanobis
 from cupbearer.detectors.statistical.statistical import (
@@ -64,6 +65,17 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
 
     def layerwise_scores(self, batch):
         activations = self.get_activations(batch)
+        batch_size = next(iter(activations.values())).shape[0]
+
+        # Reshape activations to (batch, dim) for computing distances
+        for k, activation in activations.items():
+            if activation.ndim == 3:
+                activation = rearrange(
+                    activation, "batch independent dim -> (batch independent) dim"
+                )
+            assert activation.ndim == 2, activation.shape
+            activations[k] = activation
+
         distances = mahalanobis(
             activations,
             self.means,
@@ -71,6 +83,13 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
             inv_diag_covariances=self.inv_diag_covariances,
         )
         dims = {k: v.shape[0] for k, v in self.means.items()}
+
+        for k, v in distances.items():
+            # Unflatten distances so we can take the mean over the independent axis
+            distances[k] = rearrange(
+                v, "(batch independent) -> batch independent", batch=batch_size
+            ).mean(dim=1)
+
         return {
             k: log_chi_squared_percentiles(v, dims[k]) for k, v in distances.items()
         }

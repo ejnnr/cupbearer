@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 
 import torch
+from einops import rearrange
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -71,12 +72,19 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
     during training."""
 
     def init_variables(self, activation_sizes: dict[str, torch.Size], device):
+        for k, size in activation_sizes.items():
+            if len(size) not in (1, 2):
+                raise ValueError(
+                    f"Activation size {size} of {k} is not supported. "
+                    "Activations must be either 1D or 2D (in which case separate "
+                    "covariance matrices are learned along the first dimension)."
+                )
         self._means = {
-            k: torch.zeros(size.numel(), device=device)
+            k: torch.zeros(size[-1], device=device)
             for k, size in activation_sizes.items()
         }
         self._Cs = {
-            k: torch.zeros((size.numel(), size.numel()), device=device)
+            k: torch.zeros((size[-1], size[-1]), device=device)
             for k, size in activation_sizes.items()
         }
         self._ns = {k: 0 for k in activation_sizes.keys()}
@@ -84,7 +92,11 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
     def batch_update(self, activations: dict[str, torch.Tensor]):
         for k, activation in activations.items():
             # Flatten the activations to (batch, dim)
-            activation = activation.flatten(start_dim=1)
+            if activation.ndim == 3:
+                activation = rearrange(
+                    activation, "batch independent dim -> (batch independent) dim"
+                )
+            assert activation.ndim == 2, activation.shape
             self._means[k], self._Cs[k], self._ns[k] = update_covariance(
                 self._means[k], self._Cs[k], self._ns[k], activation
             )
