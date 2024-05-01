@@ -30,7 +30,7 @@ class TinyNaturalMechanismsDataset(torch.utils.data.Dataset):
         )
 
 
-def tiny_natural_mechanisms_task(name: str, device: str):
+def tiny_natural_mechanisms(name: str, device: str):
     import blobfile as bf
     from transformer_lens import HookedTransformer
 
@@ -63,7 +63,7 @@ def tiny_natural_mechanisms_task(name: str, device: str):
 
     model.load_state_dict(state_dict)
 
-    cache_path = Path(f".cupbearer_cache/arc/{name}_task.json")
+    cache_path = cache_dir / f"{name}_task.json"
     if cache_path.exists():
         with cache_path.open("r") as f:
             task_data = json.load(f)

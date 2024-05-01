@@ -120,7 +120,9 @@ class AnomalyDetector(ABC):
         scores = defaultdict(list)
         labels = defaultdict(list)
 
-        with torch.inference_mode():
+        # It's important we don't use torch.inference_mode() here, since we want
+        # to be able to override this in certain detectors using torch.enable_grad().
+        with torch.no_grad():
             for batch in test_loader:
                 inputs, new_labels = batch
                 if layerwise:
