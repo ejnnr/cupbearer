@@ -1,9 +1,7 @@
 from pathlib import Path
 
 from datasets import load_dataset
-from elk_generalization.datasets.loader_utils import templatize_quirky_dataset
 from loguru import logger
-from peft import AutoPeftModelForCausalLM
 from transformers import AutoTokenizer
 
 from cupbearer.data import HuggingfaceDataset
@@ -23,6 +21,9 @@ def quirky_lm(
     include_untrusted: bool = False,
     fake_model: bool = False,
 ):
+    from elk_generalization.datasets.loader_utils import templatize_quirky_dataset
+    from peft import AutoPeftModelForCausalLM
+
     ########################
     # Load model and data
     ########################

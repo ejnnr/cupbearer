@@ -23,7 +23,6 @@ dependencies = [
     "torchattacks~=3.5.1",
     "lightning~=2.1.0",
     "torchmetrics~=1.2.0",
-    "transformer_lens~=1.14.0",
     "tensorboard",
     "datasets",
     "tqdm",
@@ -34,11 +33,14 @@ dependencies = [
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
-dev = ["pytest", "pre-commit", "ipykernel"]
+# transformer_lens is used in some tests
+dev = ["pytest", "pre-commit", "ipykernel", "transformer_lens"]
 wandb = ["wandb"]
-quirky = [
+quirky_lm = [
     "elk_generalization @ git+https://github.com/ejnnr/quirky-language-models.git",
+    "peft",
 ]
+tiny_natural_mechanisms = ["blobfile", "transformer_lens"]
 
 [project.urls]
 "Homepage" = "https://github.com/ejnnr/cupbearer"
