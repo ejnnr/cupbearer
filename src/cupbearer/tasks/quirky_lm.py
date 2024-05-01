@@ -1,5 +1,3 @@
-from pathlib import Path
-
 from datasets import load_dataset
 from loguru import logger
 from transformers import AutoTokenizer
@@ -28,16 +26,9 @@ def quirky_lm(
     # Load model and data
     ########################
 
-    # TODO(erik): push these to Huggingface and load from there
-    base_path = Path("/nas/ucb/erik/quirky-language-models/output")
-    if random_names and mixture:
-        model_name = base_path / "multi-custom/quirky_sciq_raw/checkpoint-2500"
-    elif random_names and not mixture:
-        model_name = base_path / "multi/quirky_sciq_raw/checkpoint-2000"
-    elif not random_names and mixture:
-        model_name = base_path / "single-custom/quirky_sciq_raw/checkpoint-3000"
-    elif not random_names and not mixture:
-        model_name = base_path / "single/quirky_sciq_raw/checkpoint-2048"
+    mixture_str = "mixture" if mixture else "fixed"
+    name_str = "multiname" if random_names else "singlename"
+    model_name = f"ejenner/quirky_sciq_mistral7b_{mixture_str}_{name_str}"
 
     model = None
     tokenizer = None
