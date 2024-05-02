@@ -132,6 +132,7 @@ class AnomalyDetector(ABC):
                 for layer, score in new_scores.items():
                     if isinstance(score, torch.Tensor):
                         score = score.cpu().numpy()
+                    assert score.shape == new_labels.shape
                     scores[layer].append(score)
                     labels[layer].append(new_labels)
         scores = {layer: np.concatenate(scores[layer]) for layer in scores}

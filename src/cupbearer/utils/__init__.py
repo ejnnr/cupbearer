@@ -8,7 +8,7 @@ from typing import Union, overload
 
 import torch
 
-from .get_activations import get_activations  # noqa: F401
+from .get_activations import get_activations, get_activations_and_grads  # noqa: F401
 
 SUFFIX = ".pt"
 TYPE_PREFIX = "__TYPE__:"

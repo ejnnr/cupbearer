@@ -1,3 +1,5 @@
+from typing import Callable
+
 import torch
 
 
@@ -73,3 +75,89 @@ def get_activations(
             hook.remove()
 
     return activations
+
+
+def get_activations_and_grads(
+    model: torch.nn.Module,
+    names: list[str],
+    output_func: Callable[[torch.Tensor], torch.Tensor],
+    *args,
+    **kwargs,
+) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor]]:
+    """Get the activations and gradients of the model for the given inputs.
+
+    Args:
+        See `get_activations`.
+        output_func: A function that takes the output of the model and reduces
+            to a (batch_size, ) shaped tensor.
+
+    Returns:
+        `(activations, gradients)` where both are dictionaries as in `get_activations`.
+    """
+    activations = {}
+    gradients = {}
+    hooks = []
+
+    try:
+        all_module_names = [name for name, _ in model.named_modules()]
+
+        for name in names:
+            assert name.endswith(".input") or name.endswith(
+                ".output"
+            ), f"Invalid name {name}, names should end with '.input' or '.output'"
+            base_name = ".".join(name.split(".")[:-1])
+            assert (
+                base_name in all_module_names
+            ), f"{base_name} is not a submodule of the model"
+
+        def make_hooks(name, is_input):
+            def forward_hook(module, input, output):
+                if is_input:
+                    activations[name] = (
+                        input if isinstance(input, torch.Tensor) else input[0]
+                    )
+                else:
+                    activations[name] = output
+
+            def backward_hook(module, grad_input, grad_output):
+                if isinstance(grad_input, tuple):
+                    grad_input, *_ = grad_input
+                if isinstance(grad_output, tuple):
+                    grad_output, *_ = grad_output
+
+                if is_input:
+                    gradients[name] = grad_input
+                else:
+                    gradients[name] = grad_output
+
+                if set(names).issubset(gradients.keys()):
+                    # HACK: stop the backward pass to save time
+                    raise _Finished()
+
+            return forward_hook, backward_hook
+
+        for name, module in model.named_modules():
+            if name + ".input" in names:
+                forward_hook, backward_hook = make_hooks(name + ".input", True)
+                hooks.append(module.register_forward_hook(forward_hook))
+                hooks.append(module.register_full_backward_hook(backward_hook))
+            if name + ".output" in names:
+                forward_hook, backward_hook = make_hooks(name + ".output", False)
+                hooks.append(module.register_forward_hook(forward_hook))
+                hooks.append(module.register_full_backward_hook(backward_hook))
+        with torch.enable_grad():
+            try:
+                out = model(*args, **kwargs)
+                out = output_func(out)
+                assert out.ndim == 1, "output_func should reduce to a 1D tensor"
+                out.backward(torch.ones_like(out))
+            except _Finished:
+                pass
+    finally:
+        # Make sure we always remove hooks even if an exception is raised
+        for hook in hooks:
+            hook.remove()
+
+        model.zero_grad()
+
+    return activations, gradients
