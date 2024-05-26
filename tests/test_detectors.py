@@ -48,7 +48,10 @@ class TestTrainedStatisticalDetectors:
     def train_detector(self, dataset, Model, Detector, **kwargs):
         example_input, _ = next(iter(dataset))
         model = Model(input_shape=example_input.shape, output_dim=7)
-        detector = Detector(activation_names=names[type(model)])
+        detector = Detector(
+            activation_names=names[type(model)],
+            activation_processing_func=lambda x, _, __: x.reshape(x.size(0), -1),
+        )
         detector.set_model(model)
 
         detector.train(
