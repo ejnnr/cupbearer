@@ -25,7 +25,16 @@ def model_checksum(model: torch.nn.Module) -> float:
 
 
 class ActivationCache:
+    """Cache for activations to speed up using multiple anomaly detectors.
+
+    The main use case for this is if the model is expensive to run and we want to try
+    many different detectors that require similar activations.
+
+    The cache stores a dict from (input, activation_name) to the activations.
+    """
+
     def __init__(self):
+        """Create an empty cache."""
         self.cache: dict[tuple[Any, str], torch.Tensor] = {}
         self.model_checksum = None
         # Just for debugging purposes:
@@ -39,6 +48,12 @@ class ActivationCache:
         return key in self.cache
 
     def count_missing(self, dataset: Dataset, activation_names: list[str]):
+        """Count how many inputs from `dataset` are missing from the cache.
+
+        `activation_names` is a list of the names of the activations we need to be
+        in the cache. An input counts as missing if *some* of the activations are
+        missing for that input.
+        """
         count = 0
         for sample in dataset:
             if isinstance(dataset, MixedData) and dataset.return_anomaly_labels:
@@ -65,6 +80,22 @@ class ActivationCache:
         activation_func: Callable[[Any], dict[str, torch.Tensor]],
         model: torch.nn.Module,
     ) -> dict[str, torch.Tensor]:
+        """Get activations for a batch of inputs, using the cache if possible.
+
+        If any activations are missing from the cache, they are computed and added
+        to the cache.
+
+        Args:
+            inputs: The inputs to get activations for.
+            activation_names: The names of the activations to get.
+            activation_func: Takes in `inputs` and returns a dictionary of activations.
+            model: The model to get the activations from. This is only used to compute
+                a checksum to make sure that the cache is not used with a different
+                model. Note that only one model per cache is supported.
+
+        Returns:
+            A dict from activation name to the activations.
+        """
         # We want to make sure that we don't accidentally use a cache from a different
         # model, which is why we force passing in a model whenever the cache is used.
         if self.model_checksum is None:
@@ -144,6 +175,11 @@ class ActivationBasedDetector(AnomalyDetector):
             computing the anomaly scores. The function should take the activations,
             the input data, and the name of the activations as arguments and return
             the processed activations.
+        cache: An ActivationCache to use for caching activations. If None (default),
+            activations aren't cached. The cache is meant to be shared between multiple
+            detectors on the same model.
+        layer_aggregation: How to aggregate anomaly scores over layers to get a single
+            global anomaly score. Options are "mean" (default) or "max".
     """
 
     def __init__(
@@ -186,7 +222,12 @@ class ActivationBasedDetector(AnomalyDetector):
 
 class CacheBuilder(ActivationBasedDetector):
     """A dummy detector meant only for creating activation caches.
-    Scores are meaningless."""
+
+    Scores are meaningless. You can also just create a cache manually and call
+    get_activations() on it, the only advantage of this is that it implements the
+    detector interface, so you can use it with the exact same dataloading setup as
+    the real detector.
+    """
 
     def __init__(
         self,
@@ -242,9 +283,3 @@ class CacheBuilder(ActivationBasedDetector):
 
     def layerwise_scores(self, batch):
         raise NotImplementedError
-
-    # def scores(self, batch):
-    #     # Implemented since this will be called during eval.
-    #     # During training, activations are cached directly in train().
-    #     self.get_activations(batch)
-    #     return torch.zeros(len(batch), device=next(self.model.parameters()).device)
