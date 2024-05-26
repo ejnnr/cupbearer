@@ -21,18 +21,13 @@ class SpectralSignatureDetector(ActivationCovarianceBasedDetector):
             for k, cov in self.covariances.items()
         }
 
-    def layerwise_scores(self, batch):
+    def _individual_layerwise_score(self, name, activation):
         # ((R(x_i) - \hat{R}) * v) ** 2
-        activations = self.get_activations(batch)
-        outlier_scores = {
-            k: torch.einsum(
-                "bi,i->b",
-                (activations[k] - self.means[k]),
-                v,
-            ).square()
-            for k, v in self.top_singular_vectors.items()
-        }
-        return outlier_scores
+        return torch.einsum(
+            "bi,i->b",
+            (activation - self.means[name]),
+            self.top_singular_vectors[name],
+        ).square()
 
     def _get_trained_variables(self, saving: bool = False):
         return {"means": self.means, "top_singular_vectors": self.top_singular_vectors}

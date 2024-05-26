@@ -158,3 +158,7 @@ def reduce_size(
     if isinstance(shape, int):
         return math.ceil(shape / size_reduction)
     return tuple(math.ceil(x / size_reduction) for x in shape)
+
+
+def flatten_last(x):
+    return torch.flatten(x, start_dim=1)

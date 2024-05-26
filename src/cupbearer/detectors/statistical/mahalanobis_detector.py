@@ -1,6 +1,5 @@
 import numpy as np
 import torch
-from einops import rearrange
 
 from cupbearer.detectors.statistical.helpers import mahalanobis
 from cupbearer.detectors.statistical.statistical import (
@@ -63,36 +62,19 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
                 for k, C in self.covariances.items()
             }
 
-    def layerwise_scores(self, batch):
-        activations = self.get_activations(batch)
-        batch_size = next(iter(activations.values())).shape[0]
+    def _individual_layerwise_score(self, name: str, activation: torch.Tensor):
+        inv_diag_covariance = None
+        if self.inv_diag_covariances is not None:
+            inv_diag_covariance = self.inv_diag_covariances[name]
 
-        # Reshape activations to (batch, dim) for computing distances
-        for k, activation in activations.items():
-            if activation.ndim == 3:
-                activation = rearrange(
-                    activation, "batch independent dim -> (batch independent) dim"
-                )
-            assert activation.ndim == 2, activation.shape
-            activations[k] = activation
-
-        distances = mahalanobis(
-            activations,
-            self.means,
-            self.inv_covariances,
-            inv_diag_covariances=self.inv_diag_covariances,
+        distance = mahalanobis(
+            activation,
+            self.means[name],
+            self.inv_covariances[name],
+            inv_diag_covariance=inv_diag_covariance,
         )
-        dims = {k: v.shape[0] for k, v in self.means.items()}
 
-        for k, v in distances.items():
-            # Unflatten distances so we can take the mean over the independent axis
-            distances[k] = rearrange(
-                v, "(batch independent) -> batch independent", batch=batch_size
-            ).mean(dim=1)
-
-        return {
-            k: log_chi_squared_percentiles(v, dims[k]) for k, v in distances.items()
-        }
+        return log_chi_squared_percentiles(distance, self.means[name].shape[0])
 
     def _get_trained_variables(self, saving: bool = False):
         return {

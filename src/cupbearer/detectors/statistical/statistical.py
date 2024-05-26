@@ -2,6 +2,7 @@ from abc import ABC, abstractmethod
 
 import torch
 from einops import rearrange
+from loguru import logger
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -72,13 +73,13 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
     during training."""
 
     def init_variables(self, activation_sizes: dict[str, torch.Size], device):
-        for k, size in activation_sizes.items():
-            if len(size) not in (1, 2):
-                raise ValueError(
-                    f"Activation size {size} of {k} is not supported. "
-                    "Activations must be either 1D or 2D (in which case separate "
-                    "covariance matrices are learned along the first dimension)."
-                )
+        if any(len(size) != 1 for size in activation_sizes.values()):
+            logger.debug(
+                "Received multi-dimensional activations, will only learn "
+                "covariances along last dimension and treat others independently. "
+                "If this is unintentional, pass "
+                "`activation_preprocessing_func=utils.flatten_last`."
+            )
         self._means = {
             k: torch.zeros(size[-1], device=device)
             for k, size in activation_sizes.items()
@@ -92,10 +93,7 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
     def batch_update(self, activations: dict[str, torch.Tensor]):
         for k, activation in activations.items():
             # Flatten the activations to (batch, dim)
-            if activation.ndim == 3:
-                activation = rearrange(
-                    activation, "batch independent dim -> (batch independent) dim"
-                )
+            activation = rearrange(activation, "batch ... dim -> (batch ...) dim")
             assert activation.ndim == 2, activation.shape
             self._means[k], self._Cs[k], self._ns[k] = update_covariance(
                 self._means[k], self._Cs[k], self._ns[k], activation
@@ -104,6 +102,42 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
     @abstractmethod
     def post_covariance_training(self, **kwargs):
         pass
+
+    @abstractmethod
+    def _individual_layerwise_score(self, name: str, activation: torch.Tensor):
+        """Compute the anomaly score for a single layer.
+
+        `name` is passed in to access the mean/covariance and any custom derived
+        quantities computed in post_covariance_training.
+
+        `activation` will always have shape (batch, dim). The `batch` dimension might
+        not just be the actual batch dimension, but could also contain multiple entries
+        from a single sample, in the case of multi-dimensional activations that we
+        treat as independent along all but the last dimension.
+
+        Should return a tensor of shape (batch,) with the anomaly scores.
+        """
+        pass
+
+    def layerwise_scores(self, batch):
+        activations = self.get_activations(batch)
+        batch_size = next(iter(activations.values())).shape[0]
+        activations = {
+            k: rearrange(v, "batch ... dim -> (batch ...) dim")
+            for k, v in activations.items()
+        }
+        scores = {
+            k: self._individual_layerwise_score(k, v) for k, v in activations.items()
+        }
+        scores = {
+            k: rearrange(
+                v,
+                "(batch independent_dims) -> batch independent_dims",
+                batch=batch_size,
+            ).sum(-1)
+            for k, v in scores.items()
+        }
+        return scores
 
     def train(self, trusted_data, untrusted_data, **kwargs):
         super().train(
