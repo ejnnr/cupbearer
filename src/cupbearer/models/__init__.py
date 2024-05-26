@@ -5,7 +5,6 @@ import torch
 
 from .huggingface import HuggingfaceLM
 from .models import CNN, MLP, PreActResNet
-from .transformers_hf import TamperingPredictionTransformer
 
 
 def load(model: torch.nn.Module, path: Path | str):
