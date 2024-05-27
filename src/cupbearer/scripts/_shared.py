@@ -3,15 +3,13 @@ import torch
 from torchmetrics.classification import Accuracy
 from typing_extensions import Literal
 
-from cupbearer.models import HookedModel
-
 ClassificationTask = Literal["binary", "multiclass", "multilabel"]
 
 
 class Classifier(L.LightningModule):
     def __init__(
         self,
-        model: HookedModel,
+        model: torch.nn.Module,
         lr: float,
         num_classes: int | None = None,
         num_labels: int | None = None,

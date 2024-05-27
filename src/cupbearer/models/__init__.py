@@ -3,12 +3,11 @@ from pathlib import Path
 
 import torch
 
-from .hooked_model import HookedModel
+from .huggingface import HuggingfaceLM
 from .models import CNN, MLP, PreActResNet
-from .transformers_hf import TamperingPredictionTransformer
 
 
-def load(model: HookedModel, path: Path | str):
+def load(model: torch.nn.Module, path: Path | str):
     path = Path(path)
     # Our convention is that LightningModules store the actual pytorch model
     # as a `model` attribute. We use the last checkpoint (generated via the

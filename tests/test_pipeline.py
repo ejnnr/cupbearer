@@ -2,6 +2,7 @@ import pytest
 import torch
 from cupbearer import data, detectors, models, tasks
 from cupbearer.scripts import eval_classifier, train_classifier, train_detector
+from torch import nn
 
 # Ignore warnings about num_workers
 pytestmark = pytest.mark.filterwarnings(
@@ -16,6 +17,11 @@ pytestmark = pytest.mark.filterwarnings(
 @pytest.fixture(scope="module")
 def model():
     return models.MLP(input_shape=(1, 28, 28), hidden_dims=[5, 5], output_dim=10)
+
+
+@pytest.fixture(scope="module")
+def abstract_model():
+    return models.MLP(input_shape=(1, 28, 28), hidden_dims=[3, 3], output_dim=10)
 
 
 @pytest.fixture(scope="module")
@@ -73,13 +79,17 @@ def test_eval_classifier(model, mnist, backdoor_classifier_path):
 
 
 @pytest.mark.slow
-def test_train_abstraction_corner_backdoor(model, backdoor_task, tmp_path):
+def test_train_abstraction_corner_backdoor(abstract_model, backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
         detector=detectors.AbstractionDetector(
-            abstraction=detectors.abstraction.LocallyConsistentAbstraction.get_default(
-                model, size_reduction=2
-            ),
+            abstraction=detectors.abstraction.LocallyConsistentAbstraction(
+                abstract_model=abstract_model,
+                tau_maps={
+                    "layers.linear_0.output": nn.Linear(5, 3),
+                    "layers.linear_1.output": nn.Linear(5, 3),
+                },
+            )
         ),
         save_path=tmp_path,
         batch_size=2,
@@ -88,17 +98,24 @@ def test_train_abstraction_corner_backdoor(model, backdoor_task, tmp_path):
     )
     assert (tmp_path / "detector.pt").is_file()
 
-    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "histogram_all.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
 
 
 @pytest.mark.slow
-def test_train_autoencoder_corner_backdoor(model, backdoor_task, tmp_path):
+def test_train_autoencoder_corner_backdoor(backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
         detector=detectors.AbstractionDetector(
-            abstraction=detectors.abstraction.AutoencoderAbstraction.get_default(
-                model, size_reduction=2
+            abstraction=detectors.abstraction.AutoencoderAbstraction(
+                tau_maps={
+                    "layers.linear_0.output": nn.Linear(5, 3),
+                    "layers.linear_1.output": nn.Linear(5, 3),
+                },
+                decoders={
+                    "layers.linear_0.output": nn.Linear(3, 5),
+                    "layers.linear_1.output": nn.Linear(3, 5),
+                },
             )
         ),
         batch_size=2,
@@ -108,7 +125,7 @@ def test_train_autoencoder_corner_backdoor(model, backdoor_task, tmp_path):
     )
     assert (tmp_path / "detector.pt").is_file()
 
-    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "histogram_all.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
 
 
@@ -127,7 +144,9 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
             success_threshold=1.0,
             steps=1,
         ),
-        detector=detectors.MahalanobisDetector(),
+        detector=detectors.MahalanobisDetector(
+            activation_names=["layers.linear_0.output"]
+        ),
         save_path=tmp_path,
         batch_size=2,
         eval_batch_size=2,
@@ -140,7 +159,7 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
     assert (tmp_path / "adversarial_examples_test.pdf").is_file()
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:
-    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "histogram_all.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
 
 
@@ -156,7 +175,7 @@ def test_train_mahalanobis_advex(model, mnist, tmp_path):
 def test_train_statistical_backdoor(tmp_path, backdoor_task, detector_type):
     train_detector(
         task=backdoor_task,
-        detector=detector_type(),
+        detector=detector_type(activation_names=["layers.linear_0.output"]),
         batch_size=2,
         eval_batch_size=2,
         save_path=tmp_path,
@@ -165,7 +184,7 @@ def test_train_statistical_backdoor(tmp_path, backdoor_task, detector_type):
 
     assert (tmp_path / "detector.pt").is_file()
     # Eval outputs:
-    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "histogram_all.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()
 
 
@@ -182,5 +201,5 @@ def test_finetuning_detector(backdoor_task, tmp_path):
     )
     assert (tmp_path / "detector.pt").is_file()
 
-    assert (tmp_path / "histogram.pdf").is_file()
+    assert (tmp_path / "histogram_all.pdf").is_file()
     assert (tmp_path / "eval.json").is_file()

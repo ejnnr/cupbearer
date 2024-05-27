@@ -1,9 +1,8 @@
 import json
 from abc import ABC, abstractmethod
-from collections.abc import Collection
+from collections import defaultdict
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Callable
 
 import numpy as np
 import sklearn.metrics
@@ -15,16 +14,16 @@ from tqdm.auto import tqdm
 
 from cupbearer import utils
 from cupbearer.data import MixedData
-from cupbearer.models.models import HookedModel
 
 
 class AnomalyDetector(ABC):
-    def __init__(self):
+    def __init__(self, layer_aggregation: str = "mean"):
         # For storing the original detector variables when finetuning
+        self.layer_aggregation = layer_aggregation
         self._original_variables = None
         self.trained = False
 
-    def set_model(self, model: HookedModel):
+    def set_model(self, model: torch.nn.Module):
         # This is separate from __init__ because we want to be able to set the model
         # automatically based on the task, instead of letting the user pass it in.
         # On the other hand, it's separate from train() because we might need to set
@@ -90,14 +89,14 @@ class AnomalyDetector(ABC):
 
     def eval(
         self,
-        # Don't need train_dataset here, but e.g. adversarial abstractions need it,
-        # and in general there's no reason to deny detectors access to it during eval.
         dataset: MixedData,
         batch_size: int = 1024,
         histogram_percentile: float = 95,
         save_path: Path | str | None = None,
         num_bins: int = 100,
         pbar: bool = False,
+        layerwise: bool = False,
+        log_yaxis: bool = True,
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
@@ -112,44 +111,87 @@ class AnomalyDetector(ABC):
             shuffle=True,
         )
 
-        metrics = {}
+        metrics = defaultdict(dict)
         assert 0 < histogram_percentile <= 100
 
-        scores = []
-        # Normal=0, Anomalous=1
-        labels = []
         if pbar:
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
-        with torch.inference_mode():
+
+        scores = defaultdict(list)
+        labels = defaultdict(list)
+
+        # It's important we don't use torch.inference_mode() here, since we want
+        # to be able to override this in certain detectors using torch.enable_grad().
+        with torch.no_grad():
             for batch in test_loader:
                 inputs, new_labels = batch
-                scores.append(self.scores(inputs).cpu().numpy())
-                labels.append(new_labels)
-        scores = np.concatenate(scores)
-        labels = np.concatenate(labels)
+                if layerwise:
+                    new_scores = self.layerwise_scores(inputs)
+                else:
+                    new_scores = {"all": self.scores(inputs)}
+                for layer, score in new_scores.items():
+                    if isinstance(score, torch.Tensor):
+                        score = score.cpu().numpy()
+                    assert score.shape == new_labels.shape
+                    scores[layer].append(score)
+                    labels[layer].append(new_labels)
+        scores = {layer: np.concatenate(scores[layer]) for layer in scores}
+        labels = {layer: np.concatenate(labels[layer]) for layer in labels}
 
-        auc_roc = sklearn.metrics.roc_auc_score(
-            y_true=labels,
-            y_score=scores,
-        )
-        ap = sklearn.metrics.average_precision_score(
-            y_true=labels,
-            y_score=scores,
-        )
-        logger.info(f"AUC_ROC: {auc_roc:.4f}")
-        logger.info(f"AP: {ap:.4f}")
-        metrics["AUC_ROC"] = auc_roc
-        metrics["AP"] = ap
+        figs = {}
 
-        upper_lim = np.percentile(scores, histogram_percentile).item()
-        # Usually there aren't extremely low outliers, so we just use the minimum,
-        # otherwise this tends to weirdly cut of the histogram.
-        lower_lim = scores.min().item()
+        for layer in scores:
+            auc_roc = sklearn.metrics.roc_auc_score(
+                y_true=labels[layer],
+                y_score=scores[layer],
+            )
+            ap = sklearn.metrics.average_precision_score(
+                y_true=labels[layer],
+                y_score=scores[layer],
+            )
+            logger.info(f"AUC_ROC ({layer}): {auc_roc:.4f}")
+            logger.info(f"AP ({layer}): {ap:.4f}")
+            metrics[layer]["AUC_ROC"] = auc_roc
+            metrics[layer]["AP"] = ap
 
-        bins = np.linspace(lower_lim, upper_lim, num_bins)
+            upper_lim = np.percentile(scores[layer], histogram_percentile).item()
+            # Usually there aren't extremely low outliers, so we just use the minimum,
+            # otherwise this tends to weirdly cut of the histogram.
+            lower_lim = scores[layer].min().item()
+
+            bins = np.linspace(lower_lim, upper_lim, num_bins)
+
+            # Visualizations for anomaly scores
+            fig, ax = plt.subplots()
+            for i, name in enumerate(["Normal", "Anomalous"]):
+                vals = scores[layer][labels[layer] == i]
+                ax.hist(
+                    vals,
+                    bins=bins,
+                    alpha=0.5,
+                    label=name,
+                    log=log_yaxis,
+                )
+            ax.legend()
+            ax.set_xlabel("Anomaly score")
+            ax.set_ylabel("Frequency")
+            ax.set_title(f"Anomaly score distribution ({layer})")
+            textstr = f"AUROC: {auc_roc:.1%}\n AP: {ap:.1%}"
+            props = dict(boxstyle="round", facecolor="white")
+            ax.text(
+                0.98,
+                0.80,
+                textstr,
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                horizontalalignment="right",
+                bbox=props,
+            )
+            figs[layer] = fig
 
         if not save_path:
-            return
+            return metrics, figs
 
         save_path = Path(save_path)
 
@@ -160,20 +202,10 @@ class AnomalyDetector(ABC):
         with open(save_path / "eval.json", "w") as f:
             json.dump(metrics, f)
 
-        # Visualizations for anomaly scores
-        for i, name in enumerate(["Normal", "Anomalous"]):
-            vals = scores[labels == i]
-            plt.hist(
-                vals,
-                bins=bins,
-                alpha=0.5,
-                label=name,
-            )
-        plt.legend()
-        plt.xlabel("Anomaly score")
-        plt.ylabel("Frequency")
-        plt.title("Anomaly score distribution")
-        plt.savefig(save_path / "histogram.pdf")
+        for layer, fig in figs.items():
+            fig.savefig(save_path / f"histogram_{layer}.pdf")
+
+        return metrics, figs
 
     @abstractmethod
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
@@ -208,7 +240,12 @@ class AnomalyDetector(ABC):
         assert len(scores) > 0
         # Type checker doesn't take into account that scores is non-empty,
         # so thinks this might be a float.
-        return sum(v for v in scores) / len(scores)  # type: ignore
+        if self.layer_aggregation == "mean":
+            return sum(scores) / len(scores)  # type: ignore
+        elif self.layer_aggregation == "max":
+            return torch.amax(torch.stack(list(scores)), dim=0)
+        else:
+            raise ValueError(f"Unknown layer aggregation: {self.layer_aggregation}")
 
     def _get_trained_variables(self, saving: bool = False):
         return {}
@@ -223,36 +260,3 @@ class AnomalyDetector(ABC):
     def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {path}")
         self._set_trained_variables(utils.load(path))
-
-
-def default_activation_name_func(model):
-    return model.default_names
-
-
-class ActivationBasedDetector(AnomalyDetector):
-    """AnomalyDetector using activations."""
-
-    def __init__(
-        self,
-        activation_name_func: str
-        | Callable[[HookedModel], Collection[str]]
-        | None = None,
-    ):
-        super().__init__()
-
-        if activation_name_func is None:
-            activation_name_func = default_activation_name_func
-        elif isinstance(activation_name_func, str):
-            activation_name_func = utils.get_object(activation_name_func)
-
-        assert callable(activation_name_func)  # make type checker happy
-
-        self.activation_name_func = activation_name_func
-
-    def set_model(self, model: HookedModel):
-        super().set_model(model)
-        self.activation_names = self.activation_name_func(model)
-
-    def get_activations(self, batch):
-        inputs = utils.inputs_from_batch(batch)
-        return self.model.get_activations(inputs, self.activation_names)

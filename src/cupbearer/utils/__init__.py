@@ -1,11 +1,14 @@
 import codecs
 import importlib
+import math
 import pickle
 from datetime import datetime
 from pathlib import Path
-from typing import Union
+from typing import Union, overload
 
 import torch
+
+from .get_activations import get_activations, get_activations_and_grads  # noqa: F401
 
 SUFFIX = ".pt"
 TYPE_PREFIX = "__TYPE__:"
@@ -36,6 +39,7 @@ def validate_and_convert_leaf(leaf):
     if isinstance(leaf, type):
         return TYPE_PREFIX + leaf.__module__ + "." + leaf.__name__
 
+    # TODO (erik): is any of this still necessary? torch.save should handle this I think
     try:
         pickled = pickle.dumps(leaf)
     except Exception as e:
@@ -126,3 +130,35 @@ def log_path(base="logs", time=True):
     else:
         timestamp = datetime.now().strftime("%Y-%m-%d")
     return Path(base) / timestamp
+
+
+def _try_to_device(x, device):
+    if isinstance(x, torch.Tensor):
+        return x.to(device)
+    return x
+
+
+def inputs_to_device(batch, device):
+    return tree_map(lambda x: _try_to_device(x, device), batch)
+
+
+@overload
+def reduce_size(shape: int, size_reduction: int) -> int:
+    ...
+
+
+@overload
+def reduce_size(shape: tuple[int, ...], size_reduction: int) -> tuple[int, ...]:
+    ...
+
+
+def reduce_size(
+    shape: int | tuple[int, ...], size_reduction: int
+) -> int | tuple[int, ...]:
+    if isinstance(shape, int):
+        return math.ceil(shape / size_reduction)
+    return tuple(math.ceil(x / size_reduction) for x in shape)
+
+
+def flatten_last(x):
+    return torch.flatten(x, start_dim=1)

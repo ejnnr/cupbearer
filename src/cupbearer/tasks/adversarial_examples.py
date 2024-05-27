@@ -1,15 +1,15 @@
 from pathlib import Path
 
+import torch
 from torch.utils.data import Dataset
 
 from cupbearer.data import make_adversarial_examples
-from cupbearer.models import HookedModel
 
 from .task import Task
 
 
 def adversarial_examples(
-    model: HookedModel,
+    model: torch.nn.Module,
     train_data: Dataset,
     test_data: Dataset,
     cache_path: Path,

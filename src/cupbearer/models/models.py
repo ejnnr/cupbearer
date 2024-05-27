@@ -3,10 +3,8 @@ import math
 import torch.nn.functional as F
 from torch import nn
 
-from .hooked_model import HookedModel
 
-
-class MLP(HookedModel):
+class MLP(nn.Module):
     def __init__(
         self,
         input_shape: list[int] | tuple[int, ...],
@@ -31,19 +29,12 @@ class MLP(HookedModel):
 
     def forward(self, x):
         x = x.view(x.shape[0], -1)
-        for name, layer in self.layers.items():
+        for layer in self.layers.values():
             x = layer(x)
-            self.store(f"post_{name}", x)
         return x
 
-    @property
-    def default_names(self) -> list[str]:
-        return [
-            f"post_{name}" for name in self.layers.keys() if name.startswith("linear")
-        ]
 
-
-class CNN(HookedModel):
+class CNN(nn.Module):
     def __init__(
         self,
         input_shape: list[int] | tuple[int, ...],
@@ -84,21 +75,11 @@ class CNN(HookedModel):
         self.mlp = MLP((self.channels[-1],), self.output_dim, self.dense_dims)
 
     def forward(self, x):
-        for name, layer in self.conv_layers.items():
+        for layer in self.conv_layers.values():
             x = layer(x)
-            self.store(f"conv_post_{name}", x)
         x = self.global_pool(x)
-        self.store("post_global_pool", x)
-        x = self.call_submodule("mlp", x)
+        x = self.mlp(x)
         return x
-
-    @property
-    def default_names(self) -> list[str]:
-        return [
-            f"conv_post_{name}"
-            for name in self.conv_layers.keys()
-            if name.startswith("conv")
-        ] + ["mlp_" + name for name in self.mlp.default_names]
 
 
 ########################################################################################
@@ -197,7 +178,7 @@ class PreActBottleneck(nn.Module):
         return out
 
 
-class PreActResNet(HookedModel):
+class PreActResNet(nn.Module):
     def __init__(self, block, num_blocks, num_classes=10):
         super(PreActResNet, self).__init__()
         self.in_planes = 64
@@ -221,13 +202,9 @@ class PreActResNet(HookedModel):
         # TODO: should capture more activations, including from inside blocks
         out = self.conv1(x)
         out = self.layer1(out)
-        self.store("res1", out)
         out = self.layer2(out)
-        self.store("res2", out)
         out = self.layer3(out)
-        self.store("res3", out)
         out = self.layer4(out)
-        self.store("res4", out)
         out = F.avg_pool2d(out, 4)
         out = out.view(out.size(0), -1)
         out = self.linear(out)

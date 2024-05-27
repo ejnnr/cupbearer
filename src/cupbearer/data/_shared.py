@@ -48,6 +48,13 @@ class MixedData(Dataset):
         return self._length
 
     def __getitem__(self, index):
+        # Important to check this because we might have "virtually" limited the dataset.
+        # I.e. self.anomalous_data might in fact have more samples than
+        # self.anomalous_len.
+        if index >= self._length:
+            raise IndexError(
+                f"Index {index} out of bounds for dataset of length {self._length}"
+            )
         if index < self.normal_len:
             if self.return_anomaly_labels:
                 return self.normal_data[index], 0

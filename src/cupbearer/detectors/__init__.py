@@ -1,5 +1,6 @@
 # ruff: noqa: F401
 from .abstraction import AbstractionDetector
+from .activation_based import ActivationBasedDetector, ActivationCache, CacheBuilder
 from .anomaly_detector import AnomalyDetector
 from .finetuning import FinetuningAnomalyDetector
 from .statistical import (
@@ -7,3 +8,4 @@ from .statistical import (
     QuantumEntropyDetector,
     SpectralSignatureDetector,
 )
+from .supervised_probe import SupervisedLinearProbe

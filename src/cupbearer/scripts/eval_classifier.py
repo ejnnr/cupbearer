@@ -3,15 +3,15 @@ from pathlib import Path
 from typing import Optional
 
 import lightning as L
+import torch
 from torch.utils.data import DataLoader, Dataset
 
-from cupbearer.models import HookedModel
 from cupbearer.scripts._shared import Classifier
 
 
 def main(
     data: Dataset,
-    model: HookedModel,
+    model: torch.nn.Module,
     path: Path | str,
     max_batches: Optional[int] = None,
     batch_size: int = 2048,
