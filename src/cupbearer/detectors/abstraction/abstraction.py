@@ -187,9 +187,15 @@ class LocallyConsistentAbstraction(Abstraction):
             # Important since we want to modify the *input* to the module here,
             # so can't use post-hooks.
             def hook(module, input):
-                predicted_abstractions[name] = (
-                    input if isinstance(input, torch.Tensor) else input[0]
-                )
+                if isinstance(input, torch.Tensor):
+                    predicted_abstractions[name] = input
+                elif isinstance(input[0], torch.Tensor):
+                    predicted_abstractions[name] = input[0]
+                else:
+                    raise ValueError(
+                        "Expected input to be a tensor or tuple with tensor as "
+                        f"first element, got {type(input)}"
+                    )
 
                 if not self.global_consistency:
                     return abstractions[name]
