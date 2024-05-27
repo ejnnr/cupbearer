@@ -20,10 +20,8 @@ pip install git+https://github.com/ejnnr/cupbearer.git
 (You could also `pip install cupbearer`, but note that the library is under heavy
 development and the PyPi version will often be outdated.)
 
-Alternatively, if you're going to do development work on the library itself:
-1. Clone this git repository
-2. Create a virtual environment with Python 3.10 and activate it
-3. Run `pip install -e .` inside the git repo to install the package in editable mode
+Alternatively, if you're going to do development work on the library itself,
+see [the developer guide](docs/getting_started.md).
 
 ### Notes on Pytorch
 Depending on what platform you're on, you may need to install Pytorch separately *before*

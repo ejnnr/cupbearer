@@ -6,6 +6,13 @@
    with development dependencies
 4. Run `pre-commit install` to install the pre-commit git hooks (this will lint and
    often auto-fix your code before every commit)
+5. Add the following to your `.git/config` to automatically strip output and metadata
+   from notebooks before committing them. This will *not* modify the notebooks on your
+   disk, just what's committed to git.
+   ```
+   [filter "strip-notebook-output"]
+      clean = "jupyter nbconvert --ClearOutputPreprocessor.enabled=True --ClearMetadataPreprocessor.enabled=True --to=notebook --stdin --stdout --log-level=ERROR"
+   ```
 
 ## Tests
 Run `pytest` to run all tests. New tests should be added in the `tests` directory.
