@@ -12,18 +12,6 @@ from cupbearer.data import MixedData
 from .anomaly_detector import AnomalyDetector
 
 
-def model_checksum(model: torch.nn.Module) -> float:
-    """Hacky but fast way to get a checksum of the model parameters.
-    Just sums the absolute values.
-    """
-    device = next(model.parameters()).device
-    # Using float64 to get some more bits and make collisions less likely.
-    param_sum = torch.tensor(0.0, dtype=torch.float64, device=device)
-    for param in model.parameters():
-        param_sum += param.abs().sum()
-    return param_sum.item()
-
-
 class ActivationCache:
     """Cache for activations to speed up using multiple anomaly detectors.
 
@@ -36,7 +24,6 @@ class ActivationCache:
     def __init__(self):
         """Create an empty cache."""
         self.cache: dict[tuple[Any, str], torch.Tensor] = {}
-        self.model_checksum = None
         # Just for debugging purposes:
         self.hits = 0
         self.misses = 0
@@ -65,12 +52,12 @@ class ActivationCache:
         return count
 
     def store(self, path: str | Path):
-        utils.save((self.model_checksum, self.cache), path)
+        utils.save(self.cache, path)
 
     @classmethod
     def load(cls, path: str | Path):
         cache = cls()
-        cache.model_checksum, cache.cache = utils.load(path)
+        cache.cache = utils.load(path)
         return cache
 
     def get_activations(
@@ -78,7 +65,6 @@ class ActivationCache:
         inputs,
         activation_names: list[str],
         activation_func: Callable[[Any], dict[str, torch.Tensor]],
-        model: torch.nn.Module,
     ) -> dict[str, torch.Tensor]:
         """Get activations for a batch of inputs, using the cache if possible.
 
@@ -89,27 +75,11 @@ class ActivationCache:
             inputs: The inputs to get activations for.
             activation_names: The names of the activations to get.
             activation_func: Takes in `inputs` and returns a dictionary of activations.
-            model: The model to get the activations from. This is only used to compute
-                a checksum to make sure that the cache is not used with a different
-                model. Note that only one model per cache is supported.
 
         Returns:
             A dict from activation name to the activations.
         """
-        # We want to make sure that we don't accidentally use a cache from a different
-        # model, which is why we force passing in a model whenever the cache is used.
-        if self.model_checksum is None:
-            self.model_checksum = model_checksum(model)
-        else:
-            new_checksum = model_checksum(model)
-            if new_checksum != self.model_checksum:
-                raise ValueError(
-                    "Model has changed since the cache was created. "
-                    "This is likely unintended, only one model per cache is supported."
-                )
-
-        # Now we deal with the case where the cache is not empty. In particular,
-        # we want to handle cases where some but not all elements are in the cache.
+        # We want to handle cases where some but not all elements are in the cache.
         missing_indices = []
         results: dict[str, list[torch.Tensor | None]] = defaultdict(
             lambda: [None] * len(inputs)
@@ -216,7 +186,7 @@ class ActivationBasedDetector(AnomalyDetector):
             return self._get_activations_no_cache(inputs)
 
         return self.cache.get_activations(
-            inputs, self.activation_names, self._get_activations_no_cache, self.model
+            inputs, self.activation_names, self._get_activations_no_cache
         )
 
 
