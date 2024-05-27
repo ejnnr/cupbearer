@@ -3,6 +3,7 @@ from pathlib import Path
 import torch
 from sklearn.linear_model import LogisticRegression
 from torch.utils.data import DataLoader
+import tqdm
 
 from cupbearer.data import MixedData
 from cupbearer.detectors.activation_based import ActivationBasedDetector
@@ -32,7 +33,7 @@ class SupervisedLinearProbe(ActivationBasedDetector):
 
         activations = []
         anomaly_labels = []
-        for batch in dataloader:
+        for batch in tqdm.tqdm(dataloader):
             rest, new_anomaly_labels = batch
             new_activations = self.get_activations(rest)
             if len(new_activations) > 1:
