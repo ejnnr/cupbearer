@@ -18,7 +18,7 @@ def measurement_tampering_dataset(dataset):
     return HuggingfaceDataset(dataset, label_key="labels")
 
 
-def measurement_tampering(task_name: str = "diamonds", device="cuda"):
+def measurement_tampering(task_name: str = "diamonds", device="cuda", untrusted_labels: bool=False):
     # load model and tokenizer
     config = AutoConfig.from_pretrained(
         TASKS[task_name]["model"], trust_remote_code=True
@@ -72,4 +72,5 @@ def measurement_tampering(task_name: str = "diamonds", device="cuda"):
         anomalous_untrusted_data=measurement_tampering_dataset(
             anomalous_untrusted_data
         ),
+        untrusted_labels=untrusted_labels
     )
