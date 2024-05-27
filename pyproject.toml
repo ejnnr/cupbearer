@@ -15,7 +15,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy~=1.24.2",
+    "numpy",
     "scikit-learn",
     "Pillow~=9.4.0",
     "torch~=2.0.0",
