@@ -19,6 +19,10 @@ class ActivationCache:
     many different detectors that require similar activations.
 
     The cache stores a dict from (input, activation_name) to the activations.
+
+    WARNING: This cache is not safe to use across different models or activation
+    preprocessing functions! It does not attempt to track those, and using the same
+    cache with different model/preprocessors will likely result in incorrect results.
     """
 
     def __init__(self):
