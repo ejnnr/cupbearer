@@ -42,7 +42,7 @@ def mahalanobis(
     mean: torch.Tensor,
     inv_covariance: torch.Tensor,
     inv_diag_covariance: Optional[torch.Tensor] = None,
-):
+) -> torch.Tensor:
     """Compute Simplified Relative Mahalanobis distances for a batch of activations.
 
     The Mahalanobis distance for each layer is computed,
