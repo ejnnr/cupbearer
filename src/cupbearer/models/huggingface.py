@@ -6,6 +6,7 @@ class HuggingfaceLM(torch.nn.Module):
         self,
         tokenizer=None,
         model=None,
+        tokenize_kwargs = {"padding": True},
         device="cuda",
     ):
         """A wrapper around a HF model that handles tokenization and device placement.
@@ -16,12 +17,14 @@ class HuggingfaceLM(torch.nn.Module):
                 coming from a cache anyway.
             tokenizer: The tokenizer to use for tokenization. May be None if model
                 is None.
+            tokenizer_kwargs: kwargs to pass to tokenizer on forward
             device: The device to place the model on.
         """
         super().__init__()
         self.hf_model = model
         self.tokenizer = tokenizer
         self.device = device
+        self.tokenize_kwargs = tokenize_kwargs
 
         # HACK: We often use next(model.parameters()).device to figure out which
         # device a model is on. We'd like that to still work even if there's no model.
@@ -34,15 +37,15 @@ class HuggingfaceLM(torch.nn.Module):
             checksum, device=self.device, dtype=torch.float64
         )
 
-    def tokenize(self, inputs: list[str] | str):
+    def tokenize(self, inputs: list[str] | str, **kwargs):
         if self.tokenizer is None:
             raise ValueError("No tokenizer is set, so inputs can't be tokenized.")
-        return self.tokenizer(inputs, padding=True, return_tensors="pt").to(self.device)
+        return self.tokenizer(inputs, return_tensors="pt", **kwargs).to(self.device)
 
     def forward(self, inputs: list[str] | str):
         if self.hf_model is None:
             raise ValueError("No model is set, so forward pass can't be run.")
-        tokens = self.tokenize(inputs)
+        tokens = self.tokenize(inputs, **self.tokenize_kwargs)
         return self.hf_model(**tokens)
 
     def make_last_token_hook(self):
