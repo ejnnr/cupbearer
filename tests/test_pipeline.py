@@ -95,6 +95,7 @@ def test_train_abstraction_corner_backdoor(abstract_model, backdoor_task, tmp_pa
         batch_size=2,
         eval_batch_size=2,
         max_steps=1,
+        log_every_n_steps=1,
     )
     assert (tmp_path / "detector.pt").is_file()
 
@@ -122,6 +123,7 @@ def test_train_autoencoder_corner_backdoor(backdoor_task, tmp_path):
         eval_batch_size=2,
         save_path=tmp_path,
         max_steps=1,
+        log_every_n_steps=3,
     )
     assert (tmp_path / "detector.pt").is_file()
 
@@ -198,6 +200,7 @@ def test_finetuning_detector(backdoor_task, tmp_path):
         batch_size=2,
         eval_batch_size=2,
         max_steps=1,
+        log_every_n_steps=3,
     )
     assert (tmp_path / "detector.pt").is_file()
 
