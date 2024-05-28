@@ -30,12 +30,6 @@ class HuggingfaceLM(torch.nn.Module):
         # device a model is on. We'd like that to still work even if there's no model.
         self.dummy_param = torch.nn.Parameter(torch.tensor(0.0, device=device))
 
-    def set_checksum(self, checksum: float):
-        # This is a hack to make a fake model work with caching.
-        # Needs to be float64 because that's what the checksums use.
-        self.dummy_param.data = torch.tensor(
-            checksum, device=self.device, dtype=torch.float64
-        )
 
     def tokenize(self, inputs: list[str] | str, **kwargs):
         if self.tokenizer is None:

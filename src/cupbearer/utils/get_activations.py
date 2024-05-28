@@ -43,9 +43,15 @@ def get_activations(
         def make_hook(name, is_input):
             def hook(module, input, output):
                 if is_input:
-                    activations[name] = (
-                        input if isinstance(input, torch.Tensor) else input[0]
-                    )
+                    if isinstance(input, torch.Tensor):
+                        activations[name] = input
+                    elif isinstance(input[0], torch.Tensor):
+                        activations[name] = input[0]
+                    else:
+                        raise ValueError(
+                            "Expected input to be a tensor or tuple with tensor as "
+                            f"first element, got {type(input)}"
+                        )
                 else:
                     activations[name] = output
 
@@ -113,9 +119,15 @@ def get_activations_and_grads(
         def make_hooks(name, is_input):
             def forward_hook(module, input, output):
                 if is_input:
-                    activations[name] = (
-                        input if isinstance(input, torch.Tensor) else input[0]
-                    )
+                    if isinstance(input, torch.Tensor):
+                        activations[name] = input
+                    elif isinstance(input[0], torch.Tensor):
+                        activations[name] = input[0]
+                    else:
+                        raise ValueError(
+                            "Expected input to be a tensor or tuple with tensor as "
+                            f"first element, got {type(input)}"
+                        )
                 else:
                     activations[name] = output
 

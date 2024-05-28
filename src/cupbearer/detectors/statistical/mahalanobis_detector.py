@@ -9,7 +9,7 @@ from cupbearer.detectors.statistical.statistical import (
 
 def _pinv(C, rcond):
     # Workaround for pinv not being supported on MPS
-    if C.device.type == "mps":
+    if C.is_mps:
         return torch.linalg.pinv(C.cpu(), rcond=rcond, hermitian=True).to(C.device)
     return torch.linalg.pinv(C, rcond=rcond, hermitian=True)
 
