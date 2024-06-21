@@ -15,10 +15,10 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy~=1.24",
+    "numpy>=1.24",
     "scikit-learn",
     "Pillow~=9.4",
-    "torch~=2.0",
+    "torch>=2.0",
     "torchvision~=0.15",
     "torchattacks~=3.5",
     "lightning~=2.1",
