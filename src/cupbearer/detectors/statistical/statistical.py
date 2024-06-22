@@ -80,6 +80,10 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
                 "If this is unintentional, pass "
                 "`activation_preprocessing_func=utils.flatten_last`."
             )
+        logger.debug(
+            "Activation sizes: \n"
+            + "\n".join(f"{k}: {size}" for k, size in activation_sizes.items())
+        )
         self._means = {
             k: torch.zeros(size[-1], device=device)
             for k, size in activation_sizes.items()

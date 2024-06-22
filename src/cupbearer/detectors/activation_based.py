@@ -161,12 +161,17 @@ class ActivationBasedDetector(AnomalyDetector):
         activation_names: list[str],
         activation_processing_func: Callable[[torch.Tensor, Any, str], torch.Tensor]
         | None = None,
+        global_processing_func: Callable[
+            [dict[str, torch.Tensor]], dict[str, torch.Tensor]
+        ]
+        | None = None,
         cache: ActivationCache | None = None,
         layer_aggregation: str = "mean",
     ):
         super().__init__(layer_aggregation=layer_aggregation)
         self.activation_names = activation_names
         self.activation_processing_func = activation_processing_func
+        self.global_processing_func = global_processing_func
         self.cache = cache
 
     def _get_activations_no_cache(self, inputs) -> dict[str, torch.Tensor]:
@@ -180,6 +185,9 @@ class ActivationBasedDetector(AnomalyDetector):
                 k: self.activation_processing_func(v, inputs, k)
                 for k, v in acts.items()
             }
+
+        if self.global_processing_func is not None:
+            acts = self.global_processing_func(acts)
 
         return acts
 

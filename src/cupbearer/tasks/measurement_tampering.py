@@ -18,7 +18,7 @@ def measurement_tampering_dataset(dataset):
     return HuggingfaceDataset(dataset, label_key="labels")
 
 
-def measurement_tampering(task_name: str = "diamonds", device="cuda"):
+def measurement_tampering(task_name: str = "diamonds", device="cuda", untrusted_labels: bool=False):
     # load model and tokenizer
     config = AutoConfig.from_pretrained(
         TASKS[task_name]["model"], trust_remote_code=True
@@ -54,8 +54,9 @@ def measurement_tampering(task_name: str = "diamonds", device="cuda"):
         return not x["is_correct"] and any(x["measurements"])  # no fake negatives
 
     trusted_data = dataset["train"].filter(lambda x: x["is_clean"])
-    clean_test_data = dataset["validation"].filter(lambda x: not is_tampering(x))
-    anomolous_test_data = dataset["validation"].filter(is_tampering)
+    test_data = dataset["validation"].filter(lambda x: all(x["measurements"]))
+    clean_test_data = test_data.filter(lambda x: not is_tampering(x))
+    anomolous_test_data = test_data.filter(is_tampering)
     clean_untrusted_data = dataset["train"].filter(
         lambda x: not x["is_clean"] and not is_tampering(x)
     )
@@ -63,8 +64,13 @@ def measurement_tampering(task_name: str = "diamonds", device="cuda"):
         lambda x: not x["is_clean"] and is_tampering(x)
     )
 
+    tokenize_kwargs = {"padding": "max_length", "max_length": 1024}
+
     return Task.from_separate_data(
-        model=HuggingfaceLM(model=model, tokenizer=tokenizer, device=device),
+        model=HuggingfaceLM(
+            model=model, tokenizer=tokenizer, device=device, 
+            tokenize_kwargs=tokenize_kwargs
+        ),
         trusted_data=measurement_tampering_dataset(trusted_data),
         clean_test_data=measurement_tampering_dataset(clean_test_data),
         anomalous_test_data=measurement_tampering_dataset(anomolous_test_data),
@@ -72,4 +78,5 @@ def measurement_tampering(task_name: str = "diamonds", device="cuda"):
         anomalous_untrusted_data=measurement_tampering_dataset(
             anomalous_untrusted_data
         ),
+        untrusted_labels=untrusted_labels
     )
