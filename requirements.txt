@@ -1,0 +1,24 @@
+numpy~=1.24
+scikit-learn
+Pillow~=9.4
+torch~=2.0
+torchvision~=0.15
+torchattacks~=3.5
+lightning~=2.1
+torchmetrics~=1.2
+tensorboard
+datasets
+tqdm
+loguru
+matplotlib
+pytest
+pre-commit
+ipykernel
+transformer_lens
+nbconvert
+elk_generalization @ git+https://github.com/ejnnr/quirky-language-models.git
+peft
+blobfile
+transformer_lens
+wandb
+plotly
