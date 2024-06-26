@@ -75,7 +75,8 @@ class TestTrainedStatisticalDetectors:
         # https://stats.stackexchange.com/a/594218/319192
         detector = self.train_detector(dataset, Model, Detector)
         assert isinstance(detector, ActivationCovarianceBasedDetector)
-        for layer_name, cov in detector.covariances.items():
+        covariances = next(iter(detector.covariances.values()))
+        for layer_name, cov in covariances.items():
             # Check that covariance matrix looks reasonable
             assert cov.ndim == 2
             assert cov.size(0) == cov.size(1)
@@ -84,8 +85,9 @@ class TestTrainedStatisticalDetectors:
 
     def test_inverse_covariance_matrices(self, dataset, Model):
         detector = self.train_detector(dataset, Model, MahalanobisDetector)
-        assert detector.covariances.keys() == detector.inv_covariances.keys()
-        for layer_name, cov in detector.covariances.items():
+        covariances = next(iter(detector.covariances.values()))
+        assert covariances.keys() == detector.inv_covariances.keys()
+        for layer_name, cov in covariances.items():
             inv_cov = detector.inv_covariances[layer_name]
             assert inv_cov.size() == cov.size()
 
@@ -106,9 +108,10 @@ class TestTrainedStatisticalDetectors:
 
     def test_whitening_matrices(self, dataset, Model):
         detector = self.train_detector(dataset, Model, QuantumEntropyDetector)
-        assert detector.covariances.keys() == detector.whitening_matrices.keys()
-        for layer_name, cov in detector.covariances.items():
-            W = detector.whitening_matrices[layer_name]
+        covariances = next(iter(detector.covariances.values()))
+        assert covariances.keys() == detector.trusted_whitening_matrices.keys()
+        for layer_name, cov in covariances.items():
+            W = detector.trusted_whitening_matrices[layer_name]
             assert W.size() == cov.size()
 
             # Check that Whitening matrix computes (pseudo) inverse
