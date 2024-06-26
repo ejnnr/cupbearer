@@ -99,7 +99,7 @@ class AnomalyDetector(ABC):
         layerwise: bool = False,
         log_yaxis: bool = True,
         show_worst_mistakes: bool = False,
-        show_sample_func: Callable[[Any], Any] | None = None,
+        sample_format_fn: Callable[[Any], Any] | None = None,
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
@@ -206,20 +206,20 @@ class AnomalyDetector(ABC):
                     np.where(labels == 1, layer_scores, np.inf)
                 )[:10]
 
-                print("Normal but high anomaly score:")
+                print("\nNormal but high anomaly score:\n")
                 for idx in false_positives:
                     sample, anomaly_label = dataset[idx]
                     assert anomaly_label == 0
-                    if show_sample_func:
-                        sample = show_sample_func(sample)
+                    if sample_format_fn:
+                        sample = sample_format_fn(sample)
                     print(f"#{idx} ({layer_scores[idx]}): {sample}")
-                print("====================================")
-                print("Anomalous but low anomaly score:")
+                print("\n====================================")
+                print("Anomalous but low anomaly score:\n")
                 for idx in false_negatives:
                     sample, anomaly_label = dataset[idx]
                     assert anomaly_label == 1
-                    if show_sample_func:
-                        sample = show_sample_func(sample)
+                    if sample_format_fn:
+                        sample = sample_format_fn(sample)
                     print(f"#{idx} ({layer_scores[idx]}): {sample}")
 
         if not save_path:
