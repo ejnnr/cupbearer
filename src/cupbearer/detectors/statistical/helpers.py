@@ -72,22 +72,21 @@ def mahalanobis(
 
 def quantum_entropy(
     whitened_activations: torch.Tensor,
+    untrusted_covariance: torch.Tensor,
+    covariance_norm: torch.Tensor,
     alpha: float = 4,
 ) -> torch.Tensor:
     """Quantum Entropy score.
 
     Args:
         whitened_activations: whitened activations, with shape (batch, dim)
+        untrusted_covariance: covariance matrix of shape (dim, dim)
+        covariance_norm: norm of the covariance matrix
+            (singleton tensor, passed just so it can be cached for speed)
         alpha: QUE hyperparameter
     """
     # Compute QUE-score
-    centered_batch = whitened_activations - whitened_activations.mean(
-        dim=0, keepdim=True
-    )
-    batch_cov = centered_batch.mT @ centered_batch
-
-    batch_cov_norm = torch.linalg.eigvalsh(batch_cov).max()
-    exp_factor = torch.matrix_exp(alpha * batch_cov / batch_cov_norm)
+    exp_factor = torch.matrix_exp(alpha * untrusted_covariance / covariance_norm)
 
     return torch.einsum(
         "bi,ij,jb->b",
