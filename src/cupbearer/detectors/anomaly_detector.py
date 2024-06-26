@@ -108,13 +108,7 @@ class AnomalyDetector(ABC):
         test_loader = DataLoader(
             dataset,
             batch_size=batch_size,
-            # For some methods, such as adversarial abstractions, it might matter how
-            # normal/anomalous data is distributed into batches. In that case, we want
-            # to mix them by default.
-            # TODO: we should not let detectors depend on batches this way, they should
-            # require untrusted data instead. Can then remove this and simplify some
-            # code below.
-            # shuffle=True,
+            shuffle=False,
         )
 
         metrics = defaultdict(dict)
