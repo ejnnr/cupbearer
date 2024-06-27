@@ -20,8 +20,7 @@ def compute_losses(
     abstraction: Abstraction,
     inputs,
     activations: dict[str, torch.Tensor],
-    layerwise: bool = False,
-):
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
     if isinstance(abstraction, LocallyConsistentAbstraction):
         # LocallyConsistentAbstraction returns (abstractions, predicted_abstractions),
         # where abstractions are the output of tau maps and function as our prediction
@@ -48,12 +47,9 @@ def compute_losses(
         assert losses.ndim == 1
         layer_losses[k] = losses
 
-    if layerwise:
-        return layer_losses
-
     n = len(layer_losses)
     assert n > 0
-    return sum(x for x in layer_losses.values()) / n
+    return sum(x for x in layer_losses.values()) / n, layer_losses
 
 
 class AbstractionModule(L.LightningModule):
@@ -72,15 +68,18 @@ class AbstractionModule(L.LightningModule):
     def _shared_step(self, batch):
         inputs = utils.inputs_from_batch(batch)
         activations = self.get_activations(batch)
-        losses = compute_losses(self.abstraction, inputs, activations)
+        losses, layer_losses = compute_losses(self.abstraction, inputs, activations)
         assert isinstance(losses, torch.Tensor)
         assert losses.ndim == 1 and len(losses) == len(batch[0])
         loss = losses.mean(0)
-        return loss
+        layer_losses = {k: v.mean(0) for k, v in layer_losses.items()}
+        return loss, layer_losses
 
     def training_step(self, batch, batch_idx):
-        loss = self._shared_step(batch)
+        loss, layer_losses = self._shared_step(batch)
         self.log("train/loss", loss, prog_bar=True)
+        for k, v in layer_losses.items():
+            self.log(f"train/layer_loss/{k}", v)
         return loss
 
     def configure_optimizers(self):
@@ -166,7 +165,8 @@ class AbstractionDetector(ActivationBasedDetector):
     def layerwise_scores(self, batch):
         inputs = utils.inputs_from_batch(batch)
         activations = self.get_activations(batch)
-        return compute_losses(self.abstraction, inputs, activations, layerwise=True)
+        _, layer_losses = compute_losses(self.abstraction, inputs, activations)
+        return layer_losses
 
     def _get_trained_variables(self, saving: bool = False):
         # TODO: for saving=False we should return optimizer here if we want to make

@@ -138,6 +138,7 @@ class LocallyConsistentAbstraction(Abstraction):
         tau_maps: dict[str, nn.Module],
         abstract_model: nn.Module,
         loss_fns: dict[str, Callable] | None = None,
+        loss_weights: dict[str, float] | None = None,
         activation_processing_func: Callable | None = None,
         global_consistency: bool = False,
     ):
@@ -145,6 +146,7 @@ class LocallyConsistentAbstraction(Abstraction):
         self.tau_maps = _ModuleDict(tau_maps)
         self.abstract_model = abstract_model
         self.loss_fns = loss_fns or {}
+        self.loss_weights = loss_weights or {}
         # activation_processing_func is used on the abstract predicted activations
         # before they are compared to the tau_map output. This can in principle be
         # distinct from the activation_processing_func set in the detector
@@ -152,8 +154,13 @@ class LocallyConsistentAbstraction(Abstraction):
         self.activation_processing_func = activation_processing_func
         self.global_consistency = global_consistency
 
-    def loss_fn(self, name: str) -> Callable:
-        return self.loss_fns.get(name, l2_loss)
+    def loss_fn(
+        self, name: str
+    ) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
+        fn = self.loss_fns.get(name, l2_loss)
+        if name in self.loss_weights:
+            return lambda input, target: fn(input, target) * self.loss_weights[name]
+        return fn
 
     def forward(
         self, inputs, activations: dict[str, torch.Tensor]
