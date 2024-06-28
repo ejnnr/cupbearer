@@ -4,6 +4,7 @@ This is just a light wrapper around datasets and models create by Jacob Hilton.
 """
 
 import json
+import blobfile as bf
 import os
 from pathlib import Path
 from typing import Any
@@ -11,6 +12,54 @@ from typing import Any
 import torch
 
 from .task import Task
+
+
+def decode_and_encode(tokens, task_model, model):
+    decoded = task_model.tokenizer.decode(tokens)
+    reencoded = model.tokenizer.encode(decoded)
+    return reencoded
+
+def pad_tokens(tokens, pad_token_id, max_len=16):
+        tokens_len = len(tokens)
+        return [pad_token_id] * (max(max_len - tokens_len, 0)) + tokens[-min(tokens_len, max_len):]
+
+def get_effect_tokens(behavior_name, model):
+    from hex_nn.masking.behaviors import registry as behavior_registry
+    new_behavior = behavior_registry[behavior_name](model.tokenizer)
+    new_effect_tokens = list(new_behavior.effect_tokens)
+    return new_effect_tokens
+
+def convert_task_to_model(behavior_name, model_name, task_data, task_model, model):
+    def decode_encode_data(data, task_model, model):
+        return [
+            {
+                "prefix_tokens": decode_and_encode(example["prefix_tokens"], task_model, model),
+                "completion_token": decode_and_encode([example["completion_token"]], task_model, model),
+            }
+            for example in data
+        ]
+
+    def pad_tokens_data(data, pad_token_id, max_len=16):
+        return [
+            {
+                "prefix_tokens": pad_tokens(example.pop("prefix_tokens"), pad_token_id, max_len=max_len),
+                **example
+            }
+            for example in data
+        ]
+    # decode and recode tokens
+    task_data["train"] = decode_encode_data(task_data["train"], task_model, model)
+    task_data["test_non_anomalous"] = decode_encode_data(task_data["test_non_anomalous"], task_model, model)
+    task_data["test_anomalous"] = decode_encode_data(task_data["test_anomalous"], task_model, model)
+    # pad tokens 
+    task_data["train"] = pad_tokens_data(task_data["train"], model.tokenizer.pad_token_id)
+    task_data["test_non_anomalous"] = pad_tokens_data(task_data["test_non_anomalous"], model.tokenizer.pad_token_id)
+    task_data["test_anomalous"] = pad_tokens_data(task_data["test_anomalous"], model.tokenizer.pad_token_id)
+    # add model effect probabilities
+    new_effect_tokens = get_effect_tokens(behavior_name, model)
+    task_data["effect_tokens"] = new_effect_tokens
+    return task_data  
+
 
 
 class TinyNaturalMechanismsDataset(torch.utils.data.Dataset):
@@ -30,7 +79,7 @@ class TinyNaturalMechanismsDataset(torch.utils.data.Dataset):
         )
 
 
-def tiny_natural_mechanisms(name: str, device: str):
+def tiny_natural_mechanisms(name: str, device: str, model_name=None):
     import blobfile as bf
     from transformer_lens import HookedTransformer
 
@@ -73,6 +122,11 @@ def tiny_natural_mechanisms(name: str, device: str):
             task_data = json.load(f)
         with cache_path.open("w") as f:
             json.dump(task_data, f)
+    
+    if model_name is not None:
+        task_model = model 
+        model = HookedTransformer.from_pretrained(model_name).to(device)
+        task_data = convert_task_to_model(name, model_name, task_data, task_model, model)
 
     train_data = TinyNaturalMechanismsDataset(task_data["train"])
     normal_test_data = TinyNaturalMechanismsDataset(task_data["test_non_anomalous"])
