@@ -31,9 +31,9 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         max_steps: int | None = None,
         **kwargs,
     ):
-        # Common for statistical methods is that the training does not require
-        # gradients, but instead computes summary statistics or similar
-        with torch.inference_mode():
+        # It's important we don't use torch.inference_mode() here, since we want
+        # to be able to override this in certain detectors using torch.enable_grad().
+        with torch.no_grad():
             if self.use_trusted:
                 if trusted_data is None:
                     raise ValueError(
