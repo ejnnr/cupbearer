@@ -31,6 +31,10 @@ def from_string(s):
     return s
 
 
+def tensor_to_tuple(tensor: torch.Tensor):
+    return tuple(tensor.cpu().numpy().flatten())
+
+
 def validate_and_convert_leaf(leaf):
     if isinstance(leaf, (str, int, float, bool, torch.Tensor)):
         return leaf
