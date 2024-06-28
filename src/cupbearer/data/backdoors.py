@@ -18,6 +18,7 @@ from ._shared import Transform, TransformDataset
 class Backdoor(Transform, ABC):
     p_backdoor: float = 1.0  # Probability of applying the backdoor
     target_class: int = 0  # Target class when backdoor is applied
+    return_anomaly_label: bool = False  # If True, return ((img, label), is_backdoored)
 
     def __post_init__(self):
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
@@ -29,13 +30,19 @@ class Backdoor(Transform, ABC):
     def __call__(self, sample: Tuple[torch.Tensor, int]) -> Tuple[torch.Tensor, int]:
         if torch.rand(1) > self.p_backdoor:
             # Backdoor inactive, don't do anything
-            return sample
+            if self.return_anomaly_label:
+                return sample, False
+            else:
+                return sample
 
         img, label = sample
 
         # Do changes out of place
         img = img.clone()
-        return self.inject_backdoor(img), self.target_class
+        if self.return_anomaly_label:
+            return (self.inject_backdoor(img), self.target_class), True
+        else:
+            return self.inject_backdoor(img), self.target_class
 
 
 class BackdoorDataset(TransformDataset):

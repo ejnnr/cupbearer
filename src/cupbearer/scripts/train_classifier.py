@@ -1,6 +1,6 @@
 import warnings
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import lightning as L
 import torch
@@ -26,6 +26,7 @@ def main(
     # submitit trying to pickle the entire Trainer object.
     return_trainer: bool = False,
     wandb: bool = False,
+    make_classifier_fn: Callable[[Any], Classifier] | None = None,
     **trainer_kwargs,
 ) -> dict[str, Any] | L.Trainer:
     path = Path(path)
@@ -37,13 +38,24 @@ def main(
     elif isinstance(val_loaders, DataLoader):
         val_loaders = {"val": val_loaders}
 
-    classifier = Classifier(
-        model=model,
-        num_classes=num_classes,
-        num_labels=num_labels,
-        lr=lr,
-        val_loader_names=list(val_loaders.keys()),
-        task=task,
+    classifier = (
+        make_classifier_fn(
+            model=model,
+            lr=lr,
+            num_classes=num_classes,
+            num_labels=num_labels,
+            val_loader_names=list(val_loaders.keys()),
+            task=task,
+        )
+        if make_classifier_fn
+        else Classifier(
+            model=model,
+            lr=lr,
+            num_classes=num_classes,
+            num_labels=num_labels,
+            val_loader_names=list(val_loaders.keys()),
+            task=task,
+        )
     )
 
     callbacks = trainer_kwargs.pop("callbacks", [])
