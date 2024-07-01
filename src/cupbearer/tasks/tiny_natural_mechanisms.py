@@ -13,9 +13,9 @@ import torch
 from .task import Task
 
 
-def decode_and_encode(tokens, task_model, model):
-    decoded = task_model.tokenizer.decode(tokens)
-    reencoded = model.tokenizer.encode(decoded)
+def decode_and_encode(tokens, model, new_model):
+    decoded = model.tokenizer.decode(tokens)
+    reencoded = new_model.tokenizer.encode(decoded)
     return reencoded
 
 def pad_tokens(tokens, pad_token_id, max_len=16):
@@ -28,12 +28,12 @@ def get_effect_tokens(behavior_name, model):
     new_effect_tokens = list(new_behavior.effect_tokens)
     return new_effect_tokens
 
-def convert_task_to_model(behavior_name, model_name, task_data, task_model, model):
-    def decode_encode_data(data, task_model, model):
+def convert_task_to_model(behavior_name, task_data, model, new_model):
+    def decode_encode_data(data, model, new_model):
         return [
             {
-                "prefix_tokens": decode_and_encode(example["prefix_tokens"], task_model, model),
-                "completion_token": decode_and_encode([example["completion_token"]], task_model, model),
+                "prefix_tokens": decode_and_encode(example["prefix_tokens"], model, new_model),
+                "completion_token": decode_and_encode([example["completion_token"]], model, new_model),
             }
             for example in data
         ]
@@ -47,14 +47,14 @@ def convert_task_to_model(behavior_name, model_name, task_data, task_model, mode
             for example in data
         ]
     # decode and recode tokens
-    task_data["train"] = decode_encode_data(task_data["train"], task_model, model)
-    task_data["test_non_anomalous"] = decode_encode_data(task_data["test_non_anomalous"], task_model, model)
-    task_data["test_anomalous"] = decode_encode_data(task_data["test_anomalous"], task_model, model)
+    task_data["train"] = decode_encode_data(task_data["train"], model, new_model)
+    task_data["test_non_anomalous"] = decode_encode_data(task_data["test_non_anomalous"], model, new_model)
+    task_data["test_anomalous"] = decode_encode_data(task_data["test_anomalous"], model, new_model)
     # pad tokens 
     task_data["train"] = pad_tokens_data(task_data["train"], model.tokenizer.pad_token_id)
     task_data["test_non_anomalous"] = pad_tokens_data(task_data["test_non_anomalous"], model.tokenizer.pad_token_id)
     task_data["test_anomalous"] = pad_tokens_data(task_data["test_anomalous"], model.tokenizer.pad_token_id)
-    # add model effect probabilities
+    # add effect tokens
     new_effect_tokens = get_effect_tokens(behavior_name, model)
     task_data["effect_tokens"] = new_effect_tokens
     return task_data  
@@ -78,7 +78,7 @@ class TinyNaturalMechanismsDataset(torch.utils.data.Dataset):
         )
 
 
-def tiny_natural_mechanisms(name: str, device: str, model_name=None):
+def tiny_natural_mechanisms(name: str, device: str, new_model_name=None):
     import blobfile as bf
     from transformer_lens import HookedTransformer
 
@@ -122,10 +122,9 @@ def tiny_natural_mechanisms(name: str, device: str, model_name=None):
         with cache_path.open("w") as f:
             json.dump(task_data, f)
     
-    if model_name is not None:
-        task_model = model 
-        model = HookedTransformer.from_pretrained(model_name).to(device)
-        task_data = convert_task_to_model(name, model_name, task_data, task_model, model)
+    if new_model_name is not None:
+        new_model = HookedTransformer.from_pretrained(new_model_name).to(device)
+        task_data = convert_task_to_model(name, task_data, model, new_model)
 
     train_data = TinyNaturalMechanismsDataset(task_data["train"])
     normal_test_data = TinyNaturalMechanismsDataset(task_data["test_non_anomalous"])
