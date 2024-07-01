@@ -90,6 +90,9 @@ class ActivationCache:
         )
 
         for i, input in enumerate(inputs):
+            # convert input to tuple for hashing if tensor 
+            if isinstance(input, torch.Tensor):
+                input = utils.tensor_to_tuple(input)
             # The keys into the cache contain the input and the name of the activation.
             keys = [(input, name) for name in activation_names]
             # In principle we could support the case where some but not all activations
@@ -130,7 +133,10 @@ class ActivationCache:
         for name, act in new_acts.items():
             for i, idx in enumerate(missing_indices):
                 results[name][idx] = act[i]
-                self.cache[(inputs[i], name)] = act[i]
+                input = inputs[i]
+                if isinstance(input, torch.Tensor):
+                    input = utils.tensor_to_tuple(input)
+                self.cache[(input, name)] = act[i]
 
         assert all(
             all(result is not None for result in results[name])
