@@ -68,8 +68,8 @@ class ActivationCache:
         utils.save(self.cache, path)
 
     @classmethod
-    def load(cls, path: str | Path, device: str):
-        cache = cls(device=device)
+    def load(cls, path: str | Path, device: str, storage_device: str = "cpu"):
+        cache = cls(device=device, storage_device=storage_device)
         cache.cache = utils.load(path)
         return cache
 
