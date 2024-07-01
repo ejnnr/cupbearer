@@ -23,11 +23,20 @@ class ActivationCache:
     WARNING: This cache is not safe to use across different models or activation
     preprocessing functions! It does not attempt to track those, and using the same
     cache with different model/preprocessors will likely result in incorrect results.
+
+    Args:
+        device: The device to load the activations to (same as model and data)
+        storage_device: The device to store the activations on. This should be a
+            device with more memory than `device`, since the activations are stored
+            in the cache. Default is "cpu".
     """
 
-    def __init__(self):
+
+    def __init__(self, device: str, storage_device: str = "cpu"):
         """Create an empty cache."""
         self.cache: dict[tuple[Any, str], torch.Tensor] = {}
+        self.device = device
+        self.storage_device = storage_device
         # Just for debugging purposes:
         self.hits = 0
         self.misses = 0
@@ -59,8 +68,8 @@ class ActivationCache:
         utils.save(self.cache, path)
 
     @classmethod
-    def load(cls, path: str | Path):
-        cache = cls()
+    def load(cls, path: str | Path, device: str, storage_device: str = "cpu"):
+        cache = cls(device=device, storage_device=storage_device)
         cache.cache = utils.load(path)
         return cache
 
@@ -104,7 +113,7 @@ class ActivationCache:
             if all(key in self.cache for key in keys):
                 self.hits += 1
                 for name in activation_names:
-                    results[name][i] = self.cache[(input, name)]
+                    results[name][i] = self.cache[(input, name)].to(self.device)
             else:
                 missing_indices.append(i)
 
@@ -136,7 +145,8 @@ class ActivationCache:
                 input = inputs[i]
                 if isinstance(input, torch.Tensor):
                     input = utils.tensor_to_tuple(input)
-                self.cache[(input, name)] = act[i]
+                self.cache[(input, name)] = act[i].to(self.storage_device)
+        del new_acts # free up device memory
 
         assert all(
             all(result is not None for result in results[name])
@@ -221,12 +231,13 @@ class CacheBuilder(ActivationBasedDetector):
         self,
         cache_path: str | Path,
         activation_names: list[str],
+        device: str,
         activation_processing_func: Callable[[torch.Tensor, Any, str], torch.Tensor]
         | None = None,
         cache: ActivationCache | None = None,
     ):
         if cache is None:
-            cache = ActivationCache()
+            cache = ActivationCache(device=device)
         super().__init__(activation_names, activation_processing_func, cache=cache)
         self.cache_path = cache_path
 
