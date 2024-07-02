@@ -28,7 +28,15 @@ def get_effect_tokens(behavior_name, model):
     new_effect_tokens = list(new_behavior.effect_tokens)
     return new_effect_tokens
 
-def convert_task_to_model(behavior_name, task_data, model, new_model):
+def convert_task_to_model(behavior_name, new_model_name, task_data, model, new_model, cache_dir=None):
+    # set up cache path
+    cache_path = Path(cache_dir) / f"{behavior_name}_{new_model_name}_task.json" if cache_dir else None
+    
+    # try to load from cache
+    if cache_path and cache_path.exists():
+        with cache_path.open("r") as f:
+            task_data = json.load(f)
+            return task_data
     def decode_encode_data(data, model, new_model):
         return [
             {
@@ -57,6 +65,10 @@ def convert_task_to_model(behavior_name, task_data, model, new_model):
     # add effect tokens
     new_effect_tokens = get_effect_tokens(behavior_name, model)
     task_data["effect_tokens"] = new_effect_tokens
+    # save to cache
+    if cache_path:
+        with cache_path.open("w") as f:
+            json.dump(task_data, f)
     return task_data  
 
 
@@ -124,7 +136,7 @@ def tiny_natural_mechanisms(name: str, device: str, new_model_name=None):
     
     if new_model_name is not None:
         new_model = HookedTransformer.from_pretrained(new_model_name).to(device)
-        task_data = convert_task_to_model(name, task_data, model, new_model)
+        task_data = convert_task_to_model(name, new_model_name, task_data, model, new_model, cache_dir=cache_dir)
 
     train_data = TinyNaturalMechanismsDataset(task_data["train"])
     normal_test_data = TinyNaturalMechanismsDataset(task_data["test_non_anomalous"])
