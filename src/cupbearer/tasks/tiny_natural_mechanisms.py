@@ -136,6 +136,7 @@ def tiny_natural_mechanisms(name: str, device: str, new_model_name=None):
     
     if new_model_name is not None:
         new_model = HookedTransformer.from_pretrained(new_model_name).to(device)
+        new_model.tokenizer.add_bos_token = False # prevents prepending
         task_data = convert_task_to_model(name, new_model_name, task_data, model, new_model, cache_dir=cache_dir)
         model = new_model
     train_data = TinyNaturalMechanismsDataset(task_data["train"])
