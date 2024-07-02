@@ -41,7 +41,7 @@ def convert_task_to_model(behavior_name, new_model_name, task_data, model, new_m
         return [
             {
                 "prefix_tokens": decode_and_encode(example["prefix_tokens"], model, new_model),
-                "completion_token": decode_and_encode([example["completion_token"]], model, new_model),
+                "completion_token": decode_and_encode([example["completion_token"]], model, new_model)[0],
             }
             for example in data
         ]
