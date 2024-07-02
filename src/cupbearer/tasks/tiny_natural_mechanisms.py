@@ -137,7 +137,7 @@ def tiny_natural_mechanisms(name: str, device: str, new_model_name=None):
     if new_model_name is not None:
         new_model = HookedTransformer.from_pretrained(new_model_name).to(device)
         task_data = convert_task_to_model(name, new_model_name, task_data, model, new_model, cache_dir=cache_dir)
-
+        model = new_model
     train_data = TinyNaturalMechanismsDataset(task_data["train"])
     normal_test_data = TinyNaturalMechanismsDataset(task_data["test_non_anomalous"])
     anomalous_test_data = TinyNaturalMechanismsDataset(task_data["test_anomalous"])
