@@ -12,8 +12,8 @@ from cupbearer.detectors.activation_based import ActivationBasedDetector
 
 class SupervisedLinearProbe(ActivationBasedDetector):
 
-    def __init__(self, scalar= StandardScaler | None , **kwargs):
-        self.scalar = scalar
+    def __init__(self, scaler = StandardScaler | None , **kwargs):
+        self.scaler = scaler
         super().__init__(**kwargs)
 
     def train(
@@ -56,8 +56,8 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         activations = activations.cpu().numpy()
         anomaly_labels = anomaly_labels.cpu().numpy()
         
-        if self.scalar is not None:
-            activations = self.scalar.fit_transform(activations)
+        if self.scaler is not None:
+            activations = self.scaler.fit_transform(activations)
         self.clf = LogisticRegression(**sklearn_kwargs)
         self.clf.fit(activations, anomaly_labels)
 
@@ -67,7 +67,7 @@ class SupervisedLinearProbe(ActivationBasedDetector):
             raise NotImplementedError(
                 "The supervised probe only supports a single layer right now."
             )
-        transform = self.scalar.transform if self.scalar is not None else lambda x: x
+        transform = self.scaler.transform if self.scaler is not None else lambda x: x
         activations = next(iter(activations.values()))
         return {
             # Get probabilities of class 1 (anomalous)
