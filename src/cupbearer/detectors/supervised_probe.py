@@ -2,6 +2,7 @@ from pathlib import Path
 
 import torch
 from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
 from torch.utils.data import DataLoader
 import tqdm
 
@@ -10,6 +11,11 @@ from cupbearer.detectors.activation_based import ActivationBasedDetector
 
 
 class SupervisedLinearProbe(ActivationBasedDetector):
+
+    def __init__(self, scaler = StandardScaler | None , **kwargs):
+        self.scaler = scaler
+        super().__init__(**kwargs)
+
     def train(
         self,
         trusted_data,
@@ -46,9 +52,14 @@ class SupervisedLinearProbe(ActivationBasedDetector):
 
         activations = torch.cat(activations)
         anomaly_labels = torch.cat(anomaly_labels)
-
+        
+        activations = activations.cpu().numpy()
+        anomaly_labels = anomaly_labels.cpu().numpy()
+        
+        if self.scaler is not None:
+            activations = self.scaler.fit_transform(activations)
         self.clf = LogisticRegression(**sklearn_kwargs)
-        self.clf.fit(activations.cpu().numpy(), anomaly_labels.cpu().numpy())
+        self.clf.fit(activations, anomaly_labels)
 
     def layerwise_scores(self, batch):
         activations = self.get_activations(batch)
@@ -56,12 +67,13 @@ class SupervisedLinearProbe(ActivationBasedDetector):
             raise NotImplementedError(
                 "The supervised probe only supports a single layer right now."
             )
+        transform = self.scaler.transform if self.scaler is not None else lambda x: x
         activations = next(iter(activations.values()))
         return {
             # Get probabilities of class 1 (anomalous)
-            next(iter(activations)): self.clf.predict_proba(activations.cpu().numpy())[
-                :, 1
-            ]
+            next(iter(activations)): self.clf.predict_proba(
+                transform(activations.cpu().numpy())
+            )[:, 1]
         }
 
     def _get_trained_variables(self, saving: bool = False):
