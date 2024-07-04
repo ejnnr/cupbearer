@@ -1,16 +1,15 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 
 import torch
 from einops import rearrange
 from loguru import logger
-from torch.utils.data import DataLoader
 from tqdm import tqdm
 
-from cupbearer.detectors.activation_based import ActivationBasedDetector
+from cupbearer.detectors.anomaly_detector import LayerwiseAnomalyDetector
 from cupbearer.detectors.statistical.helpers import update_covariance
 
 
-class StatisticalDetector(ActivationBasedDetector, ABC):
+class StatisticalDetector(LayerwiseAnomalyDetector):
     use_trusted: bool = True
 
     @abstractmethod
@@ -21,12 +20,11 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
     def batch_update(self, activations: dict[str, torch.Tensor]):
         pass
 
-    def train(
+    def _train(
         self,
-        trusted_data,
-        untrusted_data,
+        trusted_dataloader,
+        untrusted_dataloader,
         *,
-        batch_size: int = 1024,
         pbar: bool = True,
         max_steps: int | None = None,
         **kwargs,
@@ -35,22 +33,20 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
         # to be able to override this in certain detectors using torch.enable_grad().
         with torch.no_grad():
             if self.use_trusted:
-                if trusted_data is None:
+                if trusted_dataloader is None:
                     raise ValueError(
                         f"{self.__class__.__name__} requires trusted training data."
                     )
-                data = trusted_data
+                dataloader = trusted_dataloader
             else:
-                if untrusted_data is None:
+                if untrusted_dataloader is None:
                     raise ValueError(
                         f"{self.__class__.__name__} requires untrusted training data."
                     )
-                data = untrusted_data
+                dataloader = untrusted_dataloader
 
             # No reason to shuffle, we're just computing statistics
-            data_loader = DataLoader(data, batch_size=batch_size, shuffle=False)
-            example_batch = next(iter(data_loader))
-            example_activations = self.get_activations(example_batch)
+            example_activations = next(iter(dataloader))
 
             # v is an entire batch, v[0] are activations for a single input
             activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
@@ -59,12 +55,11 @@ class StatisticalDetector(ActivationBasedDetector, ABC):
             )
 
             if pbar:
-                data_loader = tqdm(data_loader, total=max_steps or len(data_loader))
+                dataloader = tqdm(dataloader, total=max_steps or len(dataloader))
 
-            for i, batch in enumerate(data_loader):
+            for i, activations in enumerate(dataloader):
                 if max_steps and i >= max_steps:
                     break
-                activations = self.get_activations(batch)
                 self.batch_update(activations)
 
 
@@ -123,8 +118,7 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         """
         pass
 
-    def layerwise_scores(self, batch):
-        activations = self.get_activations(batch)
+    def _compute_layerwise_scores(self, activations):
         batch_size = next(iter(activations.values())).shape[0]
         activations = {
             k: rearrange(v, "batch ... dim -> (batch ...) dim")
@@ -143,9 +137,11 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         }
         return scores
 
-    def train(self, trusted_data, untrusted_data, **kwargs):
-        super().train(
-            trusted_data=trusted_data, untrusted_data=untrusted_data, **kwargs
+    def _train(self, trusted_dataloader, untrusted_dataloader, **kwargs):
+        super()._train(
+            trusted_dataloader=trusted_dataloader,
+            untrusted_dataloader=untrusted_dataloader,
+            **kwargs,
         )
 
         # Post process

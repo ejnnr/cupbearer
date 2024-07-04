@@ -5,7 +5,6 @@ from pathlib import Path
 import lightning as L
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.scripts._shared import Classifier
@@ -19,18 +18,17 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         # detector or load weights for inference, we'll need to copy in both cases.
         self.finetuned_model = copy.deepcopy(self.model)
 
-    def train(
+    def _train(
         self,
-        trusted_data,
-        untrusted_data,
+        trusted_dataloader,
+        untrusted_dataloader,
         save_path: Path | str,
         *,
         num_classes: int,
         lr: float = 1e-3,
-        batch_size: int = 64,
         **trainer_kwargs,
     ):
-        if trusted_data is None:
+        if trusted_dataloader is None:
             raise ValueError("Finetuning detector requires trusted training data.")
         classifier = Classifier(
             self.finetuned_model,
@@ -38,9 +36,6 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             lr=lr,
             save_hparams=False,
         )
-
-        # Create a DataLoader for the clean dataset
-        clean_loader = DataLoader(trusted_data, batch_size=batch_size, shuffle=True)
 
         # Finetune the model on the clean dataset
         trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
@@ -54,15 +49,10 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             )
             trainer.fit(
                 model=classifier,
-                train_dataloaders=clean_loader,
+                train_dataloaders=trusted_dataloader,
             )
 
-    def layerwise_scores(self, batch):
-        raise NotImplementedError(
-            "Layerwise scores don't exist for finetuning detector"
-        )
-
-    def scores(self, batch):
+    def _compute_scores(self, batch):
         inputs = inputs_from_batch(batch)
         original_output = self.model(inputs)
         finetuned_output = self.finetuned_model(inputs)
