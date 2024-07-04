@@ -9,8 +9,8 @@ from cupbearer.detectors.abstraction.abstraction import (
     AutoencoderAbstraction,
     LocallyConsistentAbstraction,
 )
-from cupbearer.detectors.anomaly_detector import LayerwiseAnomalyDetector
-from cupbearer.detectors.extractors import ActivationExtractor, FeatureExtractor
+from cupbearer.detectors.activation_based import ActivationBasedDetector
+from cupbearer.detectors.extractors import FeatureExtractor
 
 
 def compute_losses(
@@ -82,8 +82,12 @@ class AbstractionModule(L.LightningModule):
         return torch.optim.Adam(self.abstraction.parameters(), lr=self.lr)
 
 
-class AbstractionDetector(LayerwiseAnomalyDetector):
+class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
+
+    # Tell ActivationBasedDetector to create a feature extractor that returns inputs
+    # in addition to activations:
+    return_inputs: bool = True
 
     def __init__(
         self,
@@ -95,19 +99,16 @@ class AbstractionDetector(LayerwiseAnomalyDetector):
             [dict[str, torch.Tensor]], dict[str, torch.Tensor]
         ]
         | None = None,
+        layer_aggregation: str = "mean",
     ):
         self.abstraction = abstraction
         super().__init__(
             feature_extractor=feature_extractor,
-            default_extractor_kwargs={
-                "names": list(abstraction.tau_maps.keys()),
-                "individual_processing_fn": individual_processing_fn,
-                "global_processing_fn": global_processing_fn,
-            },
+            activation_names=list(abstraction.tau_maps.keys()),
+            layer_aggregation=layer_aggregation,
+            individual_processing_fn=individual_processing_fn,
+            global_processing_fn=global_processing_fn,
         )
-
-    def _default_extractor_factory(self, **kwargs):
-        return ActivationExtractor(return_inputs=True, **kwargs)
 
     def _train(
         self,

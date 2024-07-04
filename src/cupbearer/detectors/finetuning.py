@@ -80,7 +80,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
 
         return kl
 
-    def _get_trained_variables(self, saving: bool = False):
+    def _get_trained_variables(self):
         return self.finetuned_model.state_dict()
 
     def _set_trained_variables(self, variables):

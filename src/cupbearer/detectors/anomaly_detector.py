@@ -2,7 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any
 
 import numpy as np
 import sklearn.metrics
@@ -27,18 +27,8 @@ class AnomalyDetector(ABC):
     def __init__(
         self,
         feature_extractor: FeatureExtractor | None = None,
-        default_extractor_kwargs: dict[str, Any] | None = None,
     ):
-        self.feature_extractor = feature_extractor or self._default_extractor_factory(
-            **default_extractor_kwargs or {}
-        )
-
-    def _default_extractor_factory(self, **kwargs):
-        """Create a default feature extractor for this detector.
-
-        Child classes can override this to provide a custom feature extractor.
-        """
-        return IdentityExtractor()
+        self.feature_extractor = feature_extractor or IdentityExtractor()
 
     @abstractmethod
     def _compute_scores(self, batch: Any) -> torch.Tensor:
@@ -58,8 +48,8 @@ class AnomalyDetector(ABC):
     @abstractmethod
     def _train(
         self,
-        trusted_dataloader: Iterable[dict[str, torch.Tensor]] | None,
-        untrusted_dataloader: Iterable[dict[str, torch.Tensor]] | None,
+        trusted_dataloader: DataLoader | None,
+        untrusted_dataloader: DataLoader | None,
         save_path: Path | str | None,
         **kwargs,
     ):
@@ -266,18 +256,12 @@ class LayerwiseAnomalyDetector(AnomalyDetector):
     but provides a default implementation for `compute_scores`, rather than vice versa.
     """
 
-    layer_aggregation: str = "mean"
-
     def __init__(
         self,
         feature_extractor: FeatureExtractor | None = None,
-        default_extractor_kwargs: dict[str, Any] | None = None,
         layer_aggregation: str = "mean",
     ):
-        super().__init__(
-            feature_extractor=feature_extractor,
-            default_extractor_kwargs=default_extractor_kwargs,
-        )
+        super().__init__(feature_extractor=feature_extractor)
         self.layer_aggregation = layer_aggregation
 
     @abstractmethod

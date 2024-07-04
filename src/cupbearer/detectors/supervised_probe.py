@@ -1,43 +1,13 @@
 from pathlib import Path
-from typing import Any, Callable
 
 import torch
 import tqdm
 from sklearn.linear_model import LogisticRegression
 
-from .anomaly_detector import LayerwiseAnomalyDetector
-from .extractors import ActivationExtractor, FeatureExtractor
+from cupbearer.detectors.activation_based import ActivationBasedDetector
 
 
-class SupervisedLinearProbe(LayerwiseAnomalyDetector):
-    def __init__(
-        self,
-        feature_extractor: FeatureExtractor | None = None,
-        activation_names: list[str] | None = None,
-        individual_processing_fn: Callable[[torch.Tensor, Any, str], torch.Tensor]
-        | None = None,
-        global_processing_fn: Callable[
-            [dict[str, torch.Tensor]], dict[str, torch.Tensor]
-        ]
-        | None = None,
-    ):
-        if feature_extractor is None and activation_names is None:
-            raise ValueError(
-                "Either a feature extractor or a list of activation names "
-                "must be provided."
-            )
-        super().__init__(
-            feature_extractor=feature_extractor,
-            default_extractor_kwargs={
-                "names": activation_names,
-                "individual_processing_fn": individual_processing_fn,
-                "global_processing_fn": global_processing_fn,
-            },
-        )
-
-    def _default_extractor_factory(self, **kwargs):
-        return ActivationExtractor(return_inputs=True, **kwargs)
-
+class SupervisedLinearProbe(ActivationBasedDetector):
     def _train(
         self,
         trusted_dataloader,
@@ -78,7 +48,6 @@ class SupervisedLinearProbe(LayerwiseAnomalyDetector):
         self.clf.fit(activations.cpu().numpy(), anomaly_labels.cpu().numpy())
 
     def _compute_layerwise_scores(self, batch):
-        batch.pop("inputs")
         activations = batch
         if len(activations) > 1:
             raise NotImplementedError(

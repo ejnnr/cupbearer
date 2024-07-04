@@ -5,11 +5,11 @@ from einops import rearrange
 from loguru import logger
 from tqdm import tqdm
 
-from cupbearer.detectors.anomaly_detector import LayerwiseAnomalyDetector
+from cupbearer.detectors.activation_based import ActivationBasedDetector
 from cupbearer.detectors.statistical.helpers import update_covariance
 
 
-class StatisticalDetector(LayerwiseAnomalyDetector):
+class StatisticalDetector(ActivationBasedDetector):
     use_trusted: bool = True
 
     @abstractmethod
