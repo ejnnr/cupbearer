@@ -156,9 +156,7 @@ class AbstractionDetector(LayerwiseAnomalyDetector):
         _, layer_losses = compute_losses(self.abstraction, inputs, activations)
         return layer_losses
 
-    def _get_trained_variables(self, saving: bool = False):
-        # TODO: for saving=False we should return optimizer here if we want to make
-        # the finetuning API work, I think
+    def _get_trained_variables(self):
         return self.abstraction.state_dict()
 
     def _set_trained_variables(self, variables):

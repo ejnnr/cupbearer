@@ -84,11 +84,11 @@ class AnomalyDetector(ABC):
         self.model = model
 
     def compute_layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
-        features = self.feature_extractor.get_features(batch)
+        features = self.feature_extractor(batch)
         return self._compute_layerwise_scores(features)
 
     def compute_scores(self, batch) -> torch.Tensor:
-        features = self.feature_extractor.get_features(batch)
+        features = self.feature_extractor(batch)
         return self._compute_scores(features)
 
     def train(
