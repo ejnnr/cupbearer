@@ -30,11 +30,19 @@ class FeatureCache:
     WARNING: This cache is not safe to use across different models or
     preprocessing functions! It does not attempt to track those, and using the same
     cache with different model/preprocessors will likely result in incorrect results.
+
+    Args:
+        device: The device to load the features to (same as model and data)
+        storage_device: The device to store the features on. This should be a
+            device with more memory than `device`, since the features are stored
+            in the cache. Default is "cpu".
     """
 
-    def __init__(self):
+    def __init__(self, device: str, storage_device: str = "cpu"):
         """Create an empty cache."""
         self.cache: dict[tuple[Any, str], torch.Tensor] = {}
+        self.device = device
+        self.storage_device = storage_device
         # Just for debugging purposes:
         self.hits = 0
         self.misses = 0
@@ -66,8 +74,8 @@ class FeatureCache:
         utils.save(self.cache, path)
 
     @classmethod
-    def load(cls, path: str | Path):
-        cache = cls()
+    def load(cls, path: str | Path, device: str, storage_device: str = "cpu"):
+        cache = cls(device=device, storage_device=storage_device)
         cache.cache = utils.load(path)
         return cache
 
@@ -98,6 +106,9 @@ class FeatureCache:
         )
 
         for i, input in enumerate(inputs):
+            # convert input to tuple for hashing if tensor
+            if isinstance(input, torch.Tensor):
+                input = utils.tensor_to_tuple(input)
             # The keys into the cache contain the input and the name of the feature.
             keys = [(input, name) for name in feature_names]
             # In principle we could support the case where some but not all features
@@ -109,7 +120,7 @@ class FeatureCache:
             if all(key in self.cache for key in keys):
                 self.hits += 1
                 for name in feature_names:
-                    results[name][i] = self.cache[(input, name)]
+                    results[name][i] = self.cache[(input, name)].to(self.device)
             else:
                 missing_indices.append(i)
 
@@ -138,7 +149,12 @@ class FeatureCache:
         for name, feature in new_features.items():
             for i, idx in enumerate(missing_indices):
                 results[name][idx] = feature[i]
-                self.cache[(inputs[i], name)] = feature[i]
+                input = inputs[i]
+                if isinstance(input, torch.Tensor):
+                    input = utils.tensor_to_tuple(input)
+                self.cache[(input, name)] = feature[i].to(self.storage_device)
+
+        del new_features  # free up device memory
 
         assert all(
             all(result is not None for result in results[name])
