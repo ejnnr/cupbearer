@@ -2,7 +2,7 @@ import pytest
 import torch
 from cupbearer import models
 from cupbearer.detectors.extractors.activation_extractor import ActivationExtractor
-from cupbearer.detectors.extractors.core import IdentityExtractor
+from cupbearer.detectors.extractors.core import FeatureCache
 
 
 class DummyModel(torch.nn.Module):
@@ -39,7 +39,6 @@ def dummy_batch():
 
 
 EXTRACTOR_FACTORIES = [
-    IdentityExtractor,
     lambda: ActivationExtractor(names=["dummy_module.output"]),
 ]
 
@@ -84,3 +83,92 @@ def test_activation_extractor(mlp, dummy_batch):
     assert torch.allclose(acts["layers.linear_0.input"], dummy_batch.view(10, -1))
     assert torch.allclose(acts["layers.linear_1.input"], acts["layers.relu_0.output"])
     assert torch.allclose(acts["layers.relu_1.input"], acts["layers.linear_1.output"])
+
+
+class DummyFeatureFn:
+    def __init__(self, feature_names):
+        self.feature_names = feature_names
+        self.called_with = []
+
+    def __call__(self, inputs):
+        self.called_with.append(inputs)
+        return {
+            name: torch.tensor([hash((name, input)) for input in inputs])
+            for name in self.feature_names
+        }
+
+
+def tensor_dicts_equal(dict1, dict2):
+    if dict1.keys() != dict2.keys():
+        return False
+    for key in dict1:
+        if not torch.all(dict1[key] == dict2[key]):
+            return False
+    return True
+
+
+@pytest.fixture
+def cache():
+    return FeatureCache(device="cpu")
+
+
+FEATURE_NAMES = ["feature_0", "feature_1"]
+
+
+@pytest.fixture
+def dummy_fn():
+    return DummyFeatureFn(FEATURE_NAMES)
+
+
+def test_feature_cache_simple(cache, dummy_fn):
+    inputs = ["input1", "input2"]
+
+    expected_features = dummy_fn(inputs)
+    assert dummy_fn.called_with == [inputs]
+
+    # Add features to cache
+    actual_features = cache.get_features(inputs, FEATURE_NAMES, dummy_fn)
+    assert tensor_dicts_equal(actual_features, expected_features)
+    assert dummy_fn.called_with == [inputs, inputs]
+
+    # Retrieve features from cache
+    retrieved_features = cache.get_features(inputs, FEATURE_NAMES, dummy_fn)
+    assert tensor_dicts_equal(retrieved_features, expected_features)
+    assert dummy_fn.called_with == [inputs, inputs]
+
+
+def test_feature_cache_partial_retrieve(cache, dummy_fn):
+    inputs = ["input1", "input2"]
+
+    # Add features for only the first input to cache
+    features = cache.get_features([inputs[0]], FEATURE_NAMES, dummy_fn)
+    assert dummy_fn.called_with == [[inputs[0]]]
+    expected_features = dummy_fn([inputs[0]])
+    assert dummy_fn.called_with == [[inputs[0]], [inputs[0]]]
+    assert tensor_dicts_equal(features, expected_features)
+
+    # Retrieve features from cache, should call feature function for the second input
+    retrieved_features = cache.get_features(inputs, FEATURE_NAMES, dummy_fn)
+    assert dummy_fn.called_with == [[inputs[0]], [inputs[0]], [inputs[1]]]
+    expected_features = dummy_fn(inputs)
+    assert tensor_dicts_equal(retrieved_features, expected_features)
+
+
+def test_feature_cache_mixed_retrieve(cache, dummy_fn):
+    inputs = ["input1", "input2"]
+    partial_dummy_fn = DummyFeatureFn(FEATURE_NAMES[:1])
+
+    features_1 = cache.get_features([inputs[0]], FEATURE_NAMES[:1], partial_dummy_fn)
+    assert partial_dummy_fn.called_with == [[inputs[0]]]
+    features_2 = cache.get_features(inputs, FEATURE_NAMES[:1], dummy_fn)
+    assert partial_dummy_fn.called_with == [[inputs[0]]]
+    assert dummy_fn.called_with == [[inputs[1]]]
+    expected_features = partial_dummy_fn([inputs[0]])
+    assert tensor_dicts_equal(features_1, expected_features)
+    expected_features = partial_dummy_fn(inputs)
+    assert tensor_dicts_equal(features_2, expected_features)
+
+    features = cache.get_features([inputs[0]], FEATURE_NAMES, dummy_fn)
+    assert dummy_fn.called_with == [[inputs[1]], [inputs[0]]]
+    expected_features = dummy_fn([inputs[0]])
+    assert tensor_dicts_equal(features, expected_features)

@@ -3,10 +3,11 @@ from typing import Any, Callable
 import torch
 
 from cupbearer import utils
-from cupbearer.detectors.extractors.core import DictionaryExtractor
+
+from .core import FeatureExtractor
 
 
-class ActivationExtractor(DictionaryExtractor):
+class ActivationExtractor(FeatureExtractor):
     def __init__(
         self,
         names: list[str],
@@ -24,6 +25,5 @@ class ActivationExtractor(DictionaryExtractor):
         )
         self.names = names
 
-    def get_features(self, inputs: Any) -> dict[str, torch.Tensor]:
-        acts = utils.get_activations(inputs, model=self.model, names=self.names)
-        return acts
+    def compute_features(self, inputs: Any) -> dict[str, torch.Tensor]:
+        return utils.get_activations(inputs, model=self.model, names=self.names)

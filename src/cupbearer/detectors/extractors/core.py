@@ -10,15 +10,6 @@ from cupbearer import utils
 from cupbearer.data import MixedData
 
 
-class FeatureExtractor(ABC):
-    def set_model(self, model: torch.nn.Module):
-        self.model = model
-
-    @abstractmethod
-    def __call__(self, inputs: Any) -> Any:
-        pass
-
-
 class FeatureCache:
     """Cache for features to speed up using multiple anomaly detectors.
 
@@ -101,9 +92,11 @@ class FeatureCache:
         """
         # We want to handle cases where some but not all elements are in the cache.
         missing_indices = []
-        results: dict[str, list[torch.Tensor | None]] = defaultdict(
-            lambda: [None] * len(inputs)
-        )
+        # It's important we compute this outside the lambda expression, since the length
+        # of inputs will change later when we remove the ones already cached. The lambda
+        # expression is only called after that.
+        n = len(inputs)
+        results: dict[str, list[torch.Tensor | None]] = defaultdict(lambda: [None] * n)
 
         for i, input in enumerate(inputs):
             # convert input to tuple for hashing if tensor
@@ -143,6 +136,12 @@ class FeatureCache:
             )
 
         new_features = feature_fn(inputs)
+        for key, feature in new_features.items():
+            if feature.ndim == 0 or feature.shape[0] != len(inputs):
+                raise ValueError(
+                    f"Feature {key} has shape {feature.shape} but should have "
+                    f"shape ({len(inputs)}, ...)"
+                )
         self.misses += len(inputs)
 
         # Fill in the missing features
@@ -164,15 +163,7 @@ class FeatureCache:
         return {name: torch.stack(results[name]) for name in feature_names}
 
 
-class DictionaryExtractor(FeatureExtractor):
-    def __call__(self, inputs: Any) -> dict[str, torch.Tensor]:
-        if self.cache is None:
-            return self._get_features_no_cache(inputs)
-
-        return self.cache.get_features(
-            inputs, self.feature_names, self._get_features_no_cache
-        )
-
+class FeatureExtractor(ABC):
     def __init__(
         self,
         feature_names: list[str],
@@ -184,15 +175,33 @@ class DictionaryExtractor(FeatureExtractor):
         | None = None,
         cache: FeatureCache | None = None,
     ):
+        # (erik) We need the feature names as an attribute just to pass them on to
+        # the cache if necessary. This seems hard to avoid if we want to be able to
+        #   1) share a cache between different detectors, which might need
+        #      different features
+        #   2) use detectors purely from the cache, potentially without even loading
+        #      the model
+        # I think these are pretty nice things to have and worth this slightly awkward
+        # additional attribute.
         self.feature_names = feature_names
         self.individual_processing_fn = individual_processing_fn
         self.global_processing_fn = global_processing_fn
         self.cache = cache
 
-    def _get_features_no_cache(self, inputs) -> dict[str, torch.Tensor]:
+    @abstractmethod
+    def compute_features(self, inputs) -> dict[str, torch.Tensor]:
+        pass
+
+    def __call__(self, inputs: Any) -> dict[str, torch.Tensor]:
+        if self.cache is None:
+            return self._call_no_cache(inputs)
+
+        return self.cache.get_features(inputs, self.feature_names, self._call_no_cache)
+
+    def _call_no_cache(self, inputs) -> dict[str, torch.Tensor]:
         device = next(self.model.parameters()).device
         inputs = utils.inputs_to_device(inputs, device)
-        features = self.get_features(inputs)
+        features = self.compute_features(inputs)
 
         # Can be used to for example select activations at specific token positions
         if self.individual_processing_fn is not None:
@@ -206,6 +215,5 @@ class DictionaryExtractor(FeatureExtractor):
 
         return features
 
-    @abstractmethod
-    def get_features(self, inputs) -> dict[str, torch.Tensor]:
-        pass
+    def set_model(self, model: torch.nn.Module):
+        self.model = model
