@@ -17,3 +17,4 @@ def load(model: torch.nn.Module, path: Path | str):
     # the 'model.' prefix from the keys.
     state_dict = {k[6:]: v for k, v in state_dict.items() if k.startswith("model.")}
     model.load_state_dict(state_dict)
+    return model
