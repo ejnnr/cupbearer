@@ -8,7 +8,6 @@ import torch.nn.functional as F
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils import inputs_from_batch
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
@@ -30,6 +29,10 @@ class FinetuningAnomalyDetector(AnomalyDetector):
     ):
         if trusted_dataloader is None:
             raise ValueError("Finetuning detector requires trusted training data.")
+
+        # Classifier expects a dataloader that doesn't return features:
+        trusted_dataloader = map(lambda x: x[0], trusted_dataloader)
+
         classifier = Classifier(
             self.finetuned_model,
             num_classes=num_classes,
@@ -52,8 +55,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
                 train_dataloaders=trusted_dataloader,
             )
 
-    def _compute_layerwise_scores(self, batch):
-        inputs = inputs_from_batch(batch)
+    def _compute_layerwise_scores(self, inputs, features):
         original_output = self.model(inputs)
         finetuned_output = self.finetuned_model(inputs)
 

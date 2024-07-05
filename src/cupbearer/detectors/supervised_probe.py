@@ -35,9 +35,7 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         activations = []
         anomaly_labels = []
         for batch in tqdm.tqdm(untrusted_dataloader):
-            # TODO: inputs are only the actual inputs, so this won't work
-            (rest, new_anomaly_labels) = batch.pop("inputs")
-            new_activations = batch
+            (_, new_anomaly_labels), new_activations = batch
             if len(new_activations) > 1:
                 raise NotImplementedError(
                     "The supervised probe only supports a single layer right now."
@@ -57,20 +55,19 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         self.clf = LogisticRegression(**sklearn_kwargs)
         self.clf.fit(activations, anomaly_labels)
 
-    def _compute_layerwise_scores(self, batch):
-        activations = batch
-        if len(activations) > 1:
+    def _compute_layerwise_scores(self, inputs, features):
+        if len(features) > 1:
             raise NotImplementedError(
                 "The supervised probe only supports a single layer right now."
             )
         transform = self.scaler.transform if self.scaler is not None else lambda x: x
-        name, activations = next(iter(activations.items()))
+        name, features = next(iter(features.items()))
         return {
             # Get probabilities of class 1 (anomalous)
-            name: self.clf.predict_proba(transform(activations.cpu().numpy()))[:, 1]
+            name: self.clf.predict_proba(transform(features.cpu().numpy()))[:, 1]
         }
 
-    def _get_trained_variables(self, saving: bool = False):
+    def _get_trained_variables(self):
         # This will just pickle things, which maybe isn't the most efficient but easiest
         return self.clf
 

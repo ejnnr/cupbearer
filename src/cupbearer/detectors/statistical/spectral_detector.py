@@ -29,7 +29,7 @@ class SpectralSignatureDetector(ActivationCovarianceBasedDetector):
             self.top_singular_vectors[name],
         ).square()
 
-    def _get_trained_variables(self, saving: bool = False):
+    def _get_trained_variables(self):
         return {"means": self.means, "top_singular_vectors": self.top_singular_vectors}
 
     def _set_trained_variables(self, variables):

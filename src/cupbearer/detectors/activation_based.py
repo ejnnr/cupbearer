@@ -14,8 +14,6 @@ class ActivationBasedDetector(AnomalyDetector):
     feature extractor. The feature extractor can still be overriden.
     """
 
-    return_inputs: bool = False
-
     def __init__(
         self,
         feature_extractor: FeatureExtractor | None = None,
@@ -38,7 +36,6 @@ class ActivationBasedDetector(AnomalyDetector):
                 names=activation_names,
                 individual_processing_fn=individual_processing_fn,
                 global_processing_fn=global_processing_fn,
-                return_inputs=self.return_inputs,
             )
         super().__init__(
             feature_extractor=feature_extractor, layer_aggregation=layer_aggregation

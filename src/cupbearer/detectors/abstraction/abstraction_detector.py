@@ -4,6 +4,7 @@ from typing import Any, Callable
 import lightning as L
 import torch
 
+from cupbearer import utils
 from cupbearer.detectors.abstraction.abstraction import (
     Abstraction,
     AutoencoderAbstraction,
@@ -61,11 +62,11 @@ class AbstractionModule(L.LightningModule):
         self.lr = lr
 
     def _shared_step(self, batch):
-        inputs = batch.pop("inputs")
-        activations = batch
-        losses, layer_losses = compute_losses(self.abstraction, inputs, activations)
+        samples, features = batch
+        inputs = utils.inputs_from_batch(samples)
+        losses, layer_losses = compute_losses(self.abstraction, inputs, features)
         assert isinstance(losses, torch.Tensor)
-        assert losses.ndim == 1 and len(losses) == len(next(iter(activations.values())))
+        assert losses.ndim == 1 and len(losses) == len(next(iter(features.values())))
         loss = losses.mean(0)
         layer_losses = {k: v.mean(0) for k, v in layer_losses.items()}
         return loss, layer_losses
@@ -84,10 +85,6 @@ class AbstractionModule(L.LightningModule):
 
 class AbstractionDetector(ActivationBasedDetector):
     """Anomaly detector based on an abstraction."""
-
-    # Tell ActivationBasedDetector to create a feature extractor that returns inputs
-    # in addition to activations:
-    return_inputs: bool = True
 
     def __init__(
         self,
@@ -151,10 +148,8 @@ class AbstractionDetector(ActivationBasedDetector):
 
         module.to(original_device)
 
-    def _compute_layerwise_scores(self, batch):
-        inputs = batch.pop("inputs")
-        activations = batch
-        _, layer_losses = compute_losses(self.abstraction, inputs, activations)
+    def _compute_layerwise_scores(self, inputs, features):
+        _, layer_losses = compute_losses(self.abstraction, inputs, features)
         return layer_losses
 
     def _get_trained_variables(self):

@@ -46,7 +46,7 @@ class StatisticalDetector(ActivationBasedDetector):
                 dataloader = untrusted_dataloader
 
             # No reason to shuffle, we're just computing statistics
-            example_activations = next(iter(dataloader))
+            _, example_activations = next(iter(dataloader))
 
             # v is an entire batch, v[0] are activations for a single input
             activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
@@ -57,7 +57,7 @@ class StatisticalDetector(ActivationBasedDetector):
             if pbar:
                 dataloader = tqdm(dataloader, total=max_steps or len(dataloader))
 
-            for i, activations in enumerate(dataloader):
+            for i, (_, activations) in enumerate(dataloader):
                 if max_steps and i >= max_steps:
                     break
                 self.batch_update(activations)
@@ -118,14 +118,14 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         """
         pass
 
-    def _compute_layerwise_scores(self, activations):
-        batch_size = next(iter(activations.values())).shape[0]
-        activations = {
+    def _compute_layerwise_scores(self, inputs, features):
+        batch_size = next(iter(features.values())).shape[0]
+        features = {
             k: rearrange(v, "batch ... dim -> (batch ...) dim")
-            for k, v in activations.items()
+            for k, v in features.items()
         }
         scores = {
-            k: self._individual_layerwise_score(k, v) for k, v in activations.items()
+            k: self._individual_layerwise_score(k, v) for k, v in features.items()
         }
         scores = {
             k: rearrange(

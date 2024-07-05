@@ -15,7 +15,7 @@ from tqdm.auto import tqdm
 from cupbearer import utils
 from cupbearer.data import MixedData
 
-from .extractors import FeatureExtractor, IdentityExtractor
+from .extractors import FeatureExtractor
 
 
 class AnomalyDetector(ABC):
@@ -29,11 +29,13 @@ class AnomalyDetector(ABC):
         feature_extractor: FeatureExtractor | None = None,
         layer_aggregation: str = "mean",
     ):
-        self.feature_extractor = feature_extractor or IdentityExtractor()
+        self.feature_extractor = feature_extractor
         self.layer_aggregation = layer_aggregation
 
     @abstractmethod
-    def _compute_layerwise_scores(self, batch: Any) -> dict[str, torch.Tensor]:
+    def _compute_layerwise_scores(
+        self, inputs: Any, features: Any
+    ) -> dict[str, torch.Tensor]:
         """Compute anomaly scores for the given inputs for each layer.
 
         Each element of the returned dictionary must have shape (batch_size, ).
@@ -52,7 +54,11 @@ class AnomalyDetector(ABC):
     ):
         """Train the anomaly detector with the given datasets on the given model.
 
-        At least one of trusted_dataloader or untrusted_dataloader must be provided.
+        At least one of trusted_dataloader or untrusted_dataloader will be provided.
+
+        The dataloaders return tuples (batch, features), where `batch` will be created
+        directly from the underlying dataset (so potentially include labels) and
+        `features` is None or the output of the feature extractor.
         """
 
     def _get_trained_variables(self):
@@ -69,30 +75,34 @@ class AnomalyDetector(ABC):
         #
         # Subclasses can implement more complex logic here.
         self.model = model
-        self.feature_extractor.set_model(model)
+        if self.feature_extractor:
+            self.feature_extractor.set_model(model)
 
-    def compute_layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
+    def compute_layerwise_scores(self, inputs) -> dict[str, torch.Tensor]:
         """Compute anomaly scores for the given inputs for each layer.
 
         Args:
-            batch: a batch of input data to the model (potentially including labels).
+            inputs: a batch of input data to the model
 
         Returns:
             A dictionary with anomaly scores, each element has shape (batch_size, ).
         """
-        features = self.feature_extractor(batch)
-        return self._compute_layerwise_scores(features)
+        if self.feature_extractor:
+            features = self.feature_extractor(inputs)
+        else:
+            features = None
+        return self._compute_layerwise_scores(inputs=inputs, features=features)
 
-    def compute_scores(self, batch) -> torch.Tensor:
+    def compute_scores(self, inputs) -> torch.Tensor:
         """Compute anomaly scores for the given inputs.
 
         Args:
-            batch: a batch of input data to the model (potentially including labels).
+            inputs: a batch of input data to the model
 
         Returns:
             Anomaly scores for the given inputs, of shape (batch_size, )
         """
-        scores = self.compute_layerwise_scores(batch)
+        scores = self.compute_layerwise_scores(inputs)
         return self._aggregate_scores(scores)
 
     def _aggregate_scores(
@@ -121,7 +131,12 @@ class AnomalyDetector(ABC):
     ):
         def collate_fn(batch):
             batch = torch.utils.data.default_collate(batch)
-            return self.feature_extractor(batch)
+            inputs = utils.inputs_from_batch(batch)
+            if self.feature_extractor:
+                features = self.feature_extractor(inputs)
+            else:
+                features = None
+            return batch, features
 
         dataloaders = []
         for data in [trusted_data, untrusted_data]:
@@ -181,7 +196,8 @@ class AnomalyDetector(ABC):
         # to be able to override this in certain detectors using torch.enable_grad().
         with torch.no_grad():
             for batch in test_loader:
-                inputs, new_labels = batch
+                samples, new_labels = batch
+                inputs = utils.inputs_from_batch(samples)
                 if layerwise:
                     new_scores = self.compute_layerwise_scores(inputs)
                 else:

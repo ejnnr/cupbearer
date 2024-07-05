@@ -15,7 +15,7 @@ class FeatureExtractor(ABC):
         self.model = model
 
     @abstractmethod
-    def __call__(self, batch: Any) -> Any:
+    def __call__(self, inputs: Any) -> Any:
         pass
 
 
@@ -165,9 +165,7 @@ class FeatureCache:
 
 
 class DictionaryExtractor(FeatureExtractor):
-    def __call__(self, batch: Any) -> dict[str, torch.Tensor]:
-        inputs = utils.inputs_from_batch(batch)
-
+    def __call__(self, inputs: Any) -> dict[str, torch.Tensor]:
         if self.cache is None:
             return self._get_features_no_cache(inputs)
 
@@ -209,12 +207,5 @@ class DictionaryExtractor(FeatureExtractor):
         return features
 
     @abstractmethod
-    def get_features(self, batch) -> dict[str, torch.Tensor]:
+    def get_features(self, inputs) -> dict[str, torch.Tensor]:
         pass
-
-
-class IdentityExtractor(FeatureExtractor):
-    """Extractor that returns the input as is."""
-
-    def __call__(self, batch: Any) -> Any:
-        return batch
