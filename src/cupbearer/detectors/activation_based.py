@@ -2,12 +2,11 @@ from typing import Any, Callable
 
 import torch
 
-from cupbearer.detectors.anomaly_detector import LayerwiseAnomalyDetector
-
+from .anomaly_detector import AnomalyDetector
 from .extractors import ActivationExtractor, FeatureExtractor
 
 
-class ActivationBasedDetector(LayerwiseAnomalyDetector):
+class ActivationBasedDetector(AnomalyDetector):
     """Base class for detectors that defaults to an activation feature extractor.
 
     The AnomalyDetector base class uses the identity feature extractor by default,

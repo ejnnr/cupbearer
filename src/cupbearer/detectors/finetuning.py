@@ -52,7 +52,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
                 train_dataloaders=trusted_dataloader,
             )
 
-    def _compute_scores(self, batch):
+    def _compute_layerwise_scores(self, batch):
         inputs = inputs_from_batch(batch)
         original_output = self.model(inputs)
         finetuned_output = self.finetuned_model(inputs)
@@ -78,7 +78,7 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             # a more specific one here.
             raise ValueError("Infinite KL divergence")
 
-        return kl
+        return {"all": kl}
 
     def _get_trained_variables(self):
         return self.finetuned_model.state_dict()

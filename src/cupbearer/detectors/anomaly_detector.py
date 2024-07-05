@@ -27,23 +27,21 @@ class AnomalyDetector(ABC):
     def __init__(
         self,
         feature_extractor: FeatureExtractor | None = None,
+        layer_aggregation: str = "mean",
     ):
         self.feature_extractor = feature_extractor or IdentityExtractor()
+        self.layer_aggregation = layer_aggregation
 
     @abstractmethod
-    def _compute_scores(self, batch: Any) -> torch.Tensor:
-        """Compute anomaly scores for the given inputs."""
-
     def _compute_layerwise_scores(self, batch: Any) -> dict[str, torch.Tensor]:
         """Compute anomaly scores for the given inputs for each layer.
 
-        By default, this just returns a single set of scores under an 'all' key.
-        But many detectors can instead return richer information here.
+        Each element of the returned dictionary must have shape (batch_size, ).
 
-        Users can call either this method or `compute_scores` depending on what they
-        need, so detectors must make sure that the results are consistent.
+        If a detector can't compute layerwise scores, it should instead return
+        a dictionary with only one element (by convention using an 'all' key).
         """
-        return {"all": self.compute_scores(batch)}
+        pass
 
     @abstractmethod
     def _train(
@@ -74,12 +72,42 @@ class AnomalyDetector(ABC):
         self.feature_extractor.set_model(model)
 
     def compute_layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
+        """Compute anomaly scores for the given inputs for each layer.
+
+        Args:
+            batch: a batch of input data to the model (potentially including labels).
+
+        Returns:
+            A dictionary with anomaly scores, each element has shape (batch_size, ).
+        """
         features = self.feature_extractor(batch)
         return self._compute_layerwise_scores(features)
 
     def compute_scores(self, batch) -> torch.Tensor:
-        features = self.feature_extractor(batch)
-        return self._compute_scores(features)
+        """Compute anomaly scores for the given inputs.
+
+        Args:
+            batch: a batch of input data to the model (potentially including labels).
+
+        Returns:
+            Anomaly scores for the given inputs, of shape (batch_size, )
+        """
+        scores = self.compute_layerwise_scores(batch)
+        return self._aggregate_scores(scores)
+
+    def _aggregate_scores(
+        self, layerwise_scores: dict[str, torch.Tensor]
+    ) -> torch.Tensor:
+        scores = layerwise_scores.values()
+        assert len(scores) > 0
+        # Type checker doesn't take into account that scores is non-empty,
+        # so thinks this might be a float.
+        if self.layer_aggregation == "mean":
+            return sum(scores) / len(scores)  # type: ignore
+        elif self.layer_aggregation == "max":
+            return torch.amax(torch.stack(list(scores)), dim=0)
+        else:
+            raise ValueError(f"Unknown layer aggregation: {self.layer_aggregation}")
 
     def train(
         self,
@@ -246,47 +274,3 @@ class AnomalyDetector(ABC):
     def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {path}")
         self._set_trained_variables(utils.load(path))
-
-
-class LayerwiseAnomalyDetector(AnomalyDetector):
-    """Base class for layerwise anomaly detectors.
-
-    Compared to `AnomalyDetector`, this makes `compute_layerwise_scores` abstract
-    but provides a default implementation for `compute_scores`, rather than vice versa.
-    """
-
-    def __init__(
-        self,
-        feature_extractor: FeatureExtractor | None = None,
-        layer_aggregation: str = "mean",
-    ):
-        super().__init__(feature_extractor=feature_extractor)
-        self.layer_aggregation = layer_aggregation
-
-    @abstractmethod
-    def _compute_layerwise_scores(self, batch: Any) -> dict[str, torch.Tensor]:
-        """Compute anomaly scores for the given inputs for each layer.
-
-        Args:
-            batch: a batch of input data to the model (potentially including labels).
-
-        Returns:
-            A dictionary with anomaly scores, each element has shape (batch, ).
-        """
-
-    def _compute_scores(self, batch: Any) -> torch.Tensor:
-        return self.aggregate_scores(self._compute_layerwise_scores(batch))
-
-    def aggregate_scores(
-        self, layerwise_scores: dict[str, torch.Tensor]
-    ) -> torch.Tensor:
-        scores = layerwise_scores.values()
-        assert len(scores) > 0
-        # Type checker doesn't take into account that scores is non-empty,
-        # so thinks this might be a float.
-        if self.layer_aggregation == "mean":
-            return sum(scores) / len(scores)  # type: ignore
-        elif self.layer_aggregation == "max":
-            return torch.amax(torch.stack(list(scores)), dim=0)
-        else:
-            raise ValueError(f"Unknown layer aggregation: {self.layer_aggregation}")
