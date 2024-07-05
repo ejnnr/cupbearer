@@ -50,7 +50,6 @@ class AnomalyDetector(ABC):
         self,
         trusted_dataloader: DataLoader | None,
         untrusted_dataloader: DataLoader | None,
-        save_path: Path | str | None,
         **kwargs,
     ):
         """Train the anomaly detector with the given datasets on the given model.
@@ -72,6 +71,7 @@ class AnomalyDetector(ABC):
         #
         # Subclasses can implement more complex logic here.
         self.model = model
+        self.feature_extractor.set_model(model)
 
     def compute_layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
         features = self.feature_extractor(batch)
@@ -85,7 +85,6 @@ class AnomalyDetector(ABC):
         self,
         trusted_data: Dataset | None,
         untrusted_data: Dataset | None,
-        save_path: Path | str | None,
         *,
         batch_size: int = 32,
         shuffle: bool = True,
@@ -100,20 +99,20 @@ class AnomalyDetector(ABC):
         for data in [trusted_data, untrusted_data]:
             if data is None:
                 dataloaders.append(None)
-            dataloaders.append(
-                torch.utils.data.DataLoader(
-                    data,
-                    batch_size=batch_size,
-                    shuffle=shuffle,
-                    num_workers=num_workers,
-                    collate_fn=collate_fn,
+            else:
+                dataloaders.append(
+                    torch.utils.data.DataLoader(
+                        data,
+                        batch_size=batch_size,
+                        shuffle=shuffle,
+                        num_workers=num_workers,
+                        collate_fn=collate_fn,
+                    )
                 )
-            )
 
         return self._train(
             trusted_dataloader=dataloaders[0],
             untrusted_dataloader=dataloaders[1],
-            save_path=save_path,
             **kwargs,
         )
 
@@ -265,7 +264,7 @@ class LayerwiseAnomalyDetector(AnomalyDetector):
         self.layer_aggregation = layer_aggregation
 
     @abstractmethod
-    def compute_layerwise_scores(self, batch: Any) -> dict[str, torch.Tensor]:
+    def _compute_layerwise_scores(self, batch: Any) -> dict[str, torch.Tensor]:
         """Compute anomaly scores for the given inputs for each layer.
 
         Args:
@@ -275,8 +274,8 @@ class LayerwiseAnomalyDetector(AnomalyDetector):
             A dictionary with anomaly scores, each element has shape (batch, ).
         """
 
-    def compute_scores(self, batch: Any) -> torch.Tensor:
-        return self.aggregate_scores(self.compute_layerwise_scores(batch))
+    def _compute_scores(self, batch: Any) -> torch.Tensor:
+        return self.aggregate_scores(self._compute_layerwise_scores(batch))
 
     def aggregate_scores(
         self, layerwise_scores: dict[str, torch.Tensor]

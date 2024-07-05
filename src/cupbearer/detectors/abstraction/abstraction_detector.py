@@ -65,7 +65,7 @@ class AbstractionModule(L.LightningModule):
         activations = batch
         losses, layer_losses = compute_losses(self.abstraction, inputs, activations)
         assert isinstance(losses, torch.Tensor)
-        assert losses.ndim == 1 and len(losses) == len(batch[0])
+        assert losses.ndim == 1 and len(losses) == len(next(iter(activations.values())))
         loss = losses.mean(0)
         layer_losses = {k: v.mean(0) for k, v in layer_losses.items()}
         return loss, layer_losses
@@ -151,7 +151,7 @@ class AbstractionDetector(ActivationBasedDetector):
 
         module.to(original_device)
 
-    def layerwise_scores(self, batch):
+    def _compute_layerwise_scores(self, batch):
         inputs = batch.pop("inputs")
         activations = batch
         _, layer_losses = compute_losses(self.abstraction, inputs, activations)

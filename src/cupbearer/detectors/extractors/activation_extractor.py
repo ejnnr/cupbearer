@@ -26,7 +26,7 @@ class ActivationExtractor(DictionaryExtractor):
         self.names = names
         self.return_inputs = return_inputs
 
-    def __call__(self, batch: Any) -> dict[str, torch.Tensor]:
+    def get_features(self, batch: Any) -> dict[str, torch.Tensor]:
         inputs = utils.inputs_from_batch(batch)
         acts = utils.get_activations(inputs, model=self.model, names=self.names)
         if self.return_inputs:

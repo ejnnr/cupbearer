@@ -165,9 +165,15 @@ class FeatureCache:
 
 
 class DictionaryExtractor(FeatureExtractor):
-    @abstractmethod
     def __call__(self, batch: Any) -> dict[str, torch.Tensor]:
-        pass
+        inputs = utils.inputs_from_batch(batch)
+
+        if self.cache is None:
+            return self._get_features_no_cache(inputs)
+
+        return self.cache.get_features(
+            inputs, self.feature_names, self._get_features_no_cache
+        )
 
     def __init__(
         self,
@@ -188,7 +194,7 @@ class DictionaryExtractor(FeatureExtractor):
     def _get_features_no_cache(self, inputs) -> dict[str, torch.Tensor]:
         device = next(self.model.parameters()).device
         inputs = utils.inputs_to_device(inputs, device)
-        features = self(inputs)
+        features = self.get_features(inputs)
 
         # Can be used to for example select activations at specific token positions
         if self.individual_processing_fn is not None:
@@ -202,15 +208,9 @@ class DictionaryExtractor(FeatureExtractor):
 
         return features
 
+    @abstractmethod
     def get_features(self, batch) -> dict[str, torch.Tensor]:
-        inputs = utils.inputs_from_batch(batch)
-
-        if self.cache is None:
-            return self._get_features_no_cache(inputs)
-
-        return self.cache.get_features(
-            inputs, self.feature_names, self._get_features_no_cache
-        )
+        pass
 
 
 class IdentityExtractor(FeatureExtractor):
