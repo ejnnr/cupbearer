@@ -4,6 +4,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
 from cupbearer import utils
+from cupbearer.data import MixedData
 from cupbearer.detectors.activation_based import ActivationBasedDetector
 
 
@@ -33,12 +34,12 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         if untrusted_dataloader is None:
             raise ValueError("Supervised probe requires untrusted training data.")
 
-        # assert isinstance(untrusted_data, MixedData)
-        # if not untrusted_data.return_anomaly_labels:
-        #     raise ValueError(
-        #         "The supervised probe is a skyline detector meant to be trained "
-        #         "with access to anomaly labels."
-        #     )
+        assert isinstance(untrusted_dataloader.dataset, MixedData)
+        if not untrusted_dataloader.dataset.return_anomaly_labels:
+            raise ValueError(
+                "The supervised probe is a skyline detector meant to be trained "
+                "with access to anomaly labels."
+            )
 
         activations = []
         anomaly_labels = []
