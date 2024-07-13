@@ -6,7 +6,7 @@ class HuggingfaceLM(torch.nn.Module):
         self,
         tokenizer=None,
         model=None,
-        tokenize_kwargs = {"padding": True},
+        tokenize_kwargs={"padding": True, "truncation": True},
         device="cuda",
     ):
         """A wrapper around a HF model that handles tokenization and device placement.
@@ -29,7 +29,6 @@ class HuggingfaceLM(torch.nn.Module):
         # HACK: We often use next(model.parameters()).device to figure out which
         # device a model is on. We'd like that to still work even if there's no model.
         self.dummy_param = torch.nn.Parameter(torch.tensor(0.0, device=device))
-
 
     def tokenize(self, inputs: list[str] | str, **kwargs):
         if self.tokenizer is None:
@@ -54,13 +53,12 @@ class HuggingfaceLM(torch.nn.Module):
         ):
             # The activation should be (batch, sequence, residual dimension)
             assert activation.ndim == 3, activation.shape
-            assert activation.shape[-1] == 4096, activation.shape
             batch_size = len(inputs)
 
             # Tokenize the inputs to know how many tokens there are.
             # It's a bit unfortunate that we're doing this twice (once here,
             # once in the model forward pass), but not a huge deal.
-            tokens = self.tokenize(inputs)
+            tokens = self.tokenize(inputs, **self.tokenize_kwargs)
             last_non_padding_index = tokens["attention_mask"].sum(dim=1) - 1
 
             return activation[range(batch_size), last_non_padding_index, :]

@@ -38,7 +38,8 @@ class Backdoor(Transform, ABC):
         img, label = sample
 
         # Do changes out of place
-        img = img.clone()
+        if isinstance(img, torch.Tensor):
+            img = img.clone()
         if self.return_anomaly_label:
             return (self.inject_backdoor(img), self.target_class), True
         else:
@@ -91,12 +92,20 @@ class CornerPixelBackdoor(Backdoor):
 @dataclass
 class NoiseBackdoor(Backdoor):
     std: float = 0.3  # Standard deviation of noise
+    value_range: Tuple[float, float] | None = (0, 1)  # Range of values to clip to
 
     def inject_backdoor(self, img: torch.Tensor):
-        assert torch.all(img <= 1), "Image not in range [0, 1]"
+        if self.value_range is not None:
+            assert torch.all(
+                img <= self.value_range[1]
+            ), f"Image not in range {self.value_range}"
+            assert torch.all(
+                img >= self.value_range[0]
+            ), f"Image not in range {self.value_range}"
         noise = torch.normal(0, self.std, img.shape)
         img += noise
-        img.clip_(0, 1)
+        if self.value_range is not None:
+            img.clamp_(self.value_range[0], self.value_range[1])
 
         return img
 
