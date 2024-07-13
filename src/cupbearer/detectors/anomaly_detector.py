@@ -119,6 +119,15 @@ class AnomalyDetector(ABC):
         else:
             raise ValueError(f"Unknown layer aggregation: {self.layer_aggregation}")
 
+    def _collate_fn(self, batch):
+        batch = torch.utils.data.default_collate(batch)
+        inputs = utils.inputs_from_batch(batch)
+        if self.feature_extractor:
+            features = self.feature_extractor(inputs)
+        else:
+            features = None
+        return batch, features
+
     def train(
         self,
         trusted_data: Dataset | None,
@@ -129,15 +138,6 @@ class AnomalyDetector(ABC):
         num_workers: int = 0,
         **kwargs,
     ):
-        def collate_fn(batch):
-            batch = torch.utils.data.default_collate(batch)
-            inputs = utils.inputs_from_batch(batch)
-            if self.feature_extractor:
-                features = self.feature_extractor(inputs)
-            else:
-                features = None
-            return batch, features
-
         dataloaders = []
         for data in [trusted_data, untrusted_data]:
             if data is None:
@@ -149,7 +149,7 @@ class AnomalyDetector(ABC):
                         batch_size=batch_size,
                         shuffle=shuffle,
                         num_workers=num_workers,
-                        collate_fn=collate_fn,
+                        collate_fn=self._collate_fn,
                     )
                 )
 

@@ -72,3 +72,17 @@ def test_mahalanobis(model, mnist_train, mnist_test, tmp_path):
     assert metrics["layers.linear_0.output"]["AUC_ROC"] > 0.97
     assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
     assert metrics["layers.linear_2.output"]["AUC_ROC"] > 0.90
+
+
+def test_supervised_probe(model, mnist_train, mnist_test):
+    detector = detectors.SupervisedLinearProbe(
+        activation_names=["layers.linear_1.output"]
+    )
+    task = tasks.backdoor_detection(
+        model, mnist_train, mnist_test, data.CornerPixelBackdoor(), trusted_fraction=0.0
+    )
+    detector.set_model(task.model)
+    task.untrusted_train_data.return_anomaly_labels = True
+    detector.train(trusted_data=None, untrusted_data=task.untrusted_train_data)
+    metrics, figs = detector.eval(task.test_data, layerwise=True)
+    assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97

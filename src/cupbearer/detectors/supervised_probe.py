@@ -1,10 +1,9 @@
-from pathlib import Path
-
 import torch
 import tqdm
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import StandardScaler
 
+from cupbearer import utils
 from cupbearer.detectors.activation_based import ActivationBasedDetector
 
 
@@ -13,13 +12,22 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         self.scaler = scaler
         super().__init__(**kwargs)
 
+    def _collate_fn(self, batch):
+        batch = torch.utils.data.default_collate(batch)
+        # Needs to be overriden becaues we need to remove anomaly labels before passing
+        # this to the model. So we just add this extra line:
+        batch, anomaly_labels = batch
+        inputs = utils.inputs_from_batch(batch)
+        if self.feature_extractor:
+            features = self.feature_extractor(inputs)
+        else:
+            features = None
+        return anomaly_labels, features
+
     def _train(
         self,
         trusted_dataloader,
         untrusted_dataloader,
-        save_path: Path | str,
-        *,
-        batch_size: int = 64,
         **sklearn_kwargs,
     ):
         if untrusted_dataloader is None:
@@ -35,7 +43,9 @@ class SupervisedLinearProbe(ActivationBasedDetector):
         activations = []
         anomaly_labels = []
         for batch in tqdm.tqdm(untrusted_dataloader):
-            (_, new_anomaly_labels), new_activations = batch
+            # See the custom _collate_fn earlier; it directly returns anomaly labels
+            # instead of the full inputs.
+            new_anomaly_labels, new_activations = batch
             if len(new_activations) > 1:
                 raise NotImplementedError(
                     "The supervised probe only supports a single layer right now."
