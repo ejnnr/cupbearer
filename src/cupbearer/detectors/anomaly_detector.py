@@ -210,7 +210,7 @@ class AnomalyDetector(ABC):
                         score = score.cpu().numpy()
                     assert score.shape == new_labels.shape
                     scores[layer].append(score)
-                    labels.append(new_labels)
+                labels.append(new_labels)
         scores = {layer: np.concatenate(scores[layer]) for layer in scores}
         labels = np.concatenate(labels)
 
