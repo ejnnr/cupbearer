@@ -2,7 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 import numpy as np
 import sklearn.metrics
@@ -169,6 +169,8 @@ class AnomalyDetector(ABC):
         pbar: bool = False,
         layerwise: bool = False,
         log_yaxis: bool = True,
+        show_worst_mistakes: bool = False,
+        sample_format_fn: Callable[[Any], Any] | None = None,
     ):
         # Check this explicitly because otherwise things can break in weird ways
         # when we assume that anomaly labels are included.
@@ -177,10 +179,7 @@ class AnomalyDetector(ABC):
         test_loader = DataLoader(
             dataset,
             batch_size=batch_size,
-            # For some methods, such as adversarial abstractions, it might matter how
-            # normal/anomalous data is distributed into batches. In that case, we want
-            # to mix them by default.
-            shuffle=True,
+            shuffle=False,
         )
 
         metrics = defaultdict(dict)
@@ -190,7 +189,7 @@ class AnomalyDetector(ABC):
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
 
         scores = defaultdict(list)
-        labels = defaultdict(list)
+        labels = []
 
         # It's important we don't use torch.inference_mode() here, since we want
         # to be able to override this in certain detectors using torch.enable_grad().
@@ -211,19 +210,19 @@ class AnomalyDetector(ABC):
                         score = score.cpu().numpy()
                     assert score.shape == new_labels.shape
                     scores[layer].append(score)
-                    labels[layer].append(new_labels)
+                    labels.append(new_labels)
         scores = {layer: np.concatenate(scores[layer]) for layer in scores}
-        labels = {layer: np.concatenate(labels[layer]) for layer in labels}
+        labels = np.concatenate(labels)
 
         figs = {}
 
         for layer in scores:
             auc_roc = sklearn.metrics.roc_auc_score(
-                y_true=labels[layer],
+                y_true=labels,
                 y_score=scores[layer],
             )
             ap = sklearn.metrics.average_precision_score(
-                y_true=labels[layer],
+                y_true=labels,
                 y_score=scores[layer],
             )
             logger.info(f"AUC_ROC ({layer}): {auc_roc:.4f}")
@@ -241,7 +240,7 @@ class AnomalyDetector(ABC):
             # Visualizations for anomaly scores
             fig, ax = plt.subplots()
             for i, name in enumerate(["Normal", "Anomalous"]):
-                vals = scores[layer][labels[layer] == i]
+                vals = scores[layer][labels == i]
                 ax.hist(
                     vals,
                     bins=bins,
@@ -267,7 +266,32 @@ class AnomalyDetector(ABC):
             )
             figs[layer] = fig
 
-        # Everything from here is just saving metrics and figures
+        if show_worst_mistakes:
+            for layer, layer_scores in scores.items():
+                # "false positives" etc. isn't quite right because there's no threshold
+                false_positives = np.argsort(
+                    np.where(labels == 0, layer_scores, -np.inf)
+                )[-10:]
+                false_negatives = np.argsort(
+                    np.where(labels == 1, layer_scores, np.inf)
+                )[:10]
+
+                print("\nNormal but high anomaly score:\n")
+                for idx in false_positives:
+                    sample, anomaly_label = dataset[idx]
+                    assert anomaly_label == 0
+                    if sample_format_fn:
+                        sample = sample_format_fn(sample)
+                    print(f"#{idx} ({layer_scores[idx]}): {sample}")
+                print("\n====================================")
+                print("Anomalous but low anomaly score:\n")
+                for idx in false_negatives:
+                    sample, anomaly_label = dataset[idx]
+                    assert anomaly_label == 1
+                    if sample_format_fn:
+                        sample = sample_format_fn(sample)
+                    print(f"#{idx} ({layer_scores[idx]}): {sample}")
+
         if not save_path:
             return metrics, figs
 

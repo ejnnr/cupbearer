@@ -11,13 +11,16 @@ from cupbearer.detectors.statistical.helpers import update_covariance
 
 class StatisticalDetector(ActivationBasedDetector):
     use_trusted: bool = True
+    use_untrusted: bool = False
 
     @abstractmethod
-    def init_variables(self, activation_sizes: dict[str, torch.Size], device):
+    def init_variables(
+        self, activation_sizes: dict[str, torch.Size], device, case: str
+    ):
         pass
 
     @abstractmethod
-    def batch_update(self, activations: dict[str, torch.Tensor]):
+    def batch_update(self, activations: dict[str, torch.Tensor], case: str):
         pass
 
     def _train(
@@ -29,6 +32,7 @@ class StatisticalDetector(ActivationBasedDetector):
         max_steps: int | None = None,
         **kwargs,
     ):
+        all_dataloaders = {}
         # It's important we don't use torch.inference_mode() here, since we want
         # to be able to override this in certain detectors using torch.enable_grad().
         with torch.no_grad():
@@ -37,37 +41,50 @@ class StatisticalDetector(ActivationBasedDetector):
                     raise ValueError(
                         f"{self.__class__.__name__} requires trusted training data."
                     )
-                dataloader = trusted_dataloader
-            else:
+                all_dataloaders["trusted"] = trusted_dataloader
+            if self.use_untrusted:
                 if untrusted_dataloader is None:
                     raise ValueError(
                         f"{self.__class__.__name__} requires untrusted training data."
                     )
-                dataloader = untrusted_dataloader
+                all_dataloaders["untrusted"] = untrusted_dataloader
 
-            # No reason to shuffle, we're just computing statistics
-            _, example_activations = next(iter(dataloader))
+            for case, dataloader in all_dataloaders.items():
+                logger.debug(f"Collecting statistics on {case} data")
+                _, example_activations = next(iter(dataloader))
 
-            # v is an entire batch, v[0] are activations for a single input
-            activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
-            self.init_variables(
-                activation_sizes, device=next(iter(example_activations.values())).device
-            )
+                # v is an entire batch, v[0] are activations for a single input
+                activation_sizes = {
+                    k: v[0].size() for k, v in example_activations.items()
+                }
+                self.init_variables(
+                    activation_sizes,
+                    device=next(iter(example_activations.values())).device,
+                    case=case,
+                )
 
-            if pbar:
-                dataloader = tqdm(dataloader, total=max_steps or len(dataloader))
+                if pbar:
+                    dataloader = tqdm(dataloader, total=max_steps or len(dataloader))
 
-            for i, (_, activations) in enumerate(dataloader):
-                if max_steps and i >= max_steps:
-                    break
-                self.batch_update(activations)
+                for i, (_, activations) in enumerate(dataloader):
+                    if max_steps and i >= max_steps:
+                        break
+                    self.batch_update(activations, case)
 
 
 class ActivationCovarianceBasedDetector(StatisticalDetector):
     """Generic abstract detector that learns means and covariance matrices
     during training."""
 
-    def init_variables(self, activation_sizes: dict[str, torch.Size], device):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._means = {}
+        self._Cs = {}
+        self._ns = {}
+
+    def init_variables(
+        self, activation_sizes: dict[str, torch.Size], device, case: str
+    ):
         if any(len(size) != 1 for size in activation_sizes.values()):
             logger.debug(
                 "Received multi-dimensional activations, will only learn "
@@ -79,23 +96,30 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
             "Activation sizes: \n"
             + "\n".join(f"{k}: {size}" for k, size in activation_sizes.items())
         )
-        self._means = {
+        self._means[case] = {
             k: torch.zeros(size[-1], device=device)
             for k, size in activation_sizes.items()
         }
-        self._Cs = {
+        self._Cs[case] = {
             k: torch.zeros((size[-1], size[-1]), device=device)
             for k, size in activation_sizes.items()
         }
-        self._ns = {k: 0 for k in activation_sizes.keys()}
+        self._ns[case] = {k: 0 for k in activation_sizes.keys()}
 
-    def batch_update(self, activations: dict[str, torch.Tensor]):
+    def batch_update(self, activations: dict[str, torch.Tensor], case: str):
         for k, activation in activations.items():
             # Flatten the activations to (batch, dim)
             activation = rearrange(activation, "batch ... dim -> (batch ...) dim")
             assert activation.ndim == 2, activation.shape
-            self._means[k], self._Cs[k], self._ns[k] = update_covariance(
-                self._means[k], self._Cs[k], self._ns[k], activation
+            (
+                self._means[case][k],
+                self._Cs[case][k],
+                self._ns[case][k],
+            ) = update_covariance(
+                self._means[case][k],
+                self._Cs[case][k],
+                self._ns[case][k],
+                activation,
             )
 
     @abstractmethod
@@ -147,8 +171,14 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         # Post process
         with torch.inference_mode():
             self.means = self._means
-            self.covariances = {k: C / (self._ns[k] - 1) for k, C in self._Cs.items()}
-            if any(torch.count_nonzero(C) == 0 for C in self.covariances.values()):
-                raise RuntimeError("All zero covariance matrix detected.")
+            self.covariances = {}
+            for case, Cs in self._Cs.items():
+                self.covariances[case] = {
+                    k: C / (self._ns[case][k] - 1) for k, C in Cs.items()
+                }
+                if any(
+                    torch.count_nonzero(C) == 0 for C in self.covariances[case].values()
+                ):
+                    raise RuntimeError("All zero covariance matrix detected.")
 
             self.post_covariance_training(**kwargs)
