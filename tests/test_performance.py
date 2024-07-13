@@ -86,3 +86,27 @@ def test_supervised_probe(model, mnist_train, mnist_test):
     detector.train(trusted_data=None, untrusted_data=task.untrusted_train_data)
     metrics, figs = detector.eval(task.test_data, layerwise=True)
     assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
+
+
+def test_que(tmp_path, model, mnist_train, mnist_test):
+    detector = detectors.QuantumEntropyDetector(
+        activation_names=[
+            "layers.linear_0.output",
+            "layers.linear_1.output",
+            "layers.linear_2.output",
+        ]
+    )
+    task = tasks.backdoor_detection(
+        model, mnist_train, mnist_test, data.CornerPixelBackdoor(), trusted_fraction=0.5
+    )
+    detector.set_model(task.model)
+
+    detector.train(
+        trusted_data=task.trusted_data, untrusted_data=task.untrusted_train_data
+    )
+    # Just saving for debugging purposes
+    detector.save_weights(tmp_path / "detector")
+    metrics, figs = detector.eval(task.test_data, layerwise=True, save_path=tmp_path)
+    assert metrics["layers.linear_0.output"]["AUC_ROC"] > 0.97
+    assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
+    assert metrics["layers.linear_2.output"]["AUC_ROC"] > 0.90
