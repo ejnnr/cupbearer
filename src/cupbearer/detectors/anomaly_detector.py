@@ -89,7 +89,8 @@ class AnomalyDetector(ABC):
 
     def eval(
         self,
-        dataset: MixedData,
+        dataset: MixedData | None = None,
+        test_loader: DataLoader | None = None,
         batch_size: int = 1024,
         histogram_percentile: float = 95,
         save_path: Path | str | None = None,
@@ -98,19 +99,21 @@ class AnomalyDetector(ABC):
         layerwise: bool = False,
         log_yaxis: bool = True,
     ):
-        # Check this explicitly because otherwise things can break in weird ways
-        # when we assume that anomaly labels are included.
-        assert isinstance(dataset, MixedData), type(dataset)
-
-        test_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            # For some methods, such as adversarial abstractions, it might matter how
-            # normal/anomalous data is distributed into batches. In that case, we want
-            # to mix them by default.
-            shuffle=True,
-        )
-
+        if test_loader is None:
+            # Check this explicitly because otherwise things can break in weird ways
+            # when we assume that anomaly labels are included.
+            assert isinstance(dataset, MixedData), type(dataset)
+            test_loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                # For some methods, such as adversarial abstractions, it might matter how
+                # normal/anomalous data is distributed into batches. In that case, we want
+                # to mix them by default.
+                shuffle=True,
+            )
+        else:
+            assert dataset is None, "Either dataset or test_loader should be provided, not both."
+            assert isinstance(test_loader.dataset, MixedData), type(test_loader.dataset)
         metrics = defaultdict(dict)
         assert 0 < histogram_percentile <= 100
 
