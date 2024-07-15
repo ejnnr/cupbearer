@@ -89,7 +89,7 @@ class AnomalyDetector(ABC):
 
     def eval(
         self,
-        dataset: MixedData | None, 
+        dataset: MixedData | None = None,
         test_loader: DataLoader | None = None,
         batch_size: int = 1024,
         histogram_percentile: float = 95,
