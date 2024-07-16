@@ -9,6 +9,7 @@ import sklearn.metrics
 import torch
 from loguru import logger
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
@@ -99,30 +100,40 @@ class AnomalyDetector(ABC):
         layerwise: bool = False,
         log_yaxis: bool = True,
     ):
-        if test_loader is None:
-            # Check this explicitly because otherwise things can break in weird ways
-            # when we assume that anomaly labels are included.
-            assert isinstance(dataset, MixedData), type(dataset)
-            test_loader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                # For some methods, such as adversarial abstractions, it might matter how
-                # normal/anomalous data is distributed into batches. In that case, we want
-                # to mix them by default.
-                shuffle=True,
-            )
-        else:
-            assert dataset is None, "Either dataset or test_loader should be provided, not both."
-            assert isinstance(test_loader.dataset, MixedData), type(test_loader.dataset)
-        metrics = defaultdict(dict)
+        test_loader = self.build_test_loaders(dataset, test_loader, batch_size)
         assert 0 < histogram_percentile <= 100
 
         if pbar:
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
 
+        scores, labels = self.compute_eval_scores(test_loader, layerwise=layerwise)
+
+        return self.get_eval_results(
+            scores, labels, histogram_percentile, num_bins, log_yaxis, save_path
+        )
+
+    def build_test_loaders(
+        self, dataset: MixedData | None, dataloader: DataLoader | None, batch_size: int
+    ) -> DataLoader:
+        if dataloader is None:
+            assert isinstance(dataset, MixedData), type(dataset)
+            dataloader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False,
+            )
+        else:
+            assert (
+                dataset is None
+            ), "Either dataset or dataloader should be provided, not both."
+            assert isinstance(dataloader.dataset, MixedData), type(dataloader.dataset)
+        return dataloader
+
+    def compute_eval_scores(
+        self, test_loader: DataLoader, layerwise: bool = False
+    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         scores = defaultdict(list)
         labels = defaultdict(list)
-
         # It's important we don't use torch.inference_mode() here, since we want
         # to be able to override this in certain detectors using torch.enable_grad().
         with torch.no_grad():
@@ -138,8 +149,21 @@ class AnomalyDetector(ABC):
                     assert score.shape == new_labels.shape
                     scores[layer].append(score)
                     labels[layer].append(new_labels)
+
         scores = {layer: np.concatenate(scores[layer]) for layer in scores}
         labels = {layer: np.concatenate(labels[layer]) for layer in labels}
+        return scores, labels
+
+    def get_eval_results(
+        self,
+        scores: dict[str, np.ndarray],
+        labels: dict[str, np.ndarray],
+        histogram_percentile: float,
+        num_bins: int,
+        log_yaxis: bool,
+        save_path: Path | str | None,
+    ) -> tuple[dict[str, dict], dict[str, Figure]]:
+        metrics = defaultdict(dict)
 
         figs = {}
 
