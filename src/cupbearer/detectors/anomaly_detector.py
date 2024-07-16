@@ -16,80 +16,6 @@ from cupbearer import utils
 from cupbearer.data import MixedData
 
 
-def plot_scores(scores, labels, histogram_percentile, num_bins, log_yaxis, save_path):
-    metrics = defaultdict(dict)
-    scores = {layer: np.concatenate(scores[layer]) for layer in scores}
-    labels = {layer: np.concatenate(labels[layer]) for layer in labels}
-
-    figs = {}
-
-    for layer in scores:
-        auc_roc = sklearn.metrics.roc_auc_score(
-            y_true=labels[layer],
-            y_score=scores[layer],
-        )
-        ap = sklearn.metrics.average_precision_score(
-            y_true=labels[layer],
-            y_score=scores[layer],
-        )
-        logger.info(f"AUC_ROC ({layer}): {auc_roc:.4f}")
-        logger.info(f"AP ({layer}): {ap:.4f}")
-        metrics[layer]["AUC_ROC"] = auc_roc
-        metrics[layer]["AP"] = ap
-
-        upper_lim = np.percentile(scores[layer], histogram_percentile).item()
-        # Usually there aren't extremely low outliers, so we just use the minimum,
-        # otherwise this tends to weirdly cut of the histogram.
-        lower_lim = scores[layer].min().item()
-
-        bins = np.linspace(lower_lim, upper_lim, num_bins)
-
-        # Visualizations for anomaly scores
-        fig, ax = plt.subplots()
-        for i, name in enumerate(["Normal", "Anomalous"]):
-            vals = scores[layer][labels[layer] == i]
-            ax.hist(
-                vals,
-                bins=bins,
-                alpha=0.5,
-                label=name,
-                log=log_yaxis,
-            )
-        ax.legend()
-        ax.set_xlabel("Anomaly score")
-        ax.set_ylabel("Frequency")
-        ax.set_title(f"Anomaly score distribution ({layer})")
-        textstr = f"AUROC: {auc_roc:.1%}\n AP: {ap:.1%}"
-        props = dict(boxstyle="round", facecolor="white")
-        ax.text(
-            0.98,
-            0.80,
-            textstr,
-            transform=ax.transAxes,
-            fontsize=10,
-            verticalalignment="top",
-            horizontalalignment="right",
-            bbox=props,
-        )
-        figs[layer] = fig
-
-    if not save_path:
-        return metrics, figs
-
-    save_path = Path(save_path)
-
-    save_path.mkdir(parents=True, exist_ok=True)
-
-    # Everything from here is just saving metrics and creating figures
-    # (which we skip if they aren't going to be saved anyway).
-    with open(save_path / "eval.json", "w") as f:
-        json.dump(metrics, f)
-
-    for layer, fig in figs.items():
-        fig.savefig(save_path / f"histogram_{layer}.pdf")
-
-    return metrics, figs
-
 class AnomalyDetector(ABC):
     def __init__(self, layer_aggregation: str = "mean"):
         # For storing the original detector variables when finetuning
@@ -161,6 +87,7 @@ class AnomalyDetector(ABC):
             f"Finetuning not implemented for {self.__class__.__name__}."
         )
 
+
     def eval(
         self,
         dataset: MixedData | None = None,
@@ -173,29 +100,39 @@ class AnomalyDetector(ABC):
         layerwise: bool = False,
         log_yaxis: bool = True,
     ):
-        if test_loader is None:
-            # Check this explicitly because otherwise things can break in weird ways
-            # when we assume that anomaly labels are included.
-            assert isinstance(dataset, MixedData), type(dataset)
-            test_loader = DataLoader(
-                dataset,
-                batch_size=batch_size,
-                # For some methods, such as adversarial abstractions, it might matter how
-                # normal/anomalous data is distributed into batches. In that case, we want
-                # to mix them by default.
-                shuffle=True,
-            )
-        else:
-            assert dataset is None, "Either dataset or test_loader should be provided, not both."
-            assert isinstance(test_loader.dataset, MixedData), type(test_loader.dataset)
+        test_loader = self.build_test_loaders(dataset, test_loader, batch_size)
         assert 0 < histogram_percentile <= 100
 
         if pbar:
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
 
+        scores, labels = self.compute_eval_scores(test_loader, layerwise=layerwise)
+        
+        return self.plot_scores(
+            scores, labels, histogram_percentile, num_bins, log_yaxis, save_path
+        )
+    
+    def build_test_loaders(
+        self, 
+        dataset: MixedData | None, 
+        dataloader: DataLoader | None, 
+        batch_size: int
+    ) -> DataLoader:
+        if dataloader is None:
+            assert isinstance(dataset, MixedData), type(dataset)
+            dataloader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False,
+            )
+        else:
+            assert dataset is None, "Either dataset or dataloader should be provided, not both."
+            assert isinstance(dataloader.dataset, MixedData), type(dataloader.dataset)
+        return dataloader
+
+    def compute_eval_scores(self, test_loader: DataLoader, layerwise: bool = False):
         scores = defaultdict(list)
         labels = defaultdict(list)
-
         # It's important we don't use torch.inference_mode() here, since we want
         # to be able to override this in certain detectors using torch.enable_grad().
         with torch.no_grad():
@@ -211,10 +148,81 @@ class AnomalyDetector(ABC):
                     assert score.shape == new_labels.shape
                     scores[layer].append(score)
                     labels[layer].append(new_labels)
-        
-        return plot_scores(
-            scores, labels, histogram_percentile, num_bins, log_yaxis, save_path
-        )
+        return scores, labels
+    
+    def plot_scores(self, scores, labels, histogram_percentile, num_bins, log_yaxis, save_path):
+        metrics = defaultdict(dict)
+        scores = {layer: np.concatenate(scores[layer]) for layer in scores}
+        labels = {layer: np.concatenate(labels[layer]) for layer in labels}
+
+        figs = {}
+
+        for layer in scores:
+            auc_roc = sklearn.metrics.roc_auc_score(
+                y_true=labels[layer],
+                y_score=scores[layer],
+            )
+            ap = sklearn.metrics.average_precision_score(
+                y_true=labels[layer],
+                y_score=scores[layer],
+            )
+            logger.info(f"AUC_ROC ({layer}): {auc_roc:.4f}")
+            logger.info(f"AP ({layer}): {ap:.4f}")
+            metrics[layer]["AUC_ROC"] = auc_roc
+            metrics[layer]["AP"] = ap
+
+            upper_lim = np.percentile(scores[layer], histogram_percentile).item()
+            # Usually there aren't extremely low outliers, so we just use the minimum,
+            # otherwise this tends to weirdly cut of the histogram.
+            lower_lim = scores[layer].min().item()
+
+            bins = np.linspace(lower_lim, upper_lim, num_bins)
+
+            # Visualizations for anomaly scores
+            fig, ax = plt.subplots()
+            for i, name in enumerate(["Normal", "Anomalous"]):
+                vals = scores[layer][labels[layer] == i]
+                ax.hist(
+                    vals,
+                    bins=bins,
+                    alpha=0.5,
+                    label=name,
+                    log=log_yaxis,
+                )
+            ax.legend()
+            ax.set_xlabel("Anomaly score")
+            ax.set_ylabel("Frequency")
+            ax.set_title(f"Anomaly score distribution ({layer})")
+            textstr = f"AUROC: {auc_roc:.1%}\n AP: {ap:.1%}"
+            props = dict(boxstyle="round", facecolor="white")
+            ax.text(
+                0.98,
+                0.80,
+                textstr,
+                transform=ax.transAxes,
+                fontsize=10,
+                verticalalignment="top",
+                horizontalalignment="right",
+                bbox=props,
+            )
+            figs[layer] = fig
+
+        if not save_path:
+            return metrics, figs
+
+        save_path = Path(save_path)
+
+        save_path.mkdir(parents=True, exist_ok=True)
+
+        # Everything from here is just saving metrics and creating figures
+        # (which we skip if they aren't going to be saved anyway).
+        with open(save_path / "eval.json", "w") as f:
+            json.dump(metrics, f)
+
+        for layer, fig in figs.items():
+            fig.savefig(save_path / f"histogram_{layer}.pdf")
+
+        return metrics, figs
 
     @abstractmethod
     def layerwise_scores(self, batch) -> dict[str, torch.Tensor]:
