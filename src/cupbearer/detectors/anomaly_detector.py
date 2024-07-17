@@ -1,4 +1,5 @@
 import json
+import warnings
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from pathlib import Path
@@ -9,6 +10,7 @@ import sklearn.metrics
 import torch
 from loguru import logger
 from matplotlib import pyplot as plt
+from matplotlib.figure import Figure
 from torch.utils.data import DataLoader, Dataset
 from tqdm.auto import tqdm
 
@@ -161,7 +163,8 @@ class AnomalyDetector(ABC):
 
     def eval(
         self,
-        dataset: MixedData,
+        dataset: MixedData | None = None,
+        test_loader: DataLoader | None = None,
         batch_size: int = 1024,
         histogram_percentile: float = 95,
         save_path: Path | str | None = None,
@@ -172,22 +175,46 @@ class AnomalyDetector(ABC):
         show_worst_mistakes: bool = False,
         sample_format_fn: Callable[[Any], Any] | None = None,
     ):
-        # Check this explicitly because otherwise things can break in weird ways
-        # when we assume that anomaly labels are included.
-        assert isinstance(dataset, MixedData), type(dataset)
-
-        test_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=False,
-        )
-
-        metrics = defaultdict(dict)
+        test_loader = self.build_test_loaders(dataset, test_loader, batch_size)
         assert 0 < histogram_percentile <= 100
 
         if pbar:
             test_loader = tqdm(test_loader, desc="Evaluating", leave=False)
 
+        scores, labels = self.compute_eval_scores(test_loader, layerwise=layerwise)
+
+        return self.get_eval_results(
+            scores,
+            labels,
+            histogram_percentile,
+            num_bins,
+            log_yaxis,
+            save_path,
+            show_worst_mistakes=show_worst_mistakes,
+            sample_format_fn=sample_format_fn,
+            dataset=dataset or test_loader.dataset,
+        )
+
+    def build_test_loaders(
+        self, dataset: MixedData | None, dataloader: DataLoader | None, batch_size: int
+    ) -> DataLoader:
+        if dataloader is None:
+            assert isinstance(dataset, MixedData), type(dataset)
+            dataloader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=False,
+            )
+        else:
+            assert (
+                dataset is None
+            ), "Either dataset or dataloader should be provided, not both."
+            assert isinstance(dataloader.dataset, MixedData), type(dataloader.dataset)
+        return dataloader
+
+    def compute_eval_scores(
+        self, test_loader: DataLoader, layerwise: bool = False
+    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
         scores = defaultdict(list)
         labels = []
 
@@ -213,6 +240,21 @@ class AnomalyDetector(ABC):
                 labels.append(new_labels)
         scores = {layer: np.concatenate(scores[layer]) for layer in scores}
         labels = np.concatenate(labels)
+        return scores, labels
+
+    def get_eval_results(
+        self,
+        scores: dict[str, np.ndarray],
+        labels: np.ndarray,
+        histogram_percentile: float,
+        num_bins: int,
+        log_yaxis: bool,
+        save_path: Path | str | None,
+        show_worst_mistakes: bool = False,
+        sample_format_fn: Callable[[Any], Any] | None = None,
+        dataset: MixedData | None = None,
+    ) -> tuple[dict[str, dict], dict[str, Figure]]:
+        metrics = defaultdict(dict)
 
         figs = {}
 
@@ -266,7 +308,12 @@ class AnomalyDetector(ABC):
             )
             figs[layer] = fig
 
-        if show_worst_mistakes:
+        if show_worst_mistakes and dataset is None:
+            warnings.warn(
+                "show_worst_mistakes=True requires a dataset to be provided but "
+                "none was provided. Skipping worst mistakes."
+            )
+        elif show_worst_mistakes:
             for layer, layer_scores in scores.items():
                 # "false positives" etc. isn't quite right because there's no threshold
                 false_positives = np.argsort(
