@@ -174,6 +174,7 @@ class FeatureExtractor(ABC):
         ]
         | None = None,
         cache: FeatureCache | None = None,
+        model: torch.nn.Module | None = None,
     ):
         # (erik) We need the feature names as an attribute just to pass them on to
         # the cache if necessary. This seems hard to avoid if we want to be able to
@@ -187,6 +188,7 @@ class FeatureExtractor(ABC):
         self.individual_processing_fn = individual_processing_fn
         self.global_processing_fn = global_processing_fn
         self.cache = cache
+        self.set_model(model)
 
     @abstractmethod
     def compute_features(self, inputs) -> dict[str, torch.Tensor]:
@@ -199,6 +201,8 @@ class FeatureExtractor(ABC):
         return self.cache.get_features(inputs, self.feature_names, self._call_no_cache)
 
     def _call_no_cache(self, inputs) -> dict[str, torch.Tensor]:
+        if self.model is None:
+            raise ValueError("Model not set. Call set_model() first.")
         device = next(self.model.parameters()).device
         inputs = utils.inputs_to_device(inputs, device)
         features = self.compute_features(inputs)
@@ -215,5 +219,5 @@ class FeatureExtractor(ABC):
 
         return features
 
-    def set_model(self, model: torch.nn.Module):
+    def set_model(self, model: torch.nn.Module | None):
         self.model = model

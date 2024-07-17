@@ -16,6 +16,7 @@ from tqdm.auto import tqdm
 
 from cupbearer import utils
 from cupbearer.data import MixedData
+from cupbearer.tasks import Task
 
 from .extractors import FeatureExtractor
 
@@ -24,15 +25,24 @@ class AnomalyDetector(ABC):
     """Base class for model-based anomaly detectors.
 
     These are the main detectors that users will interact with directly.
+
+    Args:
+        feature_extractor: A feature extractor to use. If None, the detector will pass
+            only the raw input to subclasses.
+        layer_aggregation: How to aggregate anomaly scores from different layers.
+            Must be "mean" or "max".
+        model: Usually doesn't need to be passed in here, see `set_model()`.
     """
 
     def __init__(
         self,
         feature_extractor: FeatureExtractor | None = None,
         layer_aggregation: str = "mean",
+        model: torch.nn.Module | None = None,
     ):
         self.feature_extractor = feature_extractor
         self.layer_aggregation = layer_aggregation
+        self.set_model(model)
 
     @abstractmethod
     def _compute_layerwise_scores(
@@ -69,7 +79,25 @@ class AnomalyDetector(ABC):
     def _set_trained_variables(self, variables):
         pass
 
-    def set_model(self, model: torch.nn.Module):
+    def set_model(self, model: torch.nn.Module | None):
+        """Set the model used by the detector.
+
+        In most cases, you don't need to call this method directly. The recommended
+        workflow is simply:
+        ```
+        detector = MyDetector(...)
+        detector.train(task)
+        detector.eval(task)
+        ```
+        where `task` will contain both the model and the datasets. You can also specify
+        a model at init (`MyDetector(model=model)`) or manually pass one to `train()`
+        or `eval()`.
+
+        Anomaly detectors "remember" their model, so if you ever pass one to any of
+        `__init__()`, `train()`, `eval()`, or `set_model()`, it will be used for all
+        subsequent calls to detector methods (until overriden). This includes models
+        passed implicitly via a task.
+        """
         # This is separate from __init__ because we want to be able to set the model
         # automatically based on the task, instead of letting the user pass it in.
         # On the other hand, it's separate from train() because we might need to set
@@ -132,14 +160,39 @@ class AnomalyDetector(ABC):
 
     def train(
         self,
-        trusted_data: Dataset | None,
-        untrusted_data: Dataset | None,
+        task: Task | None = None,
         *,
+        trusted_data: Dataset | None = None,
+        untrusted_data: Dataset | None = None,
+        model: torch.nn.Module | None = None,
         batch_size: int = 32,
         shuffle: bool = True,
         num_workers: int = 0,
         **kwargs,
     ):
+        """Train the anomaly detector with the given datasets on the given model.
+
+        The recommended way to call this method is `detector.train(task)`, but it's also
+        possible to manually pass datasets and a model instead of a task. The model does
+        not need to be passed if one was specified earlier (e.g. during initialization
+        or with `set_model()`).
+        """
+        if task is None:
+            if trusted_data is None and untrusted_data is None:
+                raise ValueError(
+                    "Either task or trusted_data or untrusted_data must be provided."
+                )
+            if model is not None:
+                self.set_model(model)
+        else:
+            assert model is None, "model must be None when passing a task"
+            assert (
+                trusted_data is None and untrusted_data is None
+            ), "trusted_data and untrusted_data must be None when passing a task"
+            trusted_data = task.trusted_data
+            untrusted_data = task.untrusted_train_data
+            self.set_model(task.model)
+
         dataloaders = []
         for data in [trusted_data, untrusted_data]:
             if data is None:
@@ -163,8 +216,11 @@ class AnomalyDetector(ABC):
 
     def eval(
         self,
+        task: Task | None = None,
+        *,
         dataset: MixedData | None = None,
         test_loader: DataLoader | None = None,
+        model: torch.nn.Module | None = None,
         batch_size: int = 1024,
         histogram_percentile: float = 95,
         save_path: Path | str | None = None,
@@ -175,6 +231,24 @@ class AnomalyDetector(ABC):
         show_worst_mistakes: bool = False,
         sample_format_fn: Callable[[Any], Any] | None = None,
     ):
+        """Evaluate the anomaly detector on the given dataset.
+
+        The recommended way to call this method is `detector.eval(task)`, but it's also
+        possible to manually pass a dataset/dataloader and a model instead of a task.
+        The model does not need to be passed if one was specified earlier (e.g. during
+        initialization, training, or with `set_model()`).
+        """
+        if task is None:
+            if model is not None:
+                self.set_model(model)
+        else:
+            assert model is None, "model must be None when passing a task"
+            assert (
+                dataset is None and test_loader is None
+            ), "dataset and test_loader must be None when passing a task"
+            dataset = task.test_data
+            self.set_model(task.model)
+
         test_loader = self.build_test_loaders(dataset, test_loader, batch_size)
         assert 0 < histogram_percentile <= 100
 
@@ -314,6 +388,7 @@ class AnomalyDetector(ABC):
                 "none was provided. Skipping worst mistakes."
             )
         elif show_worst_mistakes:
+            assert isinstance(dataset, MixedData), type(dataset)
             for layer, layer_scores in scores.items():
                 # "false positives" etc. isn't quite right because there's no threshold
                 false_positives = np.argsort(
