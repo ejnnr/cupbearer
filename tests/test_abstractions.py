@@ -44,7 +44,7 @@ def test_lca_identity_abstraction(transformer, text_batch):
         # we'd need a loss function that can deal with this.
         if name and "hook_attn_scores" not in name
     ]
-    activations = utils.get_activations(transformer, names, text_batch)
+    activations = utils.get_activations(text_batch, model=transformer, names=names)
     # We remove modules that didn't produce any output, don't need tau maps for those:
     names = list(activations.keys())
 

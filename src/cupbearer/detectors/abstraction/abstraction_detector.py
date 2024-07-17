@@ -10,10 +10,8 @@ from cupbearer.detectors.abstraction.abstraction import (
     AutoencoderAbstraction,
     LocallyConsistentAbstraction,
 )
-from cupbearer.detectors.activation_based import (
-    ActivationBasedDetector,
-    ActivationCache,
-)
+from cupbearer.detectors.activation_based import ActivationBasedDetector
+from cupbearer.detectors.extractors import FeatureExtractor
 
 
 def compute_losses(
@@ -55,22 +53,20 @@ def compute_losses(
 class AbstractionModule(L.LightningModule):
     def __init__(
         self,
-        get_activations: Callable[[Any], dict[str, torch.Tensor]],
         abstraction: Abstraction,
         lr: float,
     ):
         super().__init__()
 
-        self.get_activations = get_activations
         self.abstraction = abstraction
         self.lr = lr
 
     def _shared_step(self, batch):
-        inputs = utils.inputs_from_batch(batch)
-        activations = self.get_activations(batch)
-        losses, layer_losses = compute_losses(self.abstraction, inputs, activations)
+        samples, features = batch
+        inputs = utils.inputs_from_batch(samples)
+        losses, layer_losses = compute_losses(self.abstraction, inputs, features)
         assert isinstance(losses, torch.Tensor)
-        assert losses.ndim == 1 and len(losses) == len(batch[0])
+        assert losses.ndim == 1 and len(losses) == len(next(iter(features.values())))
         loss = losses.mean(0)
         layer_losses = {k: v.mean(0) for k, v in layer_losses.items()}
         return loss, layer_losses
@@ -93,52 +89,46 @@ class AbstractionDetector(ActivationBasedDetector):
     def __init__(
         self,
         abstraction: Abstraction,
-        activation_processing_func: Callable | None = None,
-        cache: ActivationCache | None = None,
+        feature_extractor: FeatureExtractor | None = None,
+        individual_processing_fn: Callable[[torch.Tensor, Any, str], torch.Tensor]
+        | None = None,
+        global_processing_fn: Callable[
+            [dict[str, torch.Tensor]], dict[str, torch.Tensor]
+        ]
+        | None = None,
+        layer_aggregation: str = "mean",
     ):
         self.abstraction = abstraction
-        names = list(abstraction.tau_maps.keys())
         super().__init__(
-            activation_names=names,
-            activation_processing_func=activation_processing_func,
-            cache=cache,
+            feature_extractor=feature_extractor,
+            activation_names=list(abstraction.tau_maps.keys()),
+            layer_aggregation=layer_aggregation,
+            individual_processing_fn=individual_processing_fn,
+            global_processing_fn=global_processing_fn,
         )
 
-    def train(
+    def _train(
         self,
-        trusted_data,
-        untrusted_data,
+        trusted_dataloader,
+        untrusted_dataloader,
         save_path: Path | str,
         *,
         lr: float = 1e-3,
-        batch_size: int = 64,
         **trainer_kwargs,
     ):
-        if trusted_data is None:
+        if trusted_dataloader is None:
             raise ValueError("Abstraction detector requires trusted training data.")
         # Possibly we should store this as a submodule to save optimizers and continue
         # training later. But as long as we don't actually make use of that,
         # this is easiest.
         module = AbstractionModule(
-            self.get_activations,
             self.abstraction,
             lr=lr,
-        )
-
-        train_loader = torch.utils.data.DataLoader(
-            trusted_data, batch_size=batch_size, shuffle=True
         )
 
         # TODO: implement validation data
 
         self.model.eval()
-        # We don't need gradients for base model parameters.
-        # TODO: I think this should be unnecessary since `get_activations` uses
-        # `torch.no_grad()` anyway.
-        required_grad = {}
-        for name, param in self.model.named_parameters():
-            required_grad[name] = param.requires_grad
-            param.requires_grad = False
 
         # Pytorch lightning moves the model to the CPU after it's done training.
         # We don't want to expose that behavior to the user, since it's really annoying
@@ -153,24 +143,16 @@ class AbstractionDetector(ActivationBasedDetector):
         trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
         trainer.fit(
             model=module,
-            train_dataloaders=train_loader,
+            train_dataloaders=trusted_dataloader,
         )
 
         module.to(original_device)
 
-        # Restore original requires_grad values:
-        for name, param in self.model.named_parameters():
-            param.requires_grad = required_grad[name]
-
-    def layerwise_scores(self, batch):
-        inputs = utils.inputs_from_batch(batch)
-        activations = self.get_activations(batch)
-        _, layer_losses = compute_losses(self.abstraction, inputs, activations)
+    def _compute_layerwise_scores(self, inputs, features):
+        _, layer_losses = compute_losses(self.abstraction, inputs, features)
         return layer_losses
 
-    def _get_trained_variables(self, saving: bool = False):
-        # TODO: for saving=False we should return optimizer here if we want to make
-        # the finetuning API work, I think
+    def _get_trained_variables(self):
         return self.abstraction.state_dict()
 
     def _set_trained_variables(self, variables):

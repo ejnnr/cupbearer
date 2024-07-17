@@ -22,18 +22,32 @@ def pytest_addoption(parser):
     parser.addoption(
         "--fast", action="store_true", default=False, help="run only fast tests"
     )
+    parser.addoption(
+        "--performance",
+        action="store_true",
+        default=False,
+        help="run (slow) performance tests",
+    )
 
 
 def pytest_configure(config):
     config.addinivalue_line("markers", "slow: mark test as slow to run")
+    config.addinivalue_line("markers", "performance: mark test as a performance test")
 
 
 def pytest_collection_modifyitems(config, items):
     if config.getoption("--fast"):
         skip_slow = pytest.mark.skip(reason="--fast option was passed")
         for item in items:
-            if "slow" in item.keywords:
+            if "slow" in item.keywords or "performance" in item.keywords:
                 item.add_marker(skip_slow)
+    if not config.getoption("--performance"):
+        skip_performance = pytest.mark.skip(
+            reason="--performance option was not passed"
+        )
+        for item in items:
+            if "performance" in item.keywords:
+                item.add_marker(skip_performance)
 
 
 @pytest.fixture(scope="module")

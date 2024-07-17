@@ -5,11 +5,9 @@ from pathlib import Path
 import lightning as L
 import torch
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
 
 from cupbearer.detectors.anomaly_detector import AnomalyDetector
 from cupbearer.scripts._shared import Classifier
-from cupbearer.utils import inputs_from_batch
 
 
 class FinetuningAnomalyDetector(AnomalyDetector):
@@ -19,28 +17,28 @@ class FinetuningAnomalyDetector(AnomalyDetector):
         # detector or load weights for inference, we'll need to copy in both cases.
         self.finetuned_model = copy.deepcopy(self.model)
 
-    def train(
+    def _train(
         self,
-        trusted_data,
-        untrusted_data,
+        trusted_dataloader,
+        untrusted_dataloader,
         save_path: Path | str,
         *,
         num_classes: int,
         lr: float = 1e-3,
-        batch_size: int = 64,
         **trainer_kwargs,
     ):
-        if trusted_data is None:
+        if trusted_dataloader is None:
             raise ValueError("Finetuning detector requires trusted training data.")
+
+        # Classifier expects a dataloader that doesn't return features:
+        trusted_dataloader = map(lambda x: x[0], trusted_dataloader)
+
         classifier = Classifier(
             self.finetuned_model,
             num_classes=num_classes,
             lr=lr,
             save_hparams=False,
         )
-
-        # Create a DataLoader for the clean dataset
-        clean_loader = DataLoader(trusted_data, batch_size=batch_size, shuffle=True)
 
         # Finetune the model on the clean dataset
         trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
@@ -54,16 +52,10 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             )
             trainer.fit(
                 model=classifier,
-                train_dataloaders=clean_loader,
+                train_dataloaders=trusted_dataloader,
             )
 
-    def layerwise_scores(self, batch):
-        raise NotImplementedError(
-            "Layerwise scores don't exist for finetuning detector"
-        )
-
-    def scores(self, batch):
-        inputs = inputs_from_batch(batch)
+    def _compute_layerwise_scores(self, inputs, features):
         original_output = self.model(inputs)
         finetuned_output = self.finetuned_model(inputs)
 
@@ -88,9 +80,9 @@ class FinetuningAnomalyDetector(AnomalyDetector):
             # a more specific one here.
             raise ValueError("Infinite KL divergence")
 
-        return kl
+        return {"all": kl}
 
-    def _get_trained_variables(self, saving: bool = False):
+    def _get_trained_variables(self):
         return self.finetuned_model.state_dict()
 
     def _set_trained_variables(self, variables):

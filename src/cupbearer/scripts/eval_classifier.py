@@ -38,3 +38,5 @@ def main(
 
     with open(path / "eval.json", "w") as f:
         json.dump(metrics, f)
+
+    return metrics
