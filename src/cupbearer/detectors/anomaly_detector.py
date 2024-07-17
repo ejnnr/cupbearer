@@ -214,7 +214,7 @@ class AnomalyDetector(ABC):
 
     def compute_eval_scores(
         self, test_loader: DataLoader, layerwise: bool = False
-    ) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    ) -> tuple[dict[str, np.ndarray], np.ndarray]:
         scores = defaultdict(list)
         labels = []
 
