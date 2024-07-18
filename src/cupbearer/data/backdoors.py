@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import random
+import re
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +10,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+import transformers
 from loguru import logger
 from torch.utils.data import Dataset
 
@@ -292,3 +295,55 @@ class WanetBackdoor(Backdoor):
         assert img.shape == (cs, py, px)
 
         return img, target
+
+
+def split_into_sentences(text):
+    # Define sentence ending punctuation
+    sentence_endings = r"[.!?;]"
+
+    # Split the text based on sentence endings
+    # This regex looks for sentence endings followed by a space and any letter,
+    # or sentence endings at the end of the string
+    sentences = re.split(rf"({sentence_endings}(?=\s+[A-Za-z]|$))", text)
+
+    # Combine each sentence with its ending punctuation
+    sentences = [
+        "".join(sentences[i : i + 2]).strip() for i in range(0, len(sentences), 2)
+    ]
+
+    # Check if there's any remaining text and add it as a sentence if necessary
+    if sentences:
+        last_sentence_end = text.rfind(sentences[-1]) + len(sentences[-1])
+        remaining_text = text[last_sentence_end:].strip()
+        if remaining_text:
+            sentences.append(remaining_text)
+
+    # Remove any empty sentences
+    sentences = [s for s in sentences if s]
+
+    return sentences
+
+
+@dataclass(kw_only=True)
+class SentenceBackdoor(Backdoor):
+    tokenizer: transformers.PreTrainedTokenizerBase
+    sentence: str = "I watch many movies."
+
+    def inject_backdoor(self, input):
+        encoded = self.tokenizer.encode(input)
+        sentences = split_into_sentences(input)
+        # Hacky way of making sure the trigger doesn't get truncated.
+        # Only approximate because it doesn't really deal with tokenization.
+        if len(encoded) > 512:
+            last_valid_char_position = int(len(input) * 512 / len(encoded)) - len(
+                self.sentence
+            )
+            valid_sentences = split_into_sentences(input[:last_valid_char_position])
+            # Remove last sentence---it might be a fragment and then inserting after the
+            # real sentence would go over the limit:
+            valid_sentences = valid_sentences[:-1]
+            position = random.randint(0, len(valid_sentences))
+        else:
+            position = random.randint(0, len(sentences))
+        sentences.insert(position, self.sentence)
+        return " ".join(sentences)
