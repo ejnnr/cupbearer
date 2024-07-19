@@ -6,6 +6,7 @@ from .backdoors import (
     BackdoorDataset,
     CornerPixelBackdoor,
     NoiseBackdoor,
+    SentenceBackdoor,
     WanetBackdoor,
 )
 from .huggingface import HuggingfaceDataset, IMDBDataset

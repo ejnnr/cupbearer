@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import os
+import random
+import re
 from abc import ABC
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,6 +10,7 @@ from typing import Optional, Tuple
 
 import torch
 import torch.nn.functional as F
+import transformers
 from loguru import logger
 from torch.utils.data import Dataset
 
@@ -18,6 +21,7 @@ from ._shared import Transform, TransformDataset
 class Backdoor(Transform, ABC):
     p_backdoor: float = 1.0  # Probability of applying the backdoor
     target_class: int = 0  # Target class when backdoor is applied
+    return_anomaly_label: bool = False  # If True, return ((img, label), is_backdoored)
 
     def __post_init__(self):
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
@@ -29,13 +33,20 @@ class Backdoor(Transform, ABC):
     def __call__(self, sample: Tuple[torch.Tensor, int]) -> Tuple[torch.Tensor, int]:
         if torch.rand(1) > self.p_backdoor:
             # Backdoor inactive, don't do anything
-            return sample
+            if self.return_anomaly_label:
+                return sample, False
+            else:
+                return sample
 
         img, label = sample
 
         # Do changes out of place
-        img = img.clone()
-        return self.inject_backdoor(img), self.target_class
+        if isinstance(img, torch.Tensor):
+            img = img.clone()
+        if self.return_anomaly_label:
+            return (self.inject_backdoor(img), self.target_class), True
+        else:
+            return self.inject_backdoor(img), self.target_class
 
 
 class BackdoorDataset(TransformDataset):
@@ -84,12 +95,20 @@ class CornerPixelBackdoor(Backdoor):
 @dataclass
 class NoiseBackdoor(Backdoor):
     std: float = 0.3  # Standard deviation of noise
+    value_range: Tuple[float, float] | None = (0, 1)  # Range of values to clip to
 
     def inject_backdoor(self, img: torch.Tensor):
-        assert torch.all(img <= 1), "Image not in range [0, 1]"
+        if self.value_range is not None:
+            assert torch.all(
+                img <= self.value_range[1]
+            ), f"Image not in range {self.value_range}"
+            assert torch.all(
+                img >= self.value_range[0]
+            ), f"Image not in range {self.value_range}"
         noise = torch.normal(0, self.std, img.shape)
         img += noise
-        img.clip_(0, 1)
+        if self.value_range is not None:
+            img.clamp_(self.value_range[0], self.value_range[1])
 
         return img
 
@@ -276,3 +295,55 @@ class WanetBackdoor(Backdoor):
         assert img.shape == (cs, py, px)
 
         return img, target
+
+
+def split_into_sentences(text):
+    # Define sentence ending punctuation
+    sentence_endings = r"[.!?;]"
+
+    # Split the text based on sentence endings
+    # This regex looks for sentence endings followed by a space and any letter,
+    # or sentence endings at the end of the string
+    sentences = re.split(rf"({sentence_endings}(?=\s+[A-Za-z]|$))", text)
+
+    # Combine each sentence with its ending punctuation
+    sentences = [
+        "".join(sentences[i : i + 2]).strip() for i in range(0, len(sentences), 2)
+    ]
+
+    # Check if there's any remaining text and add it as a sentence if necessary
+    if sentences:
+        last_sentence_end = text.rfind(sentences[-1]) + len(sentences[-1])
+        remaining_text = text[last_sentence_end:].strip()
+        if remaining_text:
+            sentences.append(remaining_text)
+
+    # Remove any empty sentences
+    sentences = [s for s in sentences if s]
+
+    return sentences
+
+
+@dataclass(kw_only=True)
+class SentenceBackdoor(Backdoor):
+    tokenizer: transformers.PreTrainedTokenizerBase
+    sentence: str = "I watch many movies."
+
+    def inject_backdoor(self, input):
+        encoded = self.tokenizer.encode(input)
+        sentences = split_into_sentences(input)
+        # Hacky way of making sure the trigger doesn't get truncated.
+        # Only approximate because it doesn't really deal with tokenization.
+        if len(encoded) > 512:
+            last_valid_char_position = int(len(input) * 512 / len(encoded)) - len(
+                self.sentence
+            )
+            valid_sentences = split_into_sentences(input[:last_valid_char_position])
+            # Remove last sentence---it might be a fragment and then inserting after the
+            # real sentence would go over the limit:
+            valid_sentences = valid_sentences[:-1]
+            position = random.randint(0, len(valid_sentences))
+        else:
+            position = random.randint(0, len(sentences))
+        sentences.insert(position, self.sentence)
+        return " ".join(sentences)

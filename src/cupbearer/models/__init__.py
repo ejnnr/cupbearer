@@ -4,7 +4,16 @@ from pathlib import Path
 import torch
 
 from .huggingface import HuggingfaceLM
-from .models import CNN, MLP, PreActResNet
+from .models import (
+    CNN,
+    MLP,
+    PreActResNet,
+    PreActResNet18,
+    PreActResNet34,
+    PreActResNet50,
+    PreActResNet101,
+    PreActResNet152,
+)
 
 
 def load(model: torch.nn.Module, path: Path | str):

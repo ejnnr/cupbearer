@@ -4,7 +4,7 @@ import torch
 
 from cupbearer import utils
 
-from .core import FeatureExtractor
+from .core import FeatureCache, FeatureExtractor
 
 
 class ActivationExtractor(FeatureExtractor):
@@ -17,11 +17,13 @@ class ActivationExtractor(FeatureExtractor):
             [dict[str, torch.Tensor]], dict[str, torch.Tensor]
         ]
         | None = None,
+        cache: FeatureCache | None = None,
     ):
         super().__init__(
             feature_names=names,
             individual_processing_fn=individual_processing_fn,
             global_processing_fn=global_processing_fn,
+            cache=cache,
         )
         self.names = names
 

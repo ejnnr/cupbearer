@@ -1,3 +1,4 @@
+from contextlib import nullcontext
 from typing import Callable
 
 import torch
@@ -8,8 +9,13 @@ class _Finished(Exception):
 
 
 def get_activations(
-    *args, model: torch.nn.Module, names: list[str], **kwargs
-) -> dict[str, torch.Tensor]:
+    *args,
+    model: torch.nn.Module,
+    names: list[str],
+    return_output: bool = False,
+    no_grad: bool = True,
+    **kwargs,
+) -> dict[str, torch.Tensor] | tuple[dict[str, torch.Tensor], torch.Tensor]:
     """Get the activations of the model for the given inputs.
 
     Args:
@@ -18,12 +24,19 @@ def get_activations(
             of strings corresponding to pytorch module names, with ".input" or ".output"
             appended to the end of the name to specify whether to get the input
             or output of the module.
+        return_output: If True, returns a tuple of activations and the output of
+            the model instead of just activations. Defaults to False so that we can
+            stop forward passes early if possible.
+        no_grad: If True (default), the forward pass is wrapped in a torch.no_grad()
+            block. Set to False if you need to use activations in a backward pass.
         *args: Arguments to pass to the model.
         **kwargs: Keyword arguments to pass to the model.
 
     Returns:
         A dictionary mapping the names of the modules to the activations of the model
         at that module. Keys contain ".input" or ".output" just like `names`.
+        If `return_output` is True, returns a tuple of activations and the output of
+        the model.
     """
     activations = {}
     hooks = []
@@ -55,7 +68,7 @@ def get_activations(
                 else:
                     activations[name] = output
 
-                if set(names).issubset(activations.keys()):
+                if set(names).issubset(activations.keys()) and not return_output:
                     # HACK: stop the forward pass to save time
                     raise _Finished()
 
@@ -70,17 +83,20 @@ def get_activations(
                 hooks.append(
                     module.register_forward_hook(make_hook(name + ".output", False))
                 )
-        with torch.no_grad():
+        with torch.no_grad() if no_grad else nullcontext():
             try:
-                model(*args, **kwargs)
+                output = model(*args, **kwargs)
             except _Finished:
-                pass
+                assert not return_output
     finally:
         # Make sure we always remove hooks even if an exception is raised
         for hook in hooks:
             hook.remove()
 
-    return activations
+    if return_output:
+        return activations, output
+    else:
+        return activations
 
 
 def get_activations_and_grads(
