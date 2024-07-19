@@ -166,3 +166,7 @@ def reduce_size(
 
 def flatten_last(x):
     return torch.flatten(x, start_dim=1)
+
+def collate_inputs(batch):
+    return inputs_from_batch(torch.utils.data.default_collate(batch))
+

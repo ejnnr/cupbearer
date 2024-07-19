@@ -150,8 +150,7 @@ class AnomalyDetector(ABC):
             raise ValueError(f"Unknown layer aggregation: {self.layer_aggregation}")
 
     def _collate_fn(self, batch):
-        batch = torch.utils.data.default_collate(batch)
-        inputs = utils.inputs_from_batch(batch)
+        inputs = utils.collate_inputs(batch)
         if self.feature_extractor:
             features = self.feature_extractor(inputs)
         else:
