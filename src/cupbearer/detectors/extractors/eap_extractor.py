@@ -33,6 +33,8 @@ class EAPFeatureExtractor(FeatureExtractor):
             answer_function: Literal["avg_diff", "avg_val"],
             ablation_type: StaticAblation = AblationType.ZERO,
             abs_value: bool = False,
+            score_mask: Dict[str, torch.Tensor] | None = None,
+            threshold: float = -float("inf"), 
             integrated_grad_samples: Optional[int] = None,
             resid_src: bool = False,
             resid_dest: bool = False,
@@ -66,6 +68,9 @@ class EAPFeatureExtractor(FeatureExtractor):
                 Defaults to AblationType.ZERO.
             abs_value: Whether to take the absolute value of the scores. 
                 Defaults to False.
+            score_mask: dictionary of dest_modules to boolean masks to apply to prune 
+                scores for removing certain edges. Defaults to None.
+            threshold: threshold to clamp score to 0. Defaults to -float("inf").
             integrated_grad_samples: If not None, we compute an 
                 approximation of the Integrated Gradients of the model output with respect 
                 to the mask values. This is computed by averaging the mask gradients over 
@@ -83,6 +88,8 @@ class EAPFeatureExtractor(FeatureExtractor):
         self.answer_function = answer_function
         self.ablation_type = ablation_type
         self.abs_value = abs_value
+        self.score_mask = score_mask
+        self.threshold = threshold
         self.integrated_grad_samples = integrated_grad_samples
         self.resid_src = resid_src
         self.resid_dest = resid_dest
@@ -129,9 +136,7 @@ class EAPFeatureExtractor(FeatureExtractor):
     # not sure whether invoking the contexts on every batch incurs significant performance penalty
     def compute_features(self, inputs: torch.Tensor) -> dict[str, torch.Tensor]:
         batch_size = inputs.shape[0]
-        patch_out = self.patch_out.expand( # expand according to batch size (detached in method)
-            self.patch_out.size(0), batch_size, self.patch_out.size(2), self.patch_out.size(3)
-        )
+        patch_out = expand_patch_src_out(self.patch_out, batch_size)
         with ExitStack() as stack: 
             stack.enter_context(torch.enable_grad()) # if no grad is set
             # add context managers if not already in correct context
@@ -151,13 +156,26 @@ class EAPFeatureExtractor(FeatureExtractor):
                 other_tokens=self.other_tokens, 
                 integrated_grad_samples=self.integrated_grad_samples
             )
-            prune_scores_t = torch.concat([score.flatten(start_dim=1) for score in prune_scores.values()], dim=1)
+            if self.score_mask is None:
+                prune_scores_t = torch.concat([
+                    score.flatten(start_dim=1) for score in prune_scores.values()
+                ], dim=1)
+            else: # mask 
+                prune_scores_t = torch.concat([
+                    score[:, self.score_mask[mod_name]] for mod_name, score in prune_scores.items()
+                ], dim=1)
             if self.abs_value:
                 prune_scores_t = torch.abs(prune_scores_t)
+            # apply threshold 
+            prune_scores_t = prune_scores_t * (prune_scores_t > self.threshold)
             assert prune_scores_t.ndim == 2
             assert prune_scores_t.size(0) == batch_size
             return {self.FEATURE_NAMES: prune_scores_t}
-    
+
+def expand_patch_src_out(patch_src_out: torch.Tensor, batch_size: int):
+    return patch_src_out.expand(
+        patch_src_out.size(0), batch_size, patch_src_out.size(2), patch_src_out.size(3)
+    )
 
 def set_model(model: HookedTransformer, disbale_grad: bool = True):
     model.set_use_hook_mlp_in(True)
