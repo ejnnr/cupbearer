@@ -110,7 +110,6 @@ class EAPFeatureExtractor(FeatureExtractor):
     def set_model(self, model: HookedTransformer| PatchableModel):
         if hasattr(self, "model") and isinstance(self.model, PatchableModel):
             return # already set
-        set_model(model)
         device = next(model.parameters()).device
         self.model: PatchableModel = patchable_model(
             model, 
