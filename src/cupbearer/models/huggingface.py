@@ -66,3 +66,6 @@ class HuggingfaceLM(torch.nn.Module):
             return activation[range(batch_size), last_non_padding_index, :]
 
         return get_activation_at_last_token
+
+    def __repr__(self):
+        return f"HuggingfaceLM(tokenizer={self.tokenizer}, model={self.hf_model})"

@@ -19,6 +19,9 @@ class TransformDataset(Dataset):
         sample = self.dataset[index]
         return self.transform(sample)
 
+    def __repr__(self):
+        return f"TransformDataset(dataset={self.dataset}, transform={self.transform})"
+
 
 class MixedData(Dataset):
     def __init__(
@@ -63,3 +66,10 @@ class MixedData(Dataset):
             if self.return_anomaly_labels:
                 return self.anomalous_data[index - self.normal_len], 1
             return self.anomalous_data[index - self.normal_len]
+
+    def __repr__(self):
+        return (
+            f"MixedData(normal={self.normal_data}, anomalous={self.anomalous_data}, "
+            f"normal_weight={self.normal_weight}, "
+            f"return_anomaly_labels={self.return_anomaly_labels})"
+        )

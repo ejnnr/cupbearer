@@ -46,6 +46,9 @@ class BackdoorDataset(TransformDataset):
         self.original = original
         self.backdoor = backdoor
 
+    def __repr__(self):
+        return f"BackdoorDataset(original={self.original}, backdoor={self.backdoor})"
+
 
 @dataclass
 class CornerPixelBackdoor(Backdoor):
