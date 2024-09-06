@@ -6,7 +6,7 @@ class HuggingfaceLM(torch.nn.Module):
         self,
         tokenizer=None,
         model=None,
-        tokenize_kwargs = {"padding": True},
+        tokenize_kwargs={"padding": True},
         device="cuda",
     ):
         """A wrapper around a HF model that handles tokenization and device placement.
@@ -29,7 +29,6 @@ class HuggingfaceLM(torch.nn.Module):
         # HACK: We often use next(model.parameters()).device to figure out which
         # device a model is on. We'd like that to still work even if there's no model.
         self.dummy_param = torch.nn.Parameter(torch.tensor(0.0, device=device))
-
 
     def tokenize(self, inputs: list[str] | str, **kwargs):
         if self.tokenizer is None:
