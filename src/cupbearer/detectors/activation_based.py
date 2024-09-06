@@ -3,7 +3,7 @@ from typing import Any, Callable
 import torch
 
 from .anomaly_detector import AnomalyDetector
-from .extractors import ActivationExtractor, FeatureExtractor
+from .extractors import ActivationExtractor, FeatureCache, FeatureExtractor
 
 
 class ActivationBasedDetector(AnomalyDetector):
@@ -24,7 +24,9 @@ class ActivationBasedDetector(AnomalyDetector):
             [dict[str, torch.Tensor]], dict[str, torch.Tensor]
         ]
         | None = None,
+        processed_names: list[str] | None = None,
         layer_aggregation: str = "mean",
+        cache: FeatureCache | None = None,
     ):
         if feature_extractor is None:
             if activation_names is None:
@@ -36,6 +38,8 @@ class ActivationBasedDetector(AnomalyDetector):
                 names=activation_names,
                 individual_processing_fn=individual_processing_fn,
                 global_processing_fn=global_processing_fn,
+                processed_names=processed_names,
+                cache=cache,
             )
         super().__init__(
             feature_extractor=feature_extractor, layer_aggregation=layer_aggregation

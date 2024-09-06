@@ -11,7 +11,7 @@ from cupbearer.detectors.abstraction.abstraction import (
     LocallyConsistentAbstraction,
 )
 from cupbearer.detectors.activation_based import ActivationBasedDetector
-from cupbearer.detectors.extractors import FeatureExtractor
+from cupbearer.detectors.extractors import FeatureCache, FeatureExtractor
 
 
 def compute_losses(
@@ -97,6 +97,7 @@ class AbstractionDetector(ActivationBasedDetector):
         ]
         | None = None,
         layer_aggregation: str = "mean",
+        cache: FeatureCache | None = None,
     ):
         self.abstraction = abstraction
         super().__init__(
@@ -105,6 +106,7 @@ class AbstractionDetector(ActivationBasedDetector):
             layer_aggregation=layer_aggregation,
             individual_processing_fn=individual_processing_fn,
             global_processing_fn=global_processing_fn,
+            cache=cache,
         )
 
     def _train(
