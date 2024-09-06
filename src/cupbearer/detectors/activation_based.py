@@ -24,6 +24,7 @@ class ActivationBasedDetector(AnomalyDetector):
             [dict[str, torch.Tensor]], dict[str, torch.Tensor]
         ]
         | None = None,
+        processed_names: list[str] | None = None,
         layer_aggregation: str = "mean",
         cache: FeatureCache | None = None,
     ):
@@ -37,6 +38,7 @@ class ActivationBasedDetector(AnomalyDetector):
                 names=activation_names,
                 individual_processing_fn=individual_processing_fn,
                 global_processing_fn=global_processing_fn,
+                processed_names=processed_names,
                 cache=cache,
             )
         super().__init__(

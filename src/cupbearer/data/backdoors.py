@@ -4,7 +4,7 @@ import os
 import random
 import re
 from abc import ABC
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional, Tuple
 
@@ -20,11 +20,22 @@ from ._shared import Transform, TransformDataset
 @dataclass
 class Backdoor(Transform, ABC):
     p_backdoor: float = 1.0  # Probability of applying the backdoor
-    target_class: int = 0  # Target class when backdoor is applied
+    behavior_type: str = "fixed_class"  # Can be "fixed_class" or "cycle_class"
+    target_class: int = 0  # Target class when behavior_type is "fixed_class"
+    classes: list[int] = field(
+        default_factory=lambda: [0, 1]
+    )  # List of classes to cycle through if behavior_type is "cycle_class"
     return_anomaly_label: bool = False  # If True, return ((img, label), is_backdoored)
 
     def __post_init__(self):
         assert 0 <= self.p_backdoor <= 1, "Probability must be between 0 and 1"
+        assert self.behavior_type in [
+            "fixed_class",
+            "cycle_class",
+        ], (
+            f"Invalid behavior type {self.behavior_type}, "
+            "must be 'fixed_class' or 'cycle_class'"
+        )
 
     def inject_backdoor(self, img: torch.Tensor):
         # Not an abstractmethod because e.g. Wanet overrides __call__ instead
@@ -40,13 +51,21 @@ class Backdoor(Transform, ABC):
 
         img, label = sample
 
+        if self.behavior_type == "fixed_class":
+            target = self.target_class
+        elif self.behavior_type == "cycle_class":
+            idx = self.classes.index(label)
+            target = self.classes[(idx + 1) % len(self.classes)]
+        else:
+            raise ValueError(f"Invalid behavior type {self.behavior_type}")
+
         # Do changes out of place
         if isinstance(img, torch.Tensor):
             img = img.clone()
         if self.return_anomaly_label:
-            return (self.inject_backdoor(img), self.target_class), True
+            return (self.inject_backdoor(img), target), True
         else:
-            return self.inject_backdoor(img), self.target_class
+            return self.inject_backdoor(img), target
 
 
 class BackdoorDataset(TransformDataset):
@@ -56,6 +75,9 @@ class BackdoorDataset(TransformDataset):
         super().__init__(dataset=original, transform=backdoor)
         self.original = original
         self.backdoor = backdoor
+
+    def __repr__(self):
+        return f"BackdoorDataset(original={self.original}, backdoor={self.backdoor})"
 
 
 @dataclass

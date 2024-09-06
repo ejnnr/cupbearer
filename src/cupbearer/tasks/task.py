@@ -64,6 +64,15 @@ class Task:
         if trusted_fraction == 1.0:
             trusted_data = train_data
             clean_untrusted_data = anomalous_data = None
+        elif trusted_fraction == 0.0:
+            trusted_data = None
+            train_fractions = (clean_train_weight, 1 - clean_train_weight)
+            clean_untrusted_data, anomalous_data = random_split(
+                train_data, train_fractions
+            )
+            if clean_untrusted_func:
+                clean_untrusted_data = clean_untrusted_func(clean_untrusted_data)
+            anomalous_data = anomaly_func(anomalous_data, True)
         else:
             untrusted_fraction = 1 - trusted_fraction
             train_fractions = (
