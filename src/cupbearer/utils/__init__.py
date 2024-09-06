@@ -78,7 +78,7 @@ def tree_map(f, tree):
 
 def save(data, path: Union[str, Path], overwrite: bool = False):
     data = tree_map(validate_and_convert_leaf, data)
-    path = Path(path)
+    path = Path(path).with_suffix(SUFFIX)
     directory = path.parent
     directory.mkdir(parents=True, exist_ok=True)
     if path.exists():
@@ -87,7 +87,7 @@ def save(data, path: Union[str, Path], overwrite: bool = False):
             path.unlink()
         else:
             raise RuntimeError(f"File {path} already exists.")
-    torch.save(data, path.with_suffix(SUFFIX))
+    torch.save(data, path)
 
 
 def load(path: Union[str, Path]):
