@@ -429,9 +429,9 @@ class AnomalyDetector(ABC):
 
         return metrics, figs
 
-    def save_weights(self, path: str | Path):
+    def save_weights(self, path: str | Path, overwrite: bool = False):
         logger.info(f"Saving detector to {path}")
-        utils.save(self._get_trained_variables(), path)
+        utils.save(self._get_trained_variables(), path, overwrite=overwrite)
 
     def load_weights(self, path: str | Path):
         logger.info(f"Loading detector from {path}")
