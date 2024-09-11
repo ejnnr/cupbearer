@@ -300,6 +300,7 @@ class AnomalyDetector(ABC):
                 inputs = utils.inputs_from_batch(samples)
                 if layerwise:
                     new_scores = self.compute_layerwise_scores(inputs)
+                    new_scores["all"] = self._aggregate_scores(new_scores)
                 else:
                     # For some detectors, this is what we'd get anyway when calling
                     # compute_layerwise_scores, but for layerwise detectors, we want to
