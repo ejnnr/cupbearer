@@ -156,7 +156,7 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
                 v,
                 "(batch independent_dims) -> batch independent_dims",
                 batch=batch_size,
-            ).sum(-1)
+            ).mean(-1)
             for k, v in scores.items()
         }
         return scores
