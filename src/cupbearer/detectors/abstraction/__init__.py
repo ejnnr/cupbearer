@@ -9,3 +9,4 @@ from .abstraction import (
     l2_loss,
 )
 from .abstraction_detector import AbstractionDetector
+from .vae import VAE, VAEAbstraction

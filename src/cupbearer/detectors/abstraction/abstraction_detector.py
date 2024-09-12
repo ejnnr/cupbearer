@@ -5,13 +5,15 @@ import lightning as L
 import torch
 
 from cupbearer import utils
-from cupbearer.detectors.abstraction.abstraction import (
+from cupbearer.detectors.activation_based import ActivationBasedDetector
+from cupbearer.detectors.extractors import FeatureCache, FeatureExtractor
+
+from .abstraction import (
     Abstraction,
     AutoencoderAbstraction,
     LocallyConsistentAbstraction,
 )
-from cupbearer.detectors.activation_based import ActivationBasedDetector
-from cupbearer.detectors.extractors import FeatureCache, FeatureExtractor
+from .vae import VAEAbstraction
 
 
 def compute_losses(
@@ -29,6 +31,22 @@ def compute_losses(
         # We don't care about abstractions, our target are the full model's activations.
         _, predictions = abstraction(inputs, activations)
         targets = activations
+    elif isinstance(abstraction, VAEAbstraction):
+        reconstructions, mus, log_vars = abstraction(inputs, activations)
+
+        # TODO: don't just copy this from below
+        layer_losses: dict[str, torch.Tensor] = {}
+        assert reconstructions.keys() == activations.keys()
+        for k in reconstructions.keys():
+            losses = abstraction.loss_fn(k)(
+                reconstructions[k], activations[k], mus[k], log_vars[k]
+            )
+            assert losses.ndim == 1
+            layer_losses[k] = losses
+
+        n = len(layer_losses)
+        assert n > 0
+        return sum(x for x in layer_losses.values()) / n, layer_losses
     else:
         raise ValueError(f"Unsupported abstraction type: {type(abstraction)}")
 
