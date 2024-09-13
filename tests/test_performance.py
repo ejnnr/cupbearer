@@ -61,14 +61,11 @@ def test_mahalanobis(model, mnist_train, mnist_test, tmp_path):
     task = tasks.backdoor_detection(
         model, mnist_train, mnist_test, data.CornerPixelBackdoor()
     )
-    detector.set_model(task.model)
 
-    detector.train(
-        trusted_data=task.trusted_data, untrusted_data=task.untrusted_train_data
-    )
+    detector.train(task)
     # Just saving for debugging purposes
     detector.save_weights(tmp_path / "detector")
-    metrics, figs = detector.eval(task.test_data, layerwise=True, save_path=tmp_path)
+    metrics, figs = detector.eval(task, layerwise=True, save_path=tmp_path)
     assert metrics["layers.linear_0.output"]["AUC_ROC"] > 0.97
     assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
     assert metrics["layers.linear_2.output"]["AUC_ROC"] > 0.90
@@ -81,10 +78,9 @@ def test_supervised_probe(model, mnist_train, mnist_test):
     task = tasks.backdoor_detection(
         model, mnist_train, mnist_test, data.CornerPixelBackdoor(), trusted_fraction=0.0
     )
-    detector.set_model(task.model)
     task.untrusted_train_data.return_anomaly_labels = True
-    detector.train(trusted_data=None, untrusted_data=task.untrusted_train_data)
-    metrics, figs = detector.eval(task.test_data, layerwise=True)
+    detector.train(task)
+    metrics, figs = detector.eval(task, layerwise=True)
     assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
 
 
@@ -99,14 +95,43 @@ def test_que(tmp_path, model, mnist_train, mnist_test):
     task = tasks.backdoor_detection(
         model, mnist_train, mnist_test, data.CornerPixelBackdoor(), trusted_fraction=0.5
     )
-    detector.set_model(task.model)
 
+    detector.train(task)
+    # Just saving for debugging purposes
+    detector.save_weights(tmp_path / "detector")
+    metrics, figs = detector.eval(task, layerwise=True, save_path=tmp_path)
+    assert metrics["layers.linear_0.output"]["AUC_ROC"] > 0.97
+    assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
+    assert metrics["layers.linear_2.output"]["AUC_ROC"] > 0.90
+
+
+def test_vae(model, mnist_train, mnist_test, tmp_path):
+    detector = detectors.AbstractionDetector(
+        abstraction=detectors.abstraction.VAEAbstraction(
+            vaes={
+                "layers.linear_0.output": detectors.abstraction.VAE(
+                    input_dim=128, latent_dim=32
+                ),
+                "layers.linear_1.output": detectors.abstraction.VAE(
+                    input_dim=128, latent_dim=32
+                ),
+                "layers.linear_2.output": detectors.abstraction.VAE(
+                    input_dim=10, latent_dim=4
+                ),
+            },
+        )
+    )
+    task = tasks.backdoor_detection(
+        model, mnist_train, mnist_test, data.CornerPixelBackdoor()
+    )
     detector.train(
-        trusted_data=task.trusted_data, untrusted_data=task.untrusted_train_data
+        task=task,
+        max_epochs=1,
+        save_path=tmp_path / "lightning",
     )
     # Just saving for debugging purposes
     detector.save_weights(tmp_path / "detector")
-    metrics, figs = detector.eval(task.test_data, layerwise=True, save_path=tmp_path)
+    metrics, figs = detector.eval(task, layerwise=True, save_path=tmp_path)
     assert metrics["layers.linear_0.output"]["AUC_ROC"] > 0.97
     assert metrics["layers.linear_1.output"]["AUC_ROC"] > 0.97
     assert metrics["layers.linear_2.output"]["AUC_ROC"] > 0.90
