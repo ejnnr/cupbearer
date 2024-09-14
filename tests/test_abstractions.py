@@ -1,10 +1,11 @@
 import pytest
 import torch
 import transformer_lens.loading_from_pretrained as loading
-from cupbearer import utils
-from cupbearer.detectors import LocallyConsistentAbstraction
 from torch import nn
 from transformer_lens import HookedTransformer
+
+from cupbearer import utils
+from cupbearer.detectors import LocallyConsistentAbstraction
 
 
 @pytest.fixture(scope="module")

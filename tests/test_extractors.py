@@ -1,5 +1,6 @@
 import pytest
 import torch
+
 from cupbearer import models
 from cupbearer.detectors.extractors.activation_extractor import ActivationExtractor
 from cupbearer.detectors.extractors.core import FeatureCache

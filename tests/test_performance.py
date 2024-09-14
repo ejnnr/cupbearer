@@ -1,8 +1,9 @@
 from pathlib import Path
 
 import pytest
-from cupbearer import data, detectors, models, scripts, tasks
 from torch.utils.data import DataLoader
+
+from cupbearer import data, detectors, models, scripts, tasks
 
 pytestmark = pytest.mark.performance
 

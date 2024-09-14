@@ -2,6 +2,7 @@ import math
 
 import pytest
 import torch
+
 from cupbearer.detectors.statistical.helpers import batch_covariance
 
 

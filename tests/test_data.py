@@ -5,10 +5,11 @@ from dataclasses import dataclass
 import numpy as np
 import pytest
 import torch
-from cupbearer import data
 from torch.utils.data import DataLoader, Dataset
 from torchvision.transforms import Normalize
 from torchvision.transforms.functional import InterpolationMode
+
+from cupbearer import data
 
 
 class DummyDataset(Dataset):

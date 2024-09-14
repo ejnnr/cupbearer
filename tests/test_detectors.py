@@ -2,6 +2,7 @@ from functools import partial
 
 import pytest
 import torch
+
 from cupbearer.detectors.statistical import (
     MahalanobisDetector,
     QuantumEntropyDetector,

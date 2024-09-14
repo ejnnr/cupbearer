@@ -1,8 +1,9 @@
 import pytest
 import torch
+from torch import nn
+
 from cupbearer import data, detectors, models, tasks
 from cupbearer.scripts import eval_classifier, train_classifier, train_detector
-from torch import nn
 
 # Ignore warnings about num_workers
 pytestmark = pytest.mark.filterwarnings(
