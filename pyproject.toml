@@ -52,3 +52,6 @@ where = ["src"]
 [tool.ruff]
 select = ["E", "W", "F", "I"]
 ignore-init-module-imports = true
+
+[tool.ruff.isort]
+known-first-party = ["cupbearer"]

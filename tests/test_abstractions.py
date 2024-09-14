@@ -1,12 +1,11 @@
 import pytest
 import torch
 import transformer_lens.loading_from_pretrained as loading
-from cupbearer import utils
-from cupbearer.detectors.abstraction import (
-    LocallyConsistentAbstraction,
-)
 from torch import nn
 from transformer_lens import HookedTransformer
+
+from cupbearer import utils
+from cupbearer.detectors import LocallyConsistentAbstraction
 
 
 @pytest.fixture(scope="module")
@@ -50,13 +49,12 @@ def test_lca_identity_abstraction(transformer, text_batch):
 
     tau_maps = {name: nn.Identity() for name in names}
     abstraction = LocallyConsistentAbstraction(
-        # We need to generate a separate copy for the abstract model to make sure
-        # they don't interfere
-        tau_maps=tau_maps,
-        abstract_model=transformer,
+        tau_maps=tau_maps, abstract_model=transformer
     )
 
-    abstractions, predicted_abstractions = abstraction(text_batch, activations)
+    _, abstractions, predicted_abstractions = abstraction(
+        text_batch, activations, return_outputs=True
+    )
 
     assert abstractions.keys() == predicted_abstractions.keys() == tau_maps.keys()
     for name in abstractions.keys():

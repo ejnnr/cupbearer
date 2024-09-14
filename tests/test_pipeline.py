@@ -1,8 +1,9 @@
 import pytest
 import torch
+from torch import nn
+
 from cupbearer import data, detectors, models, tasks
 from cupbearer.scripts import eval_classifier, train_classifier, train_detector
-from torch import nn
 
 # Ignore warnings about num_workers
 pytestmark = pytest.mark.filterwarnings(
@@ -82,8 +83,8 @@ def test_eval_classifier(model, mnist, backdoor_classifier_path):
 def test_train_abstraction_corner_backdoor(abstract_model, backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
-        detector=detectors.AbstractionDetector(
-            abstraction=detectors.abstraction.LocallyConsistentAbstraction(
+        detector=detectors.FeatureModelDetector(
+            feature_model=detectors.LocallyConsistentAbstraction(
                 abstract_model=abstract_model,
                 tau_maps={
                     "layers.linear_0.output": nn.Linear(5, 3),
@@ -104,20 +105,14 @@ def test_train_abstraction_corner_backdoor(abstract_model, backdoor_task, tmp_pa
 
 
 @pytest.mark.slow
-def test_train_autoencoder_corner_backdoor(backdoor_task, tmp_path):
+def test_train_vae_corner_backdoor(backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
-        detector=detectors.AbstractionDetector(
-            abstraction=detectors.abstraction.AutoencoderAbstraction(
-                tau_maps={
-                    "layers.linear_0.output": nn.Linear(5, 3),
-                    "layers.linear_1.output": nn.Linear(5, 3),
-                },
-                decoders={
-                    "layers.linear_0.output": nn.Linear(3, 5),
-                    "layers.linear_1.output": nn.Linear(3, 5),
-                },
-            )
+        detector=detectors.VAEDetector(
+            vaes={
+                "layers.linear_0.output": detectors.VAE(input_dim=5, latent_dim=2),
+                "layers.linear_1.output": detectors.VAE(input_dim=5, latent_dim=2),
+            },
         ),
         batch_size=2,
         eval_batch_size=2,
