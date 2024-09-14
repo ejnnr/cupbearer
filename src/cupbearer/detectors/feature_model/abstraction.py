@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from typing import Callable
 
 import torch
@@ -10,67 +9,6 @@ from torch import nn
 from cupbearer import utils
 
 from .feature_model_detector import FeatureModel
-
-
-def compute_losses(
-    abstraction: Abstraction,
-    inputs,
-    activations: dict[str, torch.Tensor],
-) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    if isinstance(abstraction, LocallyConsistentAbstraction):
-        # LocallyConsistentAbstraction returns (abstractions, predicted_abstractions),
-        # where abstractions are the output of tau maps and function as our prediction
-        # targets.
-        targets, predictions = abstraction(inputs, activations)
-    elif isinstance(abstraction, AutoencoderAbstraction):
-        # AutoencoderAbstraction returns (abstractions, reconstructed_activations).
-        # We don't care about abstractions, our target are the full model's activations.
-        _, predictions = abstraction(inputs, activations)
-        targets = activations
-    else:
-        raise ValueError(f"Unsupported abstraction type: {type(abstraction)}")
-
-    layer_losses: dict[str, torch.Tensor] = {}
-    assert predictions.keys() == targets.keys()
-    for k in predictions.keys():
-        if predictions[k] is None:
-            # No prediction was made for this layer
-            continue
-        # prediction = predictions[k].flatten(start_dim=1)
-        # target = targets[k].flatten(start_dim=1)
-
-        losses = abstraction.loss_fn(k)(predictions[k], targets[k])
-        assert losses.ndim == 1
-        layer_losses[k] = losses
-
-    n = len(layer_losses)
-    assert n > 0
-    return sum(x for x in layer_losses.values()) / n, layer_losses
-
-
-class Abstraction(FeatureModel, ABC):
-    tau_maps: utils.ModuleDict
-
-    @abstractmethod
-    def loss_fn(
-        self, name: str
-    ) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
-        """Get the loss function for the given activation.
-
-        The loss function should take a prediction and a target,
-        each of shape (batch, dim), and return a tensor of shape (batch,).
-        """
-        pass
-
-    def forward(self, inputs, activations: dict[str, torch.Tensor]):
-        """Get the abstractions for the given inputs and activations.
-
-        Args:
-            inputs: The inputs to the model.
-            activations: A dictionary mapping activation names to the activations of the
-                full model at that name.
-        """
-        raise NotImplementedError
 
 
 def l2_loss(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -125,7 +63,7 @@ def cross_entropy(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
     return loss.view(batch_size, -1).mean(dim=1)
 
 
-class LocallyConsistentAbstraction(Abstraction):
+class LocallyConsistentAbstraction(FeatureModel):
     def __init__(
         self,
         tau_maps: dict[str, nn.Module],
@@ -147,6 +85,10 @@ class LocallyConsistentAbstraction(Abstraction):
         self.activation_processing_func = activation_processing_func
         self.global_consistency = global_consistency
 
+    @property
+    def layer_names(self) -> list[str]:
+        return list(self.tau_maps.keys())
+
     def loss_fn(
         self, name: str
     ) -> Callable[[torch.Tensor, torch.Tensor], torch.Tensor]:
@@ -156,13 +98,13 @@ class LocallyConsistentAbstraction(Abstraction):
         return fn
 
     def forward(
-        self, inputs, activations: dict[str, torch.Tensor]
-    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor | None]]:
+        self, inputs, features: dict[str, torch.Tensor], return_outputs: bool = False
+    ) -> dict[str, torch.Tensor]:
         # TODO: given that this is called in each forward pass, it might be worth
         # switching to https://github.com/metaopt/optree for faster tree maps
-        assert activations.keys() == self.tau_maps.keys()
+        assert features.keys() == self.tau_maps.keys()
         abstractions = {
-            name: tau_map(activations[name]) for name, tau_map in self.tau_maps.items()
+            name: tau_map(features[name]) for name, tau_map in self.tau_maps.items()
         }
 
         predicted_abstractions = {}
@@ -231,33 +173,18 @@ class LocallyConsistentAbstraction(Abstraction):
                 for k, v in predicted_abstractions.items()
             }
 
-        return abstractions, predicted_abstractions
+        layer_losses: dict[str, torch.Tensor] = {}
+        assert abstractions.keys() == predicted_abstractions.keys()
+        for k in abstractions.keys():
+            if predicted_abstractions[k] is None:
+                # No prediction was made for this layer
+                continue
 
+            losses = self.loss_fn(k)(predicted_abstractions[k], abstractions[k])
+            assert losses.ndim == 1
+            layer_losses[k] = losses
 
-class AutoencoderAbstraction(Abstraction):
-    def __init__(
-        self,
-        tau_maps: dict[str, nn.Module],  # encoders
-        decoders: dict[str, nn.Module],  # decoders
-    ):
-        super().__init__()
-        assert tau_maps.keys() == decoders.keys()
-        self.tau_maps = utils.ModuleDict(tau_maps)
-        self.decoders = utils.ModuleDict(decoders)
+        if return_outputs:
+            return layer_losses, abstractions, predicted_abstractions
 
-    def loss_fn(self, name: str) -> Callable:
-        return l2_loss
-
-    def forward(
-        self, inputs, activations: dict[str, torch.Tensor]
-    ) -> tuple[dict[str, torch.Tensor], dict[str, torch.Tensor | None]]:
-        abstractions = {
-            name: tau_map(activations[name]) for name, tau_map in self.tau_maps.items()
-        }
-
-        reconstructed_activations: dict[str, torch.Tensor | None] = {
-            name: self.decoders[name](abstraction)
-            for name, abstraction in abstractions.items()
-        }
-
-        return abstractions, reconstructed_activations
+        return layer_losses
