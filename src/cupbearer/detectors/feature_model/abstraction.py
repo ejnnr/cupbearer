@@ -7,9 +7,49 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+from cupbearer import utils
 
-class Abstraction(nn.Module, ABC):
-    tau_maps: _ModuleDict
+from .feature_model_detector import FeatureModel
+
+
+def compute_losses(
+    abstraction: Abstraction,
+    inputs,
+    activations: dict[str, torch.Tensor],
+) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
+    if isinstance(abstraction, LocallyConsistentAbstraction):
+        # LocallyConsistentAbstraction returns (abstractions, predicted_abstractions),
+        # where abstractions are the output of tau maps and function as our prediction
+        # targets.
+        targets, predictions = abstraction(inputs, activations)
+    elif isinstance(abstraction, AutoencoderAbstraction):
+        # AutoencoderAbstraction returns (abstractions, reconstructed_activations).
+        # We don't care about abstractions, our target are the full model's activations.
+        _, predictions = abstraction(inputs, activations)
+        targets = activations
+    else:
+        raise ValueError(f"Unsupported abstraction type: {type(abstraction)}")
+
+    layer_losses: dict[str, torch.Tensor] = {}
+    assert predictions.keys() == targets.keys()
+    for k in predictions.keys():
+        if predictions[k] is None:
+            # No prediction was made for this layer
+            continue
+        # prediction = predictions[k].flatten(start_dim=1)
+        # target = targets[k].flatten(start_dim=1)
+
+        losses = abstraction.loss_fn(k)(predictions[k], targets[k])
+        assert losses.ndim == 1
+        layer_losses[k] = losses
+
+    n = len(layer_losses)
+    assert n > 0
+    return sum(x for x in layer_losses.values()) / n, layer_losses
+
+
+class Abstraction(FeatureModel, ABC):
+    tau_maps: utils.ModuleDict
 
     @abstractmethod
     def loss_fn(
@@ -31,53 +71,6 @@ class Abstraction(nn.Module, ABC):
                 full model at that name.
         """
         raise NotImplementedError
-
-
-class _ModuleDict(nn.Module):
-    """A ModuleDict that allows '.' in keys (but not '/').
-
-    Pytorch's ModuleDict doesn't allow '.' in keys, but our activation names contain
-    a lot of periods.
-    """
-
-    def __init__(self, modules: dict[str, nn.Module]):
-        super().__init__()
-        for name in modules:
-            if "/" in name:
-                raise ValueError(
-                    f"For technical reasons, names cant't contain '/', got {name}"
-                )
-        # Pytorch's ModuleDict doesn't allow '.' in keys, so we replace them with '/'
-        modules = {name.replace(".", "/"): module for name, module in modules.items()}
-        self.dict = nn.ModuleDict(modules)
-
-    def __getitem__(self, key: str) -> nn.Module:
-        return self.dict[key.replace(".", "/")]
-
-    def __len__(self) -> int:
-        return len(self.dict)
-
-    def __iter__(self):
-        for key in self.dict:
-            yield key.replace("/", ".")
-
-    def __contains__(self, key: str) -> bool:
-        return key.replace(".", "/") in self.dict
-
-    def items(self):
-        for key, value in self.dict.items():
-            yield key.replace("/", "."), value
-
-    def values(self):
-        return self.dict.values()
-
-    def keys(self):
-        # HACK: we want to return an actual dict_keys object to make sure that
-        # e.g. equality with other dict_keys objects works as expected. So we create
-        # a dummy dictionary and return its keys.
-        # BUG: This probably still doesn't behave like a real dict_keys object.
-        # For example, if the underlying dictionary changes, this won't reflect that.
-        return {key.replace("/", "."): None for key in self.dict}.keys()
 
 
 def l2_loss(input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
@@ -143,7 +136,7 @@ class LocallyConsistentAbstraction(Abstraction):
         global_consistency: bool = False,
     ):
         super().__init__()
-        self.tau_maps = _ModuleDict(tau_maps)
+        self.tau_maps = utils.ModuleDict(tau_maps)
         self.abstract_model = abstract_model
         self.loss_fns = loss_fns or {}
         self.loss_weights = loss_weights or {}
@@ -249,8 +242,8 @@ class AutoencoderAbstraction(Abstraction):
     ):
         super().__init__()
         assert tau_maps.keys() == decoders.keys()
-        self.tau_maps = _ModuleDict(tau_maps)
-        self.decoders = _ModuleDict(decoders)
+        self.tau_maps = utils.ModuleDict(tau_maps)
+        self.decoders = utils.ModuleDict(decoders)
 
     def loss_fn(self, name: str) -> Callable:
         return l2_loss

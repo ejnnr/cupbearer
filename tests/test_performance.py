@@ -106,20 +106,12 @@ def test_que(tmp_path, model, mnist_train, mnist_test):
 
 
 def test_vae(model, mnist_train, mnist_test, tmp_path):
-    detector = detectors.AbstractionDetector(
-        abstraction=detectors.abstraction.VAEAbstraction(
-            vaes={
-                "layers.linear_0.output": detectors.abstraction.VAE(
-                    input_dim=128, latent_dim=32
-                ),
-                "layers.linear_1.output": detectors.abstraction.VAE(
-                    input_dim=128, latent_dim=32
-                ),
-                "layers.linear_2.output": detectors.abstraction.VAE(
-                    input_dim=10, latent_dim=4
-                ),
-            },
-        )
+    detector = detectors.VAEDetector(
+        vaes={
+            "layers.linear_0.output": detectors.VAE(input_dim=128, latent_dim=32),
+            "layers.linear_1.output": detectors.VAE(input_dim=128, latent_dim=32),
+            "layers.linear_2.output": detectors.VAE(input_dim=10, latent_dim=4),
+        },
     )
     task = tasks.backdoor_detection(
         model, mnist_train, mnist_test, data.CornerPixelBackdoor()

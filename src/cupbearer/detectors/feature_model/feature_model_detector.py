@@ -1,5 +1,6 @@
+from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Any, Callable
+from typing import Any, Callable, Sequence
 
 import lightning as L
 import torch
@@ -8,81 +9,55 @@ from cupbearer import utils
 from cupbearer.detectors.activation_based import ActivationBasedDetector
 from cupbearer.detectors.extractors import FeatureCache, FeatureExtractor
 
-from .abstraction import (
-    Abstraction,
-    AutoencoderAbstraction,
-    LocallyConsistentAbstraction,
-)
-from .vae import VAEAbstraction
+
+class FeatureModel(ABC, torch.nn.Module):
+    """A model on features that can compute a loss for how well it models them."""
+
+    @property
+    @abstractmethod
+    def layer_names(self) -> list[str]:
+        pass
+
+    @abstractmethod
+    def forward(
+        self, inputs: Sequence[Any], features: dict[str, torch.Tensor], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        """Compute a loss for how well this model captures the features.
+
+        Args:
+            inputs: The inputs to the main model.
+            features: The activations of the main model or features derived
+                from them. Shape (batch_size, ...)
+            **kwargs: Additional arguments.
+
+        Returns:
+            A dictionary of losses, keyed by layer name. Each loss should have a batch
+            dimension, corresponding to the batch dimension of the inputs.
+
+            This method may return other outputs if given additional kwargs, but its
+            default behavior needs to be returning just this dictionary.
+
+            The dictionary keys must match `self.layer_names`.
+        """
+        pass
 
 
-def compute_losses(
-    abstraction: Abstraction,
-    inputs,
-    activations: dict[str, torch.Tensor],
-) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
-    if isinstance(abstraction, LocallyConsistentAbstraction):
-        # LocallyConsistentAbstraction returns (abstractions, predicted_abstractions),
-        # where abstractions are the output of tau maps and function as our prediction
-        # targets.
-        targets, predictions = abstraction(inputs, activations)
-    elif isinstance(abstraction, AutoencoderAbstraction):
-        # AutoencoderAbstraction returns (abstractions, reconstructed_activations).
-        # We don't care about abstractions, our target are the full model's activations.
-        _, predictions = abstraction(inputs, activations)
-        targets = activations
-    elif isinstance(abstraction, VAEAbstraction):
-        reconstructions, mus, log_vars = abstraction(inputs, activations)
-
-        # TODO: don't just copy this from below
-        layer_losses: dict[str, torch.Tensor] = {}
-        assert reconstructions.keys() == activations.keys()
-        for k in reconstructions.keys():
-            losses = abstraction.loss_fn(k)(
-                reconstructions[k], activations[k], mus[k], log_vars[k]
-            )
-            assert losses.ndim == 1
-            layer_losses[k] = losses
-
-        n = len(layer_losses)
-        assert n > 0
-        return sum(x for x in layer_losses.values()) / n, layer_losses
-    else:
-        raise ValueError(f"Unsupported abstraction type: {type(abstraction)}")
-
-    layer_losses: dict[str, torch.Tensor] = {}
-    assert predictions.keys() == targets.keys()
-    for k in predictions.keys():
-        if predictions[k] is None:
-            # No prediction was made for this layer
-            continue
-        # prediction = predictions[k].flatten(start_dim=1)
-        # target = targets[k].flatten(start_dim=1)
-
-        losses = abstraction.loss_fn(k)(predictions[k], targets[k])
-        assert losses.ndim == 1
-        layer_losses[k] = losses
-
-    n = len(layer_losses)
-    assert n > 0
-    return sum(x for x in layer_losses.values()) / n, layer_losses
-
-
-class AbstractionModule(L.LightningModule):
+class FeatureModelModule(L.LightningModule):
     def __init__(
         self,
-        abstraction: Abstraction,
+        feature_model: FeatureModel,
         lr: float,
     ):
         super().__init__()
 
-        self.abstraction = abstraction
+        self.feature_model = feature_model
         self.lr = lr
 
     def _shared_step(self, batch):
         samples, features = batch
         inputs = utils.inputs_from_batch(samples)
-        losses, layer_losses = compute_losses(self.abstraction, inputs, features)
+        layer_losses = self.feature_model(inputs, features)
+        losses = sum(x for x in layer_losses.values()) / len(layer_losses)
         assert isinstance(losses, torch.Tensor)
         assert losses.ndim == 1 and len(losses) == len(next(iter(features.values())))
         loss = losses.mean(0)
@@ -98,15 +73,15 @@ class AbstractionModule(L.LightningModule):
 
     def configure_optimizers(self):
         # Note we only optimize over the abstraction parameters, the model is frozen
-        return torch.optim.Adam(self.abstraction.parameters(), lr=self.lr)
+        return torch.optim.Adam(self.feature_model.parameters(), lr=self.lr)
 
 
-class AbstractionDetector(ActivationBasedDetector):
-    """Anomaly detector based on an abstraction."""
+class FeatureModelDetector(ActivationBasedDetector):
+    """Anomaly detector based on training some model on activations/features."""
 
     def __init__(
         self,
-        abstraction: Abstraction,
+        feature_model: FeatureModel,
         feature_extractor: FeatureExtractor | None = None,
         individual_processing_fn: Callable[[torch.Tensor, Any, str], torch.Tensor]
         | None = None,
@@ -117,10 +92,10 @@ class AbstractionDetector(ActivationBasedDetector):
         layer_aggregation: str = "mean",
         cache: FeatureCache | None = None,
     ):
-        self.abstraction = abstraction
+        self.feature_model = feature_model
         super().__init__(
             feature_extractor=feature_extractor,
-            activation_names=list(abstraction.tau_maps.keys()),
+            activation_names=feature_model.layer_names,
             layer_aggregation=layer_aggregation,
             individual_processing_fn=individual_processing_fn,
             global_processing_fn=global_processing_fn,
@@ -141,13 +116,14 @@ class AbstractionDetector(ActivationBasedDetector):
         # Possibly we should store this as a submodule to save optimizers and continue
         # training later. But as long as we don't actually make use of that,
         # this is easiest.
-        module = AbstractionModule(
-            self.abstraction,
+        module = FeatureModelModule(
+            self.feature_model,
             lr=lr,
         )
 
         # TODO: implement validation data
 
+        assert self.model is not None
         self.model.eval()
 
         # Pytorch lightning moves the model to the CPU after it's done training.
@@ -169,11 +145,10 @@ class AbstractionDetector(ActivationBasedDetector):
         module.to(original_device)
 
     def _compute_layerwise_scores(self, inputs, features):
-        _, layer_losses = compute_losses(self.abstraction, inputs, features)
-        return layer_losses
+        return self.feature_model(inputs, features)
 
     def _get_trained_variables(self):
-        return self.abstraction.state_dict()
+        return self.feature_model.state_dict()
 
     def _set_trained_variables(self, variables):
-        self.abstraction.load_state_dict(variables)
+        self.feature_model.load_state_dict(variables)

@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Union, overload
 
 import torch
+from torch import nn
 
 from .get_activations import get_activations, get_activations_and_grads  # noqa: F401
 
@@ -166,3 +167,50 @@ def reduce_size(
 
 def flatten_last(x):
     return torch.flatten(x, start_dim=1)
+
+
+class ModuleDict(nn.Module):
+    """A ModuleDict that allows '.' in keys (but not '/').
+
+    Pytorch's ModuleDict doesn't allow '.' in keys, but our activation names contain
+    a lot of periods.
+    """
+
+    def __init__(self, modules: dict[str, nn.Module]):
+        super().__init__()
+        for name in modules:
+            if "/" in name:
+                raise ValueError(
+                    f"For technical reasons, names cant't contain '/', got {name}"
+                )
+        # Pytorch's ModuleDict doesn't allow '.' in keys, so we replace them with '/'
+        modules = {name.replace(".", "/"): module for name, module in modules.items()}
+        self.dict = nn.ModuleDict(modules)
+
+    def __getitem__(self, key: str) -> nn.Module:
+        return self.dict[key.replace(".", "/")]
+
+    def __len__(self) -> int:
+        return len(self.dict)
+
+    def __iter__(self):
+        for key in self.dict:
+            yield key.replace("/", ".")
+
+    def __contains__(self, key: str) -> bool:
+        return key.replace(".", "/") in self.dict
+
+    def items(self):
+        for key, value in self.dict.items():
+            yield key.replace("/", "."), value
+
+    def values(self):
+        return self.dict.values()
+
+    def keys(self):
+        # HACK: we want to return an actual dict_keys object to make sure that
+        # e.g. equality with other dict_keys objects works as expected. So we create
+        # a dummy dictionary and return its keys.
+        # BUG: This probably still doesn't behave like a real dict_keys object.
+        # For example, if the underlying dictionary changes, this won't reflect that.
+        return {key.replace("/", "."): None for key in self.dict}.keys()

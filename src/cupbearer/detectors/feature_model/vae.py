@@ -1,9 +1,9 @@
-from typing import Callable
-
 import torch
 from torch import nn
 
-from .abstraction import Abstraction, _ModuleDict
+from cupbearer import utils
+
+from .feature_model_detector import FeatureModel, FeatureModelDetector
 
 
 class VAE(nn.Module):
@@ -20,7 +20,7 @@ class VAE(nn.Module):
                                anandkrish894@gmail.com
     """
 
-    def __init__(self, input_dim, latent_dim):
+    def __init__(self, input_dim: int, latent_dim: int):
         super().__init__()
         self.input_dim = input_dim
         self.latent_dim = latent_dim
@@ -118,38 +118,21 @@ class VAE(nn.Module):
         }
 
 
-class VAEAbstraction(Abstraction):
+class VAEFeatureModel(FeatureModel):
     def __init__(self, vaes: dict[str, VAE], kld_weight: float = 1.0):
         super().__init__()
-        self.vaes = _ModuleDict(vaes)
+        self.vaes = utils.ModuleDict(vaes)
         self.kld_weight = kld_weight
 
-    # HACK: the base class queries tau_maps.keys() to get the layer names.
     @property
-    def tau_maps(self):
-        return self.vaes
-
-    def loss_fn(self, name: str) -> Callable:
-        def loss_fn(reconstruction, feature, mu, log_var):
-            loss = self.vaes[name].loss_function(
-                reconstruction,
-                feature,
-                mu,
-                log_var,
-                kld_weight=self.kld_weight,
-                reduce=False,
-            )
-            return loss["loss"]
-
-        return loss_fn
+    def layer_names(self):
+        return list(self.vaes.keys())
 
     def forward(
-        self, inputs, activations: dict[str, torch.Tensor]
-    ) -> tuple[
-        dict[str, torch.Tensor], dict[str, torch.Tensor], dict[str, torch.Tensor]
-    ]:
+        self, inputs, features: dict[str, torch.Tensor], return_outputs: bool = False
+    ) -> dict[str, torch.Tensor]:
         vae_outputs = {
-            name: vae(activations[name], noise=False) for name, vae in self.vaes.items()
+            name: vae(features[name], noise=False) for name, vae in self.vaes.items()
         }
         # VAE outputs are (reconstruction, mu, log_var)
         reconstructions = {
@@ -157,4 +140,24 @@ class VAEAbstraction(Abstraction):
         }
         mus = {name: vae_output[1] for name, vae_output in vae_outputs.items()}
         log_vars = {name: vae_output[2] for name, vae_output in vae_outputs.items()}
-        return reconstructions, mus, log_vars
+
+        losses = {
+            name: self.vaes[name].loss_function(
+                reconstructions[name],
+                features[name],
+                mus[name],
+                log_vars[name],
+                kld_weight=self.kld_weight,
+                reduce=False,
+            )
+            for name in self.layer_names
+        }
+        if return_outputs:
+            return losses, reconstructions, mus, log_vars
+
+        return {name: loss["loss"] for name, loss in losses.items()}
+
+
+class VAEDetector(FeatureModelDetector):
+    def __init__(self, vaes: dict[str, VAE], kld_weight: float = 1.0, **kwargs):
+        super().__init__(VAEFeatureModel(vaes, kld_weight), **kwargs)

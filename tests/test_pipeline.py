@@ -82,7 +82,7 @@ def test_eval_classifier(model, mnist, backdoor_classifier_path):
 def test_train_abstraction_corner_backdoor(abstract_model, backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
-        detector=detectors.AbstractionDetector(
+        detector=detectors.FeatureModelDetector(
             abstraction=detectors.abstraction.LocallyConsistentAbstraction(
                 abstract_model=abstract_model,
                 tau_maps={
@@ -107,7 +107,7 @@ def test_train_abstraction_corner_backdoor(abstract_model, backdoor_task, tmp_pa
 def test_train_autoencoder_corner_backdoor(backdoor_task, tmp_path):
     train_detector(
         task=backdoor_task,
-        detector=detectors.AbstractionDetector(
+        detector=detectors.FeatureModelDetector(
             abstraction=detectors.abstraction.AutoencoderAbstraction(
                 tau_maps={
                     "layers.linear_0.output": nn.Linear(5, 3),
