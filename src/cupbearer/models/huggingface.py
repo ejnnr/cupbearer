@@ -21,7 +21,9 @@ class HuggingfaceLM(torch.nn.Module):
             device: The device to place the model on.
         """
         super().__init__()
-        self.hf_model = model.to(device)
+        self.hf_model = model
+        if model is not None:
+            self.hf_model.to(device)
         self.tokenizer = tokenizer
         self.device = device
         self.tokenize_kwargs = tokenize_kwargs
