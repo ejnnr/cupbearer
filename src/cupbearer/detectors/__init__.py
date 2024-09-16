@@ -11,6 +11,7 @@ from .feature_model import (
 )
 from .finetuning import FinetuningAnomalyDetector
 from .statistical import (
+    ActivationCovarianceBasedDetector,
     MahalanobisDetector,
     QuantumEntropyDetector,
     SpectralSignatureDetector,

@@ -102,21 +102,8 @@ class FeatureModelDetector(ActivationBasedDetector):
             cache=cache,
         )
 
-    def _train(
-        self,
-        trusted_dataloader,
-        untrusted_dataloader,
-        save_path: Path | str,
-        *,
-        lr: float = 1e-3,
-        **trainer_kwargs,
-    ):
-        if trusted_dataloader is None:
-            raise ValueError("Abstraction detector requires trusted training data.")
-        # Possibly we should store this as a submodule to save optimizers and continue
-        # training later. But as long as we don't actually make use of that,
-        # this is easiest.
-        module = FeatureModelModule(
+    def _setup_training(self, lr: float):
+        self.module = FeatureModelModule(
             self.feature_model,
             lr=lr,
         )
@@ -129,20 +116,36 @@ class FeatureModelDetector(ActivationBasedDetector):
         # Pytorch lightning moves the model to the CPU after it's done training.
         # We don't want to expose that behavior to the user, since it's really annoying
         # when not using Lightning.
-        original_device = next(self.model.parameters()).device
+        self.original_device = next(self.model.parameters()).device
 
         # HACK: by adding the model as a submodule to the LightningModule, it gets
         # transferred to the same device Lightning uses for everything else
         # (which seems tricky to do manually).
-        module.model = self.model
+        self.module.model = self.model
+
+    def _train(
+        self,
+        trusted_dataloader,
+        untrusted_dataloader,
+        save_path: Path | str,
+        *,
+        lr: float = 1e-3,
+        **trainer_kwargs,
+    ):
+        if trusted_dataloader is None:
+            raise ValueError("Abstraction detector requires trusted training data.")
+        self._setup_training(lr)
 
         trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
         trainer.fit(
-            model=module,
+            model=self.module,
             train_dataloaders=trusted_dataloader,
         )
+        self._teardown_training()
 
-        module.to(original_device)
+    def _teardown_training(self):
+        self.module.to(self.original_device)
+        # del self.module
 
     def _compute_layerwise_scores(self, inputs, features):
         return self.feature_model(inputs, features)

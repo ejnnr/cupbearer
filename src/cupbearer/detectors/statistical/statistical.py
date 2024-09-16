@@ -9,19 +9,12 @@ from cupbearer.detectors.activation_based import ActivationBasedDetector
 from cupbearer.detectors.statistical.helpers import update_covariance
 
 
-class StatisticalDetector(ActivationBasedDetector):
+class ActivationCovarianceBasedDetector(ActivationBasedDetector):
+    """Generic abstract detector that learns means and covariance matrices
+    during training."""
+
     use_trusted: bool = True
     use_untrusted: bool = False
-
-    @abstractmethod
-    def init_variables(
-        self, activation_sizes: dict[str, torch.Size], device, case: str
-    ):
-        pass
-
-    @abstractmethod
-    def batch_update(self, activations: dict[str, torch.Tensor], case: str):
-        pass
 
     def _train(
         self,
@@ -32,34 +25,33 @@ class StatisticalDetector(ActivationBasedDetector):
         max_steps: int | None = None,
         **kwargs,
     ):
+        self._means = {}
+        self._Cs = {}
+        self._ns = {}
+
         all_dataloaders = {}
+
+        if self.use_trusted:
+            if trusted_dataloader is None:
+                raise ValueError(
+                    f"{self.__class__.__name__} requires trusted training data."
+                )
+            all_dataloaders["trusted"] = trusted_dataloader
+        if self.use_untrusted:
+            if untrusted_dataloader is None:
+                raise ValueError(
+                    f"{self.__class__.__name__} requires untrusted training data."
+                )
+            all_dataloaders["untrusted"] = untrusted_dataloader
+
         # It's important we don't use torch.inference_mode() here, since we want
         # to be able to override this in certain detectors using torch.enable_grad().
         with torch.no_grad():
-            if self.use_trusted:
-                if trusted_dataloader is None:
-                    raise ValueError(
-                        f"{self.__class__.__name__} requires trusted training data."
-                    )
-                all_dataloaders["trusted"] = trusted_dataloader
-            if self.use_untrusted:
-                if untrusted_dataloader is None:
-                    raise ValueError(
-                        f"{self.__class__.__name__} requires untrusted training data."
-                    )
-                all_dataloaders["untrusted"] = untrusted_dataloader
-
             for case, dataloader in all_dataloaders.items():
                 logger.debug(f"Collecting statistics on {case} data")
-                _, example_activations = next(iter(dataloader))
 
-                # v is an entire batch, v[0] are activations for a single input
-                activation_sizes = {
-                    k: v[0].size() for k, v in example_activations.items()
-                }
                 self.init_variables(
-                    activation_sizes,
-                    device=next(iter(example_activations.values())).device,
+                    sample_batch=next(iter(dataloader)),
                     case=case,
                 )
 
@@ -71,20 +63,19 @@ class StatisticalDetector(ActivationBasedDetector):
                         break
                     self.batch_update(activations, case)
 
-
-class ActivationCovarianceBasedDetector(StatisticalDetector):
-    """Generic abstract detector that learns means and covariance matrices
-    during training."""
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._means = {}
-        self._Cs = {}
-        self._ns = {}
+        self._finalize_training(**kwargs)
 
     def init_variables(
-        self, activation_sizes: dict[str, torch.Size], device, case: str
+        self,
+        sample_batch,
+        case: str,
     ):
+        _, example_activations = sample_batch
+
+        # v is an entire batch, v[0] are activations for a single input
+        activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
+        device = next(iter(example_activations.values())).device
+
         if any(len(size) != 1 for size in activation_sizes.values()):
             logger.debug(
                 "Received multi-dimensional activations, will only learn "
@@ -161,15 +152,11 @@ class ActivationCovarianceBasedDetector(StatisticalDetector):
         }
         return scores
 
-    def _train(self, trusted_dataloader, untrusted_dataloader, **kwargs):
-        super()._train(
-            trusted_dataloader=trusted_dataloader,
-            untrusted_dataloader=untrusted_dataloader,
-            **kwargs,
-        )
-
-        # Post process
-        with torch.inference_mode():
+    def _finalize_training(self, **kwargs):
+        # Post process.
+        # We're using no_grad() instead of inference_mode() since in some cases,
+        # we later want gradients for anomaly scores.
+        with torch.no_grad():
             self.means = self._means
             self.covariances = {}
             for case, Cs in self._Cs.items():

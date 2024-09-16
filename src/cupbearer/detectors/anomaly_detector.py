@@ -55,7 +55,6 @@ class AnomalyDetector(ABC):
         If a detector can't compute layerwise scores, it should instead return
         a dictionary with only one element (by convention using an 'all' key).
         """
-        pass
 
     @abstractmethod
     def _train(
