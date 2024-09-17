@@ -161,3 +161,6 @@ class VAEFeatureModel(FeatureModel):
 class VAEDetector(FeatureModelDetector):
     def __init__(self, vaes: dict[str, VAE], kld_weight: float = 1.0, **kwargs):
         super().__init__(VAEFeatureModel(vaes, kld_weight), **kwargs)
+
+    def __repr__(self):
+        return f"VAEDetector(kld_weight={self.feature_model.kld_weight})"

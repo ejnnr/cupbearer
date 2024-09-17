@@ -58,3 +58,6 @@ class MahalanobisDetector(ActivationCovarianceBasedDetector):
         self.means = variables["means"]
         self.inv_covariances = variables["inv_covariances"]
         self.inv_diag_covariances = variables["inv_diag_covariances"]
+
+    def __repr__(self):
+        return "MahalanobisDetector()"
