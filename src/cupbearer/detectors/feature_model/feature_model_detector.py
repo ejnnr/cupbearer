@@ -127,16 +127,23 @@ class FeatureModelDetector(ActivationBasedDetector):
         self,
         trusted_dataloader,
         untrusted_dataloader,
-        save_path: Path | str,
+        save_path: Path | str | None = None,
         *,
         lr: float = 1e-3,
+        max_epochs: int = 1,
         **trainer_kwargs,
     ):
         if trusted_dataloader is None:
             raise ValueError("Abstraction detector requires trusted training data.")
         self._setup_training(lr)
 
-        trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
+        if save_path is not None:
+            trainer_kwargs["default_root_dir"] = save_path
+        else:
+            trainer_kwargs["enable_checkpointing"] = False
+            trainer_kwargs["logger"] = False
+
+        trainer = L.Trainer(max_epochs=max_epochs, **trainer_kwargs)
         trainer.fit(
             model=self.module,
             train_dataloaders=trusted_dataloader,
