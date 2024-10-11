@@ -336,11 +336,11 @@ class AnomalyDetector(ABC):
             auc_roc = sklearn.metrics.roc_auc_score(
                 y_true=labels,
                 y_score=scores[layer],
-            )
+            ).item()
             ap = sklearn.metrics.average_precision_score(
                 y_true=labels,
                 y_score=scores[layer],
-            )
+            ).item()
             logger.info(f"AUC_ROC ({layer}): {auc_roc:.4f}")
             logger.info(f"AP ({layer}): {ap:.4f}")
             metrics[layer]["AUC_ROC"] = auc_roc
