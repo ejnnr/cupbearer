@@ -166,6 +166,9 @@ class ActivationCovarianceBasedDetector(ActivationBasedDetector):
                 if any(
                     torch.count_nonzero(C) == 0 for C in self.covariances[case].values()
                 ):
-                    raise RuntimeError("All zero covariance matrix detected.")
+                    logger.warning(
+                        f"Found zero covariance matrix in {case} data. "
+                        "There may be a problem with the data or feature extractor."
+                    )
 
             self.post_covariance_training(**kwargs)
