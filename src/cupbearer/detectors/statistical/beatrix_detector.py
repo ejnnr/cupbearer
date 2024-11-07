@@ -13,8 +13,10 @@ class BeatrixDetector(StatisticalDetector):
     Reference: "The Beatrix Resurrections: Robust Backdoor Detection via Gram Matrices" [https://arxiv.org/abs/2209.11715v3].
     """
 
-    def __init__(self, power_list=None, mad_scale=10.0, sequence_dim_as_batch=True):
-        super().__init__()
+    def __init__(
+        self, power_list=None, mad_scale=10.0, sequence_dim_as_batch=True, **kwargs
+    ):
+        super().__init__(**kwargs)
         self.power_list = power_list or list(range(1, 9))
         self.mad_scale = mad_scale  # Scale factor for the median absolute deviation
         self._stats = {}  # Stores running statistics for Gram features
