@@ -13,9 +13,6 @@ class BeatrixDetector(StatisticalDetector):
     Reference: "The Beatrix Resurrections: Robust Backdoor Detection via Gram Matrices" [https://arxiv.org/abs/2209.11715v3].
     """
 
-    use_trusted = True
-    use_untrusted = False
-
     def __init__(self, power_list=None, mad_scale=10.0, sequence_dim_as_batch=True):
         super().__init__()
         self.power_list = power_list or list(range(1, 9))
@@ -59,8 +56,15 @@ class BeatrixDetector(StatisticalDetector):
         return gram_vector  # (batch, n_gram_features)
 
     def init_variables(
-        self, activation_sizes: dict[str, torch.Size], device, case: str
+        self,
+        sample_batch,
+        case: str,
     ):
+        _, example_activations = sample_batch
+
+        # v is an entire batch, v[0] are activations for a single input
+        activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
+
         """Initialize statistical variables for training."""
         if any(len(size) != 1 for size in activation_sizes.values()):
             logger.debug(
@@ -151,7 +155,7 @@ class BeatrixDetector(StatisticalDetector):
             layer_scores = []
 
             for power in self.power_list:
-                stats = self._stats["trusted"][layer_name][power]
+                stats = self.stats["trusted"][layer_name][power]
                 medians = stats["running_medians"]
                 mads = stats["running_mads"]
 
@@ -179,12 +183,15 @@ class BeatrixDetector(StatisticalDetector):
 
         return scores
 
+    def _finalize_training(self, **kwargs):
+        self.stats = self._stats
+
     def _get_trained_variables(self):
         """Return variables needed for inference."""
         return {
-            "stats": self._stats,
+            "stats": self.stats,
         }
 
     def _set_trained_variables(self, variables):
         """Set trained variables for inference."""
-        self._stats = variables["stats"]
+        self.stats = variables["stats"]

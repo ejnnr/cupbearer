@@ -16,5 +16,6 @@ from .statistical import (
     MahalanobisDetector,
     QuantumEntropyDetector,
     SpectralSignatureDetector,
+    StatisticalDetector,
 )
 from .supervised_probe import SupervisedLinearProbe
