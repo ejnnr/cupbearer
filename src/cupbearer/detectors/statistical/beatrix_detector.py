@@ -96,10 +96,12 @@ class BeatrixDetector(StatisticalDetector):
         """Update running median and MAD statistics for Gram features."""
         if current_stats["running_medians"] is None:
             # Initialize on first batch
-            current_stats["running_medians"] = gram_features.median(dim=0)
-            current_stats["running_mads"] = torch.abs(
-                gram_features - current_stats["running_medians"]
-            ).median(dim=0)
+            current_stats["running_medians"] = gram_features.median(dim=0).values
+            current_stats["running_mads"] = (
+                torch.abs(gram_features - current_stats["running_medians"])
+                .median(dim=0)
+                .values
+            )
             current_stats["n_samples"] = len(gram_features)
             return current_stats
 
@@ -112,13 +114,13 @@ class BeatrixDetector(StatisticalDetector):
         alpha = len(gram_features) / total_n
         new_medians = (1 - alpha) * current_stats[
             "running_medians"
-        ] + alpha * gram_features.median(dim=0)
+        ] + alpha * gram_features.median(dim=0).values
 
         # Update median absolute deviations
         deviations = torch.abs(gram_features - new_medians)
         new_mads = (1 - alpha) * current_stats[
             "running_mads"
-        ] + alpha * deviations.median(dim=0)
+        ] + alpha * deviations.median(dim=0).values
 
         return {
             "n_samples": total_n,  # int
