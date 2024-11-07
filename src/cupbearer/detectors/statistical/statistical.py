@@ -13,6 +13,9 @@ class StatisticalDetector(ActivationBasedDetector):
     use_trusted: bool = True
     use_untrusted: bool = False
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
     @abstractmethod
     def init_variables(self, sample_batch, case: str):
         pass
