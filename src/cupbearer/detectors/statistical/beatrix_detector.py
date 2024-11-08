@@ -39,7 +39,9 @@ class BeatrixDetector(StatisticalDetector):
         self.moving_average = moving_average
         self.eps = torch.finfo(torch.float16).tiny  # Small value to avoid zero-division
 
-    def compute_gram_features(self, features: torch.Tensor, power: int) -> torch.Tensor:
+    def compute_gram_features(
+        self, activation: torch.Tensor, power: int
+    ) -> torch.Tensor:
         """Compute p-th order Gram features for given activation features.
 
         Args:
@@ -49,6 +51,12 @@ class BeatrixDetector(StatisticalDetector):
         Returns:
             Vectorized upper triangular elements of Gram matrix
         """
+        # Reshape to (batch, features) treating all other dims as batch
+        if self.sequence_dim_as_batch:
+            features = rearrange(activation, "batch ... dim -> (batch ...) dim")
+        else:
+            features = rearrange(activation, "batch ... dim -> batch (...) dim")
+
         # Compute p-th power
         powered_features = features**power
 
@@ -168,12 +176,6 @@ class BeatrixDetector(StatisticalDetector):
     def batch_update(self, activations: dict[str, torch.Tensor], case: str):
         """Update statistics with new batch of activations."""
         for layer_name, activation in activations.items():
-            # Reshape to (batch, features) treating all other dims as batch
-            if self.sequence_dim_as_batch:
-                activation = rearrange(activation, "batch ... dim -> (batch ...) dim")
-            else:
-                activation = rearrange(activation, "batch ... dim -> batch (...) dim")
-
             for power in self.power_list:
                 # Compute Gram features for this batch
                 gram_features = self.compute_gram_features(activation, power)
@@ -196,11 +198,6 @@ class BeatrixDetector(StatisticalDetector):
         next(iter(features.values())).shape[0]
 
         for layer_name, activation in features.items():
-            # Reshape to (batch, features) treating all other dims as batch
-            if self.sequence_dim_as_batch:
-                activation = rearrange(activation, "batch ... dim -> (batch ...) dim")
-            else:
-                activation = rearrange(activation, "batch ... dim -> batch (...) dim")
             layer_scores = []
 
             for power in self.power_list:
