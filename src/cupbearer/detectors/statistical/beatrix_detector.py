@@ -10,22 +10,34 @@ from cupbearer.detectors.statistical.statistical import StatisticalDetector
 class BeatrixDetector(StatisticalDetector):
     """Beatrix detector that uses Gram matrices and mean absolute deviation statistics
     for anomaly detection.
-    Reference: "The Beatrix Resurrections: Robust Backdoor Detection via Gram Matrices" [https://arxiv.org/abs/2209.11715v3].
+    Reference: "The Beatrix Resurrections: Robust Backdoor Detection via Gram Matrices"
+    [https://arxiv.org/abs/2209.11715v3].
     """
 
     def __init__(
-        self, power_list=None, mad_scale=10.0, sequence_dim_as_batch=True, **kwargs
+        self,
+        power_list=None,
+        mad_scale=10.0,
+        sequence_dim_as_batch=True,
+        moving_average=True,
+        **kwargs,
     ):
         super().__init__(**kwargs)
-        self.power_list = power_list or list(range(1, 9))
+        self.power_list = power_list or list(range(1, 5))  # List of powers to compute
         self.mad_scale = mad_scale  # Scale factor for the median absolute deviation
         self._stats = {}  # Stores running statistics for Gram features
         # _stats[case][layer_name][power]["n_samples"] = int
-        # _stats[case][layer_name][power]["running_medians"] = Tensor (n_gram_features,)
-        # _stats[case][layer_name][power]["running_mads"] = Tensor (n_gram_features,)
+        # _stats[case][layer_name][power]["running_medians"] = List[Tensor(
+        #     n_gram_features,)]
+        # _stats[case][layer_name][power]["running_mads"] = List[Tensor(
+        #     n_gram_features,)]
 
         # Whether to treat all dims (exept the last) as batch:
         self.sequence_dim_as_batch = sequence_dim_as_batch
+        # Whether to usage moving average for running statistics
+        #  or to compute the median of on-batch medians
+        self.moving_average = moving_average
+        self.eps = torch.finfo(torch.float16).tiny  # Small value to avoid zero-division
 
     def compute_gram_features(self, features: torch.Tensor, power: int) -> torch.Tensor:
         """Compute p-th order Gram features for given activation features.
@@ -49,11 +61,13 @@ class BeatrixDetector(StatisticalDetector):
         # "..." contains nothing if sequence_dim_as_batch, else it's the sequence dim.
 
         # Apply p-th root
-        gram = gram.sign() * torch.abs(gram) ** (1 / power)
+        gram = gram.sign() * torch.abs(gram) ** (1.0 / power)
 
         # Get upper triangular elements (excluding diagonal)
         triu_indices = torch.triu_indices(gram.size(-2), gram.size(-1))
         gram_vector = gram[..., triu_indices[0], triu_indices[1]]
+
+        gram_vector = torch.nan_to_num(gram_vector, nan=0.0, posinf=0.0, neginf=0.0)
 
         return gram_vector  # (batch, n_gram_features)
 
@@ -84,8 +98,8 @@ class BeatrixDetector(StatisticalDetector):
             layer_name: {
                 p: {
                     "n_samples": 0,
-                    "running_medians": None,  # Will be initialized on first batch
-                    "running_mads": None,
+                    "running_medians": [],  # Will be initialized on first batch
+                    "running_mads": [],
                 }
                 for p in self.power_list
             }
@@ -94,14 +108,38 @@ class BeatrixDetector(StatisticalDetector):
 
     def update_stats(self, current_stats: dict, gram_features: torch.Tensor):
         """Update running median and MAD statistics for Gram features."""
-        if current_stats["running_medians"] is None:
+        n = current_stats["n_samples"]
+        total_n = n + len(gram_features)
+
+        # Update medians
+        new_medians = gram_features.median(dim=0).values
+
+        # Update median absolute deviations
+        deviations = torch.abs(gram_features - new_medians)
+        new_mads = deviations.median(dim=0).values
+
+        return {
+            "n_samples": total_n,  # int
+            "running_medians": current_stats["running_medians"] + [new_medians.cpu()],
+            "running_mads": current_stats["running_mads"] + [new_mads.cpu()],
+            # ^ Both List[shape (n_gram_features,)]
+        }
+
+    def update_stats_moving_average(
+        self, current_stats: dict, gram_features: torch.Tensor
+    ):
+        """Update running median and MAD statistics for Gram features, using an
+        exponential moving average."""
+        if len(current_stats["running_medians"]) == 0:
             # Initialize on first batch
-            current_stats["running_medians"] = gram_features.median(dim=0).values
-            current_stats["running_mads"] = (
-                torch.abs(gram_features - current_stats["running_medians"])
-                .median(dim=0)
-                .values
-            )
+            current_stats["running_medians"] = [gram_features.median(dim=0).values]
+            current_stats["running_mads"] = [
+                (
+                    torch.abs(gram_features - current_stats["running_medians"][0])
+                    .median(dim=0)
+                    .values
+                )
+            ]
             current_stats["n_samples"] = len(gram_features)
             return current_stats
 
@@ -109,23 +147,22 @@ class BeatrixDetector(StatisticalDetector):
         total_n = n + len(gram_features)
 
         # Update running median using exponential moving average
-        # TODO: For small batch sizes, this is more like a mean than a median.
-        #       This should probably be changed to a truer running median.
+        # For small batch sizes, this is more like a mean than a median.
         alpha = len(gram_features) / total_n
-        new_medians = (1 - alpha) * current_stats[
-            "running_medians"
+        new_medians = (1 - alpha) * current_stats["running_medians"][
+            0
         ] + alpha * gram_features.median(dim=0).values
 
         # Update median absolute deviations
         deviations = torch.abs(gram_features - new_medians)
-        new_mads = (1 - alpha) * current_stats[
-            "running_mads"
+        new_mads = (1 - alpha) * current_stats["running_mads"][
+            0
         ] + alpha * deviations.median(dim=0).values
 
         return {
             "n_samples": total_n,  # int
-            "running_medians": new_medians,  # shape (n_gram_features,)
-            "running_mads": new_mads,  # shape (n_gram_features,)
+            "running_medians": [new_medians],  # shape (n_gram_features,)
+            "running_mads": [new_mads],  # shape (n_gram_features,)
         }
 
     def batch_update(self, activations: dict[str, torch.Tensor], case: str):
@@ -142,9 +179,16 @@ class BeatrixDetector(StatisticalDetector):
                 gram_features = self.compute_gram_features(activation, power)
 
                 # Update running statistics
-                self._stats[case][layer_name][power] = self.update_stats(
-                    self._stats[case][layer_name][power], gram_features
-                )
+                if self.moving_average:
+                    self._stats[case][layer_name][
+                        power
+                    ] = self.update_stats_moving_average(
+                        self._stats[case][layer_name][power], gram_features
+                    )
+                else:
+                    self._stats[case][layer_name][power] = self.update_stats(
+                        self._stats[case][layer_name][power], gram_features
+                    )
 
     def _compute_layerwise_scores(self, inputs, features: dict[str, torch.Tensor]):
         """Compute anomaly scores for each layer."""
@@ -161,12 +205,15 @@ class BeatrixDetector(StatisticalDetector):
 
             for power in self.power_list:
                 stats = self.stats["trusted"][layer_name][power]
-                medians = stats["running_medians"]
-                mads = stats["running_mads"]
 
                 # Compute Gram features for test sample
                 # shape (batch, n_gram_features)
                 gram_features = self.compute_gram_features(activation, power)
+
+                medians = stats["medians"].to(gram_features.device)
+                mads = stats["mads"].to(gram_features.device)
+
+                print(gram_features.shape)
 
                 # Compute min/max bounds
                 # shape (n_gram_features,)
@@ -175,17 +222,19 @@ class BeatrixDetector(StatisticalDetector):
 
                 # Compute deviations
                 # shape (batch, n_gram_features)
-                lower_devs = torch.relu(min_bounds - gram_features) / torch.abs(
-                    min_bounds + 1e-6
-                )
-                upper_devs = torch.relu(gram_features - max_bounds) / torch.abs(
-                    max_bounds + 1e-6
+                lower_devs = torch.relu(min_bounds - gram_features) / (
+                    torch.abs(min_bounds) + self.eps
                 )
 
+                upper_devs = torch.relu(gram_features - max_bounds) / (
+                    torch.abs(max_bounds) + self.eps
+                )
+
+                deviations = lower_devs + upper_devs
                 # Average across Gram matrix elements
                 # shape (batch,)
-                deviation = (lower_devs + upper_devs).mean(dim=-1)
-                layer_scores.append(deviation)
+                mean_deviation = deviations.mean(dim=-1)
+                layer_scores.append(mean_deviation)
 
             # Average scores across different powers
             # shape (batch,)
@@ -194,7 +243,26 @@ class BeatrixDetector(StatisticalDetector):
         return scores
 
     def _finalize_training(self, **kwargs):
-        self.stats = self._stats
+        # Approximate the true medians as the medians across batches
+        self.stats = {}
+        for case in self._stats:
+            self.stats[case] = {}
+            for layer_name in self._stats[case]:
+                self.stats[case][layer_name] = {}
+                for power in self._stats[case][layer_name]:
+                    self.stats[case][layer_name][power] = {
+                        "n_samples": self._stats[case][layer_name][power]["n_samples"],
+                        "medians": torch.stack(
+                            self._stats[case][layer_name][power]["running_medians"]
+                        )
+                        .median(dim=0)
+                        .values,
+                        "mads": torch.stack(
+                            self._stats[case][layer_name][power]["running_mads"]
+                        )
+                        .median(dim=0)
+                        .values,
+                    }
 
     def _get_trained_variables(self):
         """Return variables needed for inference."""
