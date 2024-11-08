@@ -149,6 +149,7 @@ class BeatrixDetector(StatisticalDetector):
     def _compute_layerwise_scores(self, inputs, features: dict[str, torch.Tensor]):
         """Compute anomaly scores for each layer."""
         scores = {}
+        next(iter(features.values())).shape[0]
 
         for layer_name, activation in features.items():
             # Reshape to (batch, features) treating all other dims as batch
@@ -164,13 +165,16 @@ class BeatrixDetector(StatisticalDetector):
                 mads = stats["running_mads"]
 
                 # Compute Gram features for test sample
+                # shape (batch, n_gram_features)
                 gram_features = self.compute_gram_features(activation, power)
 
                 # Compute min/max bounds
+                # shape (n_gram_features,)
                 min_bounds = medians - self.mad_scale * mads
                 max_bounds = medians + self.mad_scale * mads
 
                 # Compute deviations
+                # shape (batch, n_gram_features)
                 lower_devs = torch.relu(min_bounds - gram_features) / torch.abs(
                     min_bounds + 1e-6
                 )
@@ -179,11 +183,13 @@ class BeatrixDetector(StatisticalDetector):
                 )
 
                 # Average across Gram matrix elements
-                deviation = (lower_devs + upper_devs).mean()
+                # shape (batch,)
+                deviation = (lower_devs + upper_devs).mean(dim=-1)
                 layer_scores.append(deviation)
 
             # Average scores across different powers
-            scores[layer_name] = torch.stack(layer_scores).mean()
+            # shape (batch,)
+            scores[layer_name] = torch.stack(layer_scores, dim=-1).mean(dim=-1)
 
         return scores
 
@@ -199,3 +205,6 @@ class BeatrixDetector(StatisticalDetector):
     def _set_trained_variables(self, variables):
         """Set trained variables for inference."""
         self.stats = variables["stats"]
+
+    def __repr__(self):
+        return "BeatrixDetector()"
