@@ -18,7 +18,7 @@ class BeatrixDetector(StatisticalDetector):
         self,
         power_list=None,
         mad_scale=10.0,
-        sequence_dim_as_batch=True,
+        sequence_dim_as_batch=False,
         moving_average=True,
         **kwargs,
     ):
