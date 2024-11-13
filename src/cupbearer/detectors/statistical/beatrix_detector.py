@@ -51,6 +51,7 @@ class BeatrixDetector(StatisticalDetector):
         Returns:
             Vectorized upper triangular elements of Gram matrix
         """
+
         # Reshape to (batch, features) treating all other dims as batch
         if self.sequence_dim_as_batch:
             features = rearrange(activation, "batch ... dim -> (batch ...) dim")
@@ -76,7 +77,6 @@ class BeatrixDetector(StatisticalDetector):
         gram_vector = gram[..., triu_indices[0], triu_indices[1]]
 
         gram_vector = torch.nan_to_num(gram_vector, nan=0.0, posinf=0.0, neginf=0.0)
-
         return gram_vector  # (batch, n_gram_features)
 
     def init_variables(
@@ -90,17 +90,20 @@ class BeatrixDetector(StatisticalDetector):
         activation_sizes = {k: v[0].size() for k, v in example_activations.items()}
 
         """Initialize statistical variables for training."""
-        if any(len(size) != 1 for size in activation_sizes.values()):
+        if (
+            any(len(size) != 1 for size in activation_sizes.values())
+            and self.sequence_dim_as_batch
+        ):
             logger.debug(
                 "Received multi-dimensional activations, will only take products for"
                 "the gram matrix along last dimension and treat others independently. "
                 "If this is unintentional, pass "
                 "`activation_preprocessing_func=utils.flatten_last`."
             )
-        logger.debug(
-            "Activation sizes: \n"
-            + "\n".join(f"{k}: {size}" for k, size in activation_sizes.items())
-        )
+        # logger.debug(
+        #     "Activation sizes: \n"
+        #     + "\n".join(f"{k}: {size}" for k, size in activation_sizes.items())
+        # )
 
         self._stats[case] = {
             layer_name: {
@@ -210,8 +213,6 @@ class BeatrixDetector(StatisticalDetector):
                 medians = stats["medians"].to(gram_features.device)
                 mads = stats["mads"].to(gram_features.device)
 
-                print(gram_features.shape)
-
                 # Compute min/max bounds
                 # shape (n_gram_features,)
                 min_bounds = medians - self.mad_scale * mads
@@ -235,7 +236,9 @@ class BeatrixDetector(StatisticalDetector):
 
             # Average scores across different powers
             # shape (batch,)
-            scores[layer_name] = torch.stack(layer_scores, dim=-1).mean(dim=-1)
+            scores[layer_name] = (
+                torch.stack(layer_scores, dim=-1).mean(dim=-1).to(float)
+            )
 
         return scores
 
