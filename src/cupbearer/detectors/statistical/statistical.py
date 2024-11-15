@@ -9,12 +9,23 @@ from cupbearer.detectors.activation_based import ActivationBasedDetector
 from cupbearer.detectors.statistical.helpers import update_covariance
 
 
-class ActivationCovarianceBasedDetector(ActivationBasedDetector):
-    """Generic abstract detector that learns means and covariance matrices
-    during training."""
-
+class StatisticalDetector(ActivationBasedDetector):
     use_trusted: bool = True
     use_untrusted: bool = False
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    @abstractmethod
+    def init_variables(self, sample_batch, case: str):
+        pass
+
+    @abstractmethod
+    def batch_update(self, activations: dict[str, torch.Tensor], case: str):
+        pass
+
+    def _finalize_training(self, **kwargs):
+        pass
 
     def _train(
         self,
@@ -25,10 +36,6 @@ class ActivationCovarianceBasedDetector(ActivationBasedDetector):
         max_steps: int | None = None,
         **kwargs,
     ):
-        self._means = {}
-        self._Cs = {}
-        self._ns = {}
-
         all_dataloaders = {}
 
         if self.use_trusted:
@@ -64,6 +71,17 @@ class ActivationCovarianceBasedDetector(ActivationBasedDetector):
                     self.batch_update(activations, case)
 
         self._finalize_training(**kwargs)
+
+
+class ActivationCovarianceBasedDetector(StatisticalDetector):
+    """Generic abstract detector that learns means and covariance matrices
+    during training."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._means = {}
+        self._Cs = {}
+        self._ns = {}
 
     def init_variables(
         self,
