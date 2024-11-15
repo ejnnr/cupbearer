@@ -345,6 +345,12 @@ class AnomalyDetector(ABC):
             logger.info(f"AP ({layer}): {ap:.4f}")
             metrics[layer]["AUC_ROC"] = auc_roc
             metrics[layer]["AP"] = ap
+            
+            # Save the scores for the positive and negative examples in metrics
+            metrics[layer]["scores"] = {
+                "positive": scores[layer][labels == 1].tolist(),
+                "negative": scores[layer][labels == 0].tolist(),
+            }
 
             upper_lim = np.percentile(scores[layer], histogram_percentile).item()
             # Usually there aren't extremely low outliers, so we just use the minimum,
