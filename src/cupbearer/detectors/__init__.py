@@ -17,5 +17,6 @@ from .statistical import (
     QuantumEntropyDetector,
     SpectralSignatureDetector,
     StatisticalDetector,
+    TEDDetector,
 )
 from .supervised_probe import SupervisedLinearProbe

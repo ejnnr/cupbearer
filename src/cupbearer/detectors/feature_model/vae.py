@@ -142,6 +142,7 @@ class VAEFeatureModel(FeatureModel):
         super().__init__()
         self.vaes = utils.ModuleDict(vaes)
         self.kld_weight = kld_weight
+        self.add_noise = kld_weight > 0
 
     @property
     def layer_names(self):
@@ -151,7 +152,7 @@ class VAEFeatureModel(FeatureModel):
         self, inputs, features: dict[str, torch.Tensor], return_outputs: bool = False
     ) -> dict[str, torch.Tensor]:
         vae_outputs = {
-            name: vae(features[name], noise=False) for name, vae in self.vaes.items()
+            name: vae(features[name], noise=self.add_noise) for name, vae in self.vaes.items()
         }
         # VAE outputs are (reconstruction, mu, log_var)
         reconstructions = {
