@@ -15,7 +15,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy>=1.24",
+    "numpy >= 1.24 < 2",
     "scikit-learn",
     "Pillow>=9.4",
     "torch>=2.0",
@@ -28,6 +28,7 @@ dependencies = [
     "tqdm",
     "loguru",
     "matplotlib",
+    "pyod", # For the TED detector
 ]
 
 requires-python = ">=3.10"
