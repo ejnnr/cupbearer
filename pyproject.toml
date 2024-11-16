@@ -15,7 +15,7 @@ classifiers = [
 ]
 
 dependencies = [
-    "numpy >= 1.24 < 2",
+    "numpy >= 1.24, < 2",
     "scikit-learn",
     "Pillow>=9.4",
     "torch>=2.0",
