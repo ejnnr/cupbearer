@@ -28,12 +28,12 @@ dependencies = [
     "tqdm",
     "loguru",
     "matplotlib",
-    "pyod", # For the TED detector
 ]
 
 requires-python = ">=3.10"
 
 [project.optional-dependencies]
+ted = ["pyod>=2.0"]  # Optional dependency for TEDDetector
 # transformer_lens is used in some tests
 dev = ["pytest", "pre-commit", "ipykernel", "transformer_lens", "nbconvert"]
 wandb = ["wandb"]

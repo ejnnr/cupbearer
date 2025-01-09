@@ -1,10 +1,17 @@
 from typing import Dict, Literal, Union
 
 import torch
-from pyod.models.pca import PCA
 from tqdm.auto import tqdm
 
 from cupbearer.detectors.statistical.statistical import StatisticalDetector
+
+# Try importing optional dependency
+try:
+    from pyod.models.pca import PCA
+
+    PYOD_AVAILABLE = True
+except ImportError:
+    PYOD_AVAILABLE = False
 
 
 class TEDDetector(StatisticalDetector):
@@ -22,6 +29,9 @@ class TEDDetector(StatisticalDetector):
     Unlike the original paper which focused on classification tasks and tracked nearest
     neighbors within predicted classes, this version is adapted for generative models
     and tracks nearest neighbors among all clean samples.
+
+    This detector requires the 'pyod' package to be installed.
+    You can install it with: pip install pyod>=2.0
 
     Args:
         n_neighbors: Number of nearest neighbors to track for each sample
@@ -42,6 +52,12 @@ class TEDDetector(StatisticalDetector):
         truncate_seq_at: Literal["start", "end"] = "start",
         **kwargs,
     ):
+        # Check for required dependency at initialization
+        if not PYOD_AVAILABLE:
+            raise ImportError(
+                "The 'pyod' package is required to use TEDDetector. "
+                "You can install it with: pip install pyod>=2.0"
+            )
         super().__init__(**kwargs)
         self.n_neighbors = n_neighbors
         self.contamination = contamination
