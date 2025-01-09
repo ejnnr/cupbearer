@@ -41,18 +41,37 @@ class VAE(nn.Module):
         """
         Encodes the input by passing through the encoder network
         and returns the latent codes.
-        :param input: (Tensor) Input tensor to encoder [N x C x H x W]
-        :return: (Tensor) List of latent codes
+        :param input: (Tensor) Input tensor to encoder [N x C] or [N x T x C]
+        where N is batch size, T is the number of time steps (optional position dimension),
+        and C is the number of channels.
+        :return: (Tensor) Tuple of latent codes (mu, log_var), shaped as input but with C = latent_dim
         """
-        assert input.ndim == 2
-        result = self.encoder(input)
-        assert result.ndim == 2
-        assert result.shape[1] == 2 * self.latent_dim
+        original_shape = input.shape
+        
+        if input.ndim == 2:
+            # Input is already 2D, use as is
+            reshaped_input = input
+        elif input.ndim == 3:
+            # Reshape 3D input to 2D: [N*T x C]
+            N, T, C = input.shape
+            reshaped_input = input.reshape(-1, C)
+        else:
+            raise ValueError(f"Input must be 2D or 3D, got shape {original_shape}")
 
-        # Split the result into mu and var components
-        # of the latent Gaussian distribution
-        mu = result[:, : self.latent_dim]
-        log_var = result[:, self.latent_dim :]
+        # Pass through encoder
+        result = self.encoder(reshaped_input)
+        
+        assert result.ndim == 2, "Encoder output must be 2-dimensional"
+        assert result.shape[1] == 2 * self.latent_dim, f"Encoder output shape mismatch. Expected {2 * self.latent_dim} features, got {result.shape[1]}"
+
+        # Split the result into mu and log_var components
+        mu = result[:, :self.latent_dim]
+        log_var = result[:, self.latent_dim:]
+
+        # Reshape mu and log_var to match input shape
+        if input.ndim == 3:
+            mu = mu.reshape(N, T, self.latent_dim)
+            log_var = log_var.reshape(N, T, self.latent_dim)
 
         return mu, log_var
 
@@ -103,7 +122,7 @@ class VAE(nn.Module):
         # Reduce over all but first dimension
         recons_loss = recons_loss.view(recons_loss.shape[0], -1).mean(dim=1)
 
-        kld_loss = -0.5 * torch.sum(1 + log_var - mu**2 - log_var.exp(), dim=1)
+        kld_loss = -0.5 * torch.sum(1 + log_var - mu**2 - log_var.exp(), dim=tuple(range(1, mu.dim())))
 
         if reduce:
             recons_loss = recons_loss.mean()
@@ -123,6 +142,7 @@ class VAEFeatureModel(FeatureModel):
         super().__init__()
         self.vaes = utils.ModuleDict(vaes)
         self.kld_weight = kld_weight
+        self.add_noise = kld_weight > 0
 
     @property
     def layer_names(self):
@@ -132,7 +152,7 @@ class VAEFeatureModel(FeatureModel):
         self, inputs, features: dict[str, torch.Tensor], return_outputs: bool = False
     ) -> dict[str, torch.Tensor]:
         vae_outputs = {
-            name: vae(features[name], noise=False) for name, vae in self.vaes.items()
+            name: vae(features[name], noise=self.add_noise) for name, vae in self.vaes.items()
         }
         # VAE outputs are (reconstruction, mu, log_var)
         reconstructions = {
@@ -161,3 +181,6 @@ class VAEFeatureModel(FeatureModel):
 class VAEDetector(FeatureModelDetector):
     def __init__(self, vaes: dict[str, VAE], kld_weight: float = 1.0, **kwargs):
         super().__init__(VAEFeatureModel(vaes, kld_weight), **kwargs)
+
+    def __repr__(self):
+        return f"VAEDetector(kld_weight={self.feature_model.kld_weight})"

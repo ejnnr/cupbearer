@@ -12,12 +12,13 @@ def adversarial_examples(
     model: torch.nn.Module,
     train_data: Dataset,
     test_data: Dataset,
-    cache_path: Path,
+    cache_path: Path | str,
     trusted_fraction: float = 1.0,
     clean_train_weight: float = 0.5,
     clean_test_weight: float = 0.5,
     **kwargs,
 ) -> Task:
+    cache_path = Path(cache_path)
     return Task.from_base_data(
         model=model,
         train_data=train_data,

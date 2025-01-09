@@ -11,8 +11,12 @@ from .feature_model import (
 )
 from .finetuning import FinetuningAnomalyDetector
 from .statistical import (
+    ActivationCovarianceBasedDetector,
+    BeatrixDetector,
     MahalanobisDetector,
     QuantumEntropyDetector,
     SpectralSignatureDetector,
+    StatisticalDetector,
+    TEDDetector,
 )
 from .supervised_probe import SupervisedLinearProbe

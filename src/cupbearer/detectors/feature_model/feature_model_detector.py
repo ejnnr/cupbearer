@@ -1,6 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 from typing import Any, Callable, Sequence
+import warnings
 
 import lightning as L
 import torch
@@ -59,9 +60,9 @@ class FeatureModelModule(L.LightningModule):
         layer_losses = self.feature_model(inputs, features)
         losses = sum(x for x in layer_losses.values()) / len(layer_losses)
         assert isinstance(losses, torch.Tensor)
-        assert losses.ndim == 1 and len(losses) == len(next(iter(features.values())))
-        loss = losses.mean(0)
-        layer_losses = {k: v.mean(0) for k, v in layer_losses.items()}
+        # assert losses.ndim == 1 and len(losses) == len(next(iter(features.values())))
+        loss = losses.mean()
+        layer_losses = {k: v.mean() for k, v in layer_losses.items()}
         return loss, layer_losses
 
     def training_step(self, batch, batch_idx):
@@ -102,47 +103,60 @@ class FeatureModelDetector(ActivationBasedDetector):
             cache=cache,
         )
 
-    def _train(
-        self,
-        trusted_dataloader,
-        untrusted_dataloader,
-        save_path: Path | str,
-        *,
-        lr: float = 1e-3,
-        **trainer_kwargs,
-    ):
-        if trusted_dataloader is None:
-            raise ValueError("Abstraction detector requires trusted training data.")
-        # Possibly we should store this as a submodule to save optimizers and continue
-        # training later. But as long as we don't actually make use of that,
-        # this is easiest.
-        module = FeatureModelModule(
+    def _setup_training(self, lr: float):
+        self.module = FeatureModelModule(
             self.feature_model,
             lr=lr,
         )
 
-        # TODO: implement validation data
+        # Model is not always neccessary, but its abscence should raise a warning
+        if self.model is not None:
+            warnings.warn(
+                "`model` was not set, so standard detector training will not work."
+            )
+            
+            self.model.eval()
 
-        assert self.model is not None
-        self.model.eval()
+            # Pytorch lightning moves the model to the CPU after it's done training.
+            # We don't want to expose that behavior to the user, since it's really annoying
+            # when not using Lightning.
+            self.original_device = next(self.model.parameters()).device
 
-        # Pytorch lightning moves the model to the CPU after it's done training.
-        # We don't want to expose that behavior to the user, since it's really annoying
-        # when not using Lightning.
-        original_device = next(self.model.parameters()).device
+            # HACK: by adding the model as a submodule to the LightningModule, it gets
+            # transferred to the same device Lightning uses for everything else
+            # (which seems tricky to do manually).
+            self.module.model = self.model
 
-        # HACK: by adding the model as a submodule to the LightningModule, it gets
-        # transferred to the same device Lightning uses for everything else
-        # (which seems tricky to do manually).
-        module.model = self.model
+    def _train(
+        self,
+        trusted_dataloader,
+        untrusted_dataloader,
+        save_path: Path | str | None = None,
+        *,
+        lr: float = 1e-3,
+        max_epochs: int = 1,
+        **trainer_kwargs,
+    ):
+        if trusted_dataloader is None:
+            raise ValueError("Abstraction detector requires trusted training data.")
+        self._setup_training(lr)
 
-        trainer = L.Trainer(default_root_dir=save_path, **trainer_kwargs)
+        if save_path is not None:
+            trainer_kwargs["default_root_dir"] = save_path
+        else:
+            trainer_kwargs["enable_checkpointing"] = False
+            trainer_kwargs["logger"] = False
+
+        trainer = L.Trainer(max_epochs=max_epochs, **trainer_kwargs)
         trainer.fit(
-            model=module,
+            model=self.module,
             train_dataloaders=trusted_dataloader,
         )
+        self._teardown_training()
 
-        module.to(original_device)
+    def _teardown_training(self):
+        self.module.to(self.original_device)
+        # del self.module
 
     def _compute_layerwise_scores(self, inputs, features):
         return self.feature_model(inputs, features)

@@ -55,7 +55,6 @@ class AnomalyDetector(ABC):
         If a detector can't compute layerwise scores, it should instead return
         a dictionary with only one element (by convention using an 'all' key).
         """
-        pass
 
     @abstractmethod
     def _train(
@@ -337,15 +336,21 @@ class AnomalyDetector(ABC):
             auc_roc = sklearn.metrics.roc_auc_score(
                 y_true=labels,
                 y_score=scores[layer],
-            )
+            ).item()
             ap = sklearn.metrics.average_precision_score(
                 y_true=labels,
                 y_score=scores[layer],
-            )
+            ).item()
             logger.info(f"AUC_ROC ({layer}): {auc_roc:.4f}")
             logger.info(f"AP ({layer}): {ap:.4f}")
             metrics[layer]["AUC_ROC"] = auc_roc
             metrics[layer]["AP"] = ap
+            
+            # Save the scores for the positive and negative examples in metrics
+            metrics[layer]["scores"] = {
+                "positive": scores[layer][labels == 1].tolist(),
+                "negative": scores[layer][labels == 0].tolist(),
+            }
 
             upper_lim = np.percentile(scores[layer], histogram_percentile).item()
             # Usually there aren't extremely low outliers, so we just use the minimum,
